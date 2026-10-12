@@ -99,6 +99,12 @@ for (const [col, ddl] of [
   ['lat', 'lat REAL'],
   ['lng', 'lng REAL'],
   ['show_nearby', 'show_nearby INTEGER DEFAULT 1'],
+  ['nickname', "nickname TEXT DEFAULT ''"],
+  ['height', 'height INTEGER'],
+  ['weight', 'weight INTEGER'],
+  ['origin', "origin TEXT DEFAULT ''"],
+  ['availability', "availability TEXT DEFAULT ''"],
+  ['boundaries', "boundaries TEXT DEFAULT ''"],
 ]) if (!userCols.includes(col)) db.exec('ALTER TABLE users ADD COLUMN ' + ddl);
 
 const videoCols = db.prepare('PRAGMA table_info(videos)').all().map((c) => c.name);

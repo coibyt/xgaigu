@@ -69,7 +69,8 @@ function publicUser(u) {
   if (!u) return null;
   return {
     id: u.id, name: u.name, age: currentYear() - u.birth_year, gender: u.gender,
-    city: u.city, address: u.address || '', bio: u.bio, avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
+    city: u.city, address: u.address || '', bio: u.bio, nickname: u.nickname || '', height: u.height || null,
+    weight: u.weight || null, origin: u.origin || '', availability: u.availability || '', boundaries: u.boundaries || '', avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
     role: u.role, createdAt: u.created_at,
   };
 }
@@ -201,6 +202,11 @@ app.patch('/api/me', needUser, (req, res) => {
     clean(b.name, 40) || req.user.name, gender, clean(b.city, 60), clean(b.bio, 500),
     phone, b.showPhone && phone ? 1 : 0, b.showNearby === false ? 0 : 1,
     keep ? req.user.address : place.address, keep ? req.user.lat : place.lat, keep ? req.user.lng : place.lng, req.user.id
+  );
+  const intIn = (v, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
+  db.prepare('UPDATE users SET nickname=?, height=?, weight=?, origin=?, availability=?, boundaries=? WHERE id=?').run(
+    clean(b.nickname, 40), intIn(b.height, 120, 230), intIn(b.weight, 30, 200), clean(b.origin, 60),
+    clean(b.availability, 120), clean(b.boundaries, 300), req.user.id
   );
   res.json({ user: selfUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)) });
 });
