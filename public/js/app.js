@@ -7,6 +7,9 @@ const $ = (s, r = document) => r.querySelector(s);
 const main = $('#main');
 const P = {
   info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01',
+  mic: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8',
+  micoff: 'M1 1l22 22M9 9v3a3 3 0 0 0 5.1 2.1M15 9.3V4a3 3 0 0 0-5.9-.8M17 16.9A7 7 0 0 1 5 12v-2M19 10v2c0 .8-.1 1.5-.4 2.2M12 19v4M8 23h8',
+  videooff: 'M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.7 0H14a2 2 0 0 1 2 2v3.3l1 1L23 7v10M1 1l22 22',
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
   msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
   phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
@@ -155,6 +158,152 @@ function placePicker(init = {}) {
   return { el: h('div', { class: 'picker' }, input, list, note), get: () => ({ ...val }) };
 }
 
+// ---------- video calls (1-to-1, WebRTC; signaling goes through the server's SSE channel) ----------
+let CALL = null;
+const rid = () => [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function rtcConfig() {
+  if (!S.rtc) { try { S.rtc = await api('/rtc-config'); } catch { S.rtc = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; } }
+  return S.rtc;
+}
+const callSend = (to, callId, type, data) => api('/calls/signal', { method: 'POST', body: { to, callId, type, data } });
+
+let ringTimer = null, ringCtx = null;
+function startRing(kind) {
+  stopRing();
+  try {
+    ringCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const beep = () => {
+      const c = ringCtx, o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.value = kind === 'in' ? 880 : 440;
+      g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(0.18, c.currentTime + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.5);
+      o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.55);
+    };
+    beep(); ringTimer = setInterval(beep, kind === 'in' ? 1200 : 2200);
+  } catch {}
+}
+function stopRing() { clearInterval(ringTimer); ringTimer = null; if (ringCtx) { try { ringCtx.close(); } catch {} ringCtx = null; } }
+
+function callUI(peer) {
+  const remote = h('video', { class: 'call-remote', autoplay: true, playsinline: true });
+  const local = h('video', { class: 'call-local', autoplay: true, playsinline: true, muted: true }); local.muted = true;
+  const status = h('span', { class: 'call-status' });
+  const controls = h('div', { class: 'call-ctl' });
+  const el = h('div', { class: 'callov', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Cuộc gọi video' },
+    remote,
+    h('div', { class: 'call-top' }, avatar(peer, 'lg'), h('b', {}, peer.name), status),
+    local, controls,
+    h('p', { class: 'call-safe' }, 'Không chuyển tiền cho người chưa quen. Bấm lá cờ để báo cáo nếu bị quấy rối.'));
+  document.body.append(el);
+  return { el, remote, local, status, controls };
+}
+
+function setCallControls(C, mode) {
+  const btn = (cls, label, ic, fn, rot) => h('button', { type: 'button', class: 'call-btn ' + cls, 'aria-label': label, onclick: fn }, h('span', { class: rot ? 'rot' : '', html: icon(ic) }), h('i', {}, label));
+  const c = C.ui.controls; c.replaceChildren();
+  if (mode === 'incoming') c.append(btn('red', 'Từ chối', 'phone', () => hangup(C), true), btn('green', 'Nghe', 'video', () => acceptCall(C)));
+  else if (mode === 'connected') {
+    const mic = btn('', 'Mic', 'mic', () => { const t = C.local.getAudioTracks(); const on = !t[0]?.enabled; t.forEach((x) => (x.enabled = on)); mic.firstChild.innerHTML = icon(on ? 'mic' : 'micoff'); mic.classList.toggle('off', !on); });
+    const cam = btn('', 'Camera', 'video', () => { const t = C.local.getVideoTracks(); const on = !t[0]?.enabled; t.forEach((x) => (x.enabled = on)); cam.firstChild.innerHTML = icon(on ? 'video' : 'videooff'); cam.classList.toggle('off', !on); });
+    c.append(mic, cam, btn('', 'Báo cáo', 'flag', () => openReport('user', C.peer.id)), btn('red', 'Kết thúc', 'phone', () => hangup(C), true));
+  } else c.append(btn('red', 'Huỷ', 'phone', () => hangup(C), true));
+}
+const setCallStatus = (C, t) => { if (C.ui) C.ui.status.textContent = t; };
+
+async function getCallMedia() {
+  try { return await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: { echoCancellation: true, noiseSuppression: true } }); }
+  catch (e) { toast(e.name === 'NotAllowedError' ? 'Bạn cần cho phép camera và micro để gọi video' : 'Không mở được camera/micro', true); return null; }
+}
+
+function finishCall(C) {
+  if (!C) return;
+  clearTimeout(C.timer); clearTimeout(C.discTimer); clearInterval(C.tick); stopRing();
+  if (C.local) C.local.getTracks().forEach((t) => t.stop());
+  if (C.pc) { try { C.pc.close(); } catch {} }
+  if (C.ui) C.ui.el.remove();
+  if (CALL === C) CALL = null;
+}
+function hangup(C) {
+  if (!C || CALL !== C) return;
+  const type = C.connected || C.pc ? 'end' : C.role === 'caller' ? 'cancel' : 'decline';
+  callSend(C.peer.id, C.id, type).catch(() => {});
+  finishCall(C);
+}
+
+function makePC(C) {
+  const pc = new RTCPeerConnection(C.cfg); C.pc = pc;
+  C.local.getTracks().forEach((t) => pc.addTrack(t, C.local));
+  pc.ontrack = (e) => { C.ui.remote.srcObject = e.streams[0]; C.ui.remote.play().catch(() => {}); };
+  pc.onicecandidate = (e) => { if (e.candidate) callSend(C.peer.id, C.id, 'ice', e.candidate.toJSON()).catch(() => {}); };
+  pc.onconnectionstatechange = () => {
+    if (CALL !== C) return;
+    if (pc.connectionState === 'connected') {
+      clearTimeout(C.timer); clearTimeout(C.discTimer); stopRing(); C.connected = true; setCallControls(C, 'connected'); C.ui.el.classList.add('live');
+      const t0 = Date.now(); C.tick = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); setCallStatus(C, String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0')); }, 1000); setCallStatus(C, '00:00');
+    } else if (pc.connectionState === 'failed') { toast('Mất kết nối cuộc gọi', true); hangup(C); }
+    else if (pc.connectionState === 'disconnected') { clearTimeout(C.discTimer); C.discTimer = setTimeout(() => { if (CALL === C && pc.connectionState !== 'connected') { toast('Cuộc gọi bị gián đoạn', true); hangup(C); } }, 8000); }
+  };
+  return pc;
+}
+async function applyRemote(C, d) {
+  await C.pc.setRemoteDescription({ type: d.type, sdp: d.sdp });
+  for (const c of C.pending.splice(0)) await C.pc.addIceCandidate(c).catch(() => {});
+  if (d.type === 'offer') {
+    const ans = await C.pc.createAnswer(); await C.pc.setLocalDescription(ans);
+    callSend(C.peer.id, C.id, 'sdp', { type: ans.type, sdp: ans.sdp }).catch(() => {});
+  }
+}
+
+async function startVideoCall(user) {
+  if (!(await needLogin())) return;
+  if (user.id === S.user.id) return toast('Đây là bạn mà 😊');
+  if (user.allowCalls === false) return toast(user.name + ' đang tắt nhận cuộc gọi video', true);
+  if (CALL) return toast('Bạn đang trong một cuộc gọi', true);
+  if (!navigator.mediaDevices || !window.RTCPeerConnection) return toast('Trình duyệt này chưa hỗ trợ gọi video', true);
+  const local = await getCallMedia(); if (!local) return;
+  const C = CALL = { id: rid(), peer: user, role: 'caller', local, pending: [], connected: false };
+  C.cfg = await rtcConfig(); C.ui = callUI(user); C.ui.local.srcObject = local;
+  setCallStatus(C, 'Đang gọi…'); setCallControls(C, 'calling'); startRing('out');
+  try { await callSend(user.id, C.id, 'invite'); } catch (e) { toast(e.message, true); finishCall(C); return; }
+  C.timer = setTimeout(() => { if (CALL === C && !C.connected) { callSend(user.id, C.id, 'cancel', { missed: true }).catch(() => {}); toast('Không có người trả lời', true); finishCall(C); } }, 45000);
+}
+
+async function acceptCall(C) {
+  if (CALL !== C) return;
+  stopRing(); clearTimeout(C.timer);
+  C.local = await getCallMedia();
+  if (!C.local) { callSend(C.peer.id, C.id, 'decline').catch(() => {}); finishCall(C); return; }
+  C.cfg = await rtcConfig(); C.ui.local.srcObject = C.local; makePC(C);
+  setCallStatus(C, 'Đang kết nối…'); setCallControls(C, 'connecting');
+  C.timer = setTimeout(() => { if (CALL === C && !C.connected) { toast('Không kết nối được cuộc gọi', true); hangup(C); } }, 25000);
+  callSend(C.peer.id, C.id, 'accept').catch(() => hangup(C));
+}
+
+async function onCallEvent(m) {
+  const { type, callId, from, data } = m;
+  if (type === 'invite') {
+    if (CALL || (S.user && S.user.allowCalls === false)) { callSend(from.id, callId, CALL ? 'busy' : 'decline').catch(() => {}); return; }
+    const C = CALL = { id: callId, peer: from, role: 'callee', pending: [], connected: false };
+    C.ui = callUI(from); setCallStatus(C, 'đang gọi video cho bạn…'); setCallControls(C, 'incoming'); startRing('in');
+    C.timer = setTimeout(() => { if (CALL === C && !C.pc) finishCall(C); }, 50000);
+    return;
+  }
+  const C = CALL; if (!C || C.id !== callId || C.peer.id !== from.id) return;
+  if (type === 'accept' && C.role === 'caller') {
+    stopRing(); clearTimeout(C.timer); setCallStatus(C, 'Đang kết nối…'); setCallControls(C, 'connecting');
+    const pc = makePC(C); const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+    callSend(C.peer.id, C.id, 'sdp', { type: offer.type, sdp: offer.sdp }).catch(() => {});
+    C.timer = setTimeout(() => { if (CALL === C && !C.connected) { toast('Không kết nối được cuộc gọi', true); hangup(C); } }, 25000);
+  } else if (type === 'sdp' && C.pc) await applyRemote(C, data);
+  else if (type === 'ice' && data) { if (C.pc && C.pc.remoteDescription) await C.pc.addIceCandidate(data).catch(() => {}); else C.pending.push(data); }
+  else if (['decline', 'busy', 'cancel', 'end'].includes(type)) {
+    toast({ decline: C.peer.name + ' đã từ chối cuộc gọi', busy: C.peer.name + ' đang bận cuộc gọi khác', cancel: 'Cuộc gọi nhỡ từ ' + C.peer.name, end: 'Cuộc gọi đã kết thúc' }[type]);
+    finishCall(C);
+  }
+}
+window.addEventListener('pagehide', () => {
+  const C = CALL; if (!C) return;
+  try { navigator.sendBeacon('/api/calls/signal', new Blob([JSON.stringify({ to: C.peer.id, callId: C.id, type: C.connected || C.pc ? 'end' : C.role === 'caller' ? 'cancel' : 'decline' })], { type: 'application/json' })); } catch {}
+});
+
 // ---------- accounts on this device ----------
 async function switchAccount(id) {
   try {
@@ -240,6 +389,7 @@ function connectEvents() {
     if (m.to === S.user.id) { S.unread++; renderNav(); if (!location.hash.startsWith('#/messages')) toast('💬 Bạn có tin nhắn mới'); }
     window.dispatchEvent(new CustomEvent('dm', { detail: m }));
   });
+  es.addEventListener('call', (ev) => { onCallEvent(JSON.parse(ev.data)).catch(() => {}); });
   es.addEventListener('booking', () => { toast('📅 Có cập nhật lịch hẹn'); window.dispatchEvent(new Event('bookingupdate')); });
   S.es = es;
 }
@@ -636,6 +786,7 @@ async function pageUser(id) {
       !me ? h('div', { class: 'row' },
         h('button', { class: 'btn primary', onclick: () => startChat(user), html: icon('send') + 'Nhắn tin' }),
         h('button', { class: 'btn', onclick: () => openCall(user), html: icon('phone') + 'Gọi' }),
+        h('button', { class: 'btn', onclick: () => startVideoCall(user), html: icon('video') + 'Gọi video' }),
         h('button', { class: 'btn', onclick: () => openBook(user), html: icon('cal') + 'Hẹn gặp' }),
         h('button', { class: 'iconbtn', 'aria-label': 'Báo cáo', onclick: () => openReport('user', user.id), html: icon('flag') })) : h('a', { class: 'btn', href: '#/me' }, 'Sửa hồ sơ')),
     h('h3', { style: 'margin:8px 0 16px' }, 'Video'),
@@ -678,10 +829,11 @@ async function pageMe() {
     h('label', { class: 'f' }, h('span', {}, 'Điều tôi không muốn / từ chối gặp'), h('textarea', { name: 'boundaries', maxlength: 300, style: 'min-height:70px', placeholder: 'VD: Không gặp người hay say xỉn, không nhắn tin quá khuya…' }, u.boundaries)),
     h('label', { class: 'f' }, h('span', {}, 'Số điện thoại'), h('input', { name: 'phone', value: u.phone, type: 'tel', maxlength: 20, placeholder: '09xx xxx xxx' })),
     h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'showPhone', checked: u.showPhone }), h('span', {}, 'Hiện nút "Gọi" trên video của tôi (người đã đăng nhập mới xem được số).')),
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'allowCalls', checked: u.allowCalls !== false }), h('span', {}, 'Cho phép thành viên khác gọi video cho tôi (bỏ chọn nếu bạn không muốn bị gọi).')),
     h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'showNearby', checked: u.showNearby }), h('span', {}, 'Cho phép hiện tôi trong "Tìm quanh đây" (chỉ hiện khoảng cách làm tròn, không lộ địa chỉ chính xác).')),
     h('button', { class: 'btn primary', type: 'submit' }, 'Lưu thay đổi'));
   f.addEventListener('submit', async (e) => {
-    e.preventDefault(); const d = Object.fromEntries(new FormData(f)); d.showPhone = f.showPhone.checked; d.showNearby = f.showNearby.checked;
+    e.preventDefault(); const d = Object.fromEntries(new FormData(f)); d.showPhone = f.showPhone.checked; d.showNearby = f.showNearby.checked; d.allowCalls = f.allowCalls.checked;
     const pv = picker.get(); d.city = pv.city; if (pv.lat != null && pv.lat !== 0) { d.address = pv.address; d.lat = pv.lat; d.lng = pv.lng; }
     try { const r = await api('/me', { method: 'PATCH', body: d }); S.user = r.user; toast('Đã lưu'); renderNav(); } catch (ex) { err.textContent = ex.message; err.hidden = false; }
   });
@@ -754,6 +906,7 @@ function openInfo(v) {
     !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
     h('div', { class: 'row', style: 'margin-top:14px' },
       h('button', { class: 'btn primary', onclick: () => startChat(v.user), html: icon('send') + 'Nhắn tin' }),
+      h('button', { class: 'btn', onclick: () => startVideoCall(v.user), html: icon('video') + 'Gọi video' }),
       v.hasPhone && h('button', { class: 'btn', onclick: () => openCall({ ...v.user, canCall: true }, v.id), html: icon('phone') + 'Gọi' }),
       h('button', { class: 'btn', onclick: () => openBook(v.user, v.id), html: icon('cal') + 'Hẹn gặp' })));
   modal(body, { sheet: true });
@@ -1030,6 +1183,7 @@ async function pageMessages(otherId) {
   thread.append(h('header', { style: 'padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center' },
     h('a', { class: 'iconbtn', href: '#/messages', 'aria-label': 'Quay lại', style: 'width:38px;height:38px', html: icon('back') }),
     h('a', { href: '#/u/' + user.id, style: 'display:flex;gap:10px;align-items:center;flex:1' }, avatar(user, 'md'), h('b', {}, user.name)),
+    h('button', { class: 'iconbtn', 'aria-label': 'Gọi video', onclick: () => startVideoCall(user), html: icon('video') }),
     h('button', { class: 'iconbtn', 'aria-label': 'Gọi', onclick: () => openCall(user), html: icon('phone') }),
     h('button', { class: 'iconbtn', 'aria-label': 'Báo cáo', onclick: () => openReport('user', user.id), html: icon('flag') })), bubbles, form);
   bubbles.scrollTop = bubbles.scrollHeight;

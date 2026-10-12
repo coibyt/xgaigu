@@ -47,3 +47,9 @@ git push -u origin main
 - Muốn thêm nhạc thật (MP3) đã có giấy phép sử dụng: đặt file vào `public/music/` rồi khai báo trong `public/data/music.json`, ví dụ:
   `[{ "id": "bai-1", "title": "Tên bài", "style": "Pop", "meta": "Tác giả · 120 BPM", "url": "/music/bai-1.mp3" }]`
   Các bài này sẽ hiện đầu danh sách. Chỉ thêm nhạc bạn có quyền phân phối (royalty-free/CC0 hoặc đã mua giấy phép).
+
+## Gọi video giữa thành viên
+- Gọi 1-1 bằng WebRTC; máy chủ chỉ chuyển tín hiệu (qua kênh SSE sẵn có), hình/tiếng đi thẳng giữa hai trình duyệt.
+- Nút "Gọi video" có ở trang hồ sơ, đầu khung chat và bảng "Xem thông tin" của video. Người nhận cần đang mở website (chưa có thông báo đẩy khi đóng trình duyệt).
+- Mỗi thành viên có thể tắt nhận cuộc gọi trong `#/me`. Có giới hạn 3 lần gọi/phút cho mỗi cặp người.
+- Mặc định chỉ dùng STUN công cộng của Google; khoảng 10–20% cuộc gọi (mạng di động/NAT chặt) cần máy chủ TURN. Khi có TURN, đặt biến môi trường `TURN_URL` (vd `turn:turn.example.com:3478`), `TURN_USER`, `TURN_PASS`.

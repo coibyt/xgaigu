@@ -71,7 +71,7 @@ function publicUser(u) {
     id: u.id, name: u.name, age: currentYear() - u.birth_year, gender: u.gender,
     city: u.city, address: u.address || '', bio: u.bio, nickname: u.nickname || '', height: u.height || null,
     weight: u.weight || null, origin: u.origin || '', availability: u.availability || '', boundaries: u.boundaries || '',
-    occupation: u.occupation || '', interests: u.interests ? u.interests.split('|') : [], lookingFor: u.looking_for || '', avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
+    occupation: u.occupation || '', interests: u.interests ? u.interests.split('|') : [], lookingFor: u.looking_for || '', allowCalls: u.allow_calls !== 0, avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
     role: u.role, createdAt: u.created_at,
   };
 }
@@ -247,6 +247,7 @@ app.patch('/api/me', needUser, (req, res) => {
     phone, b.showPhone && phone ? 1 : 0, b.showNearby === false ? 0 : 1,
     keep ? req.user.address : place.address, keep ? req.user.lat : place.lat, keep ? req.user.lng : place.lng, req.user.id
   );
+  if (typeof b.allowCalls === 'boolean') db.prepare('UPDATE users SET allow_calls = ? WHERE id = ?').run(b.allowCalls ? 1 : 0, req.user.id);
   const intIn = (v, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
   // interests arrive as a comma/newline separated string or an array; stored '|' separated, max 10 tags
   const rawInterests = Array.isArray(b.interests) ? b.interests : String(b.interests || '').split(/[,\n]/);
@@ -681,6 +682,37 @@ app.post('/api/streams/:id/chat', needUser, postLimiter, (req, res) => {
 app.post('/api/streams/:id/heart', (req, res) => {
   const room = rooms.get(Number(req.params.id));
   if (room) broadcast(room, 'heart', {});
+  res.json({ ok: true });
+});
+
+// ---------- 1-to-1 video calls (WebRTC; this server only relays signaling over the SSE channel) ----------
+const callLimiter = rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: true, legacyHeaders: false });
+const inviteLog = new Map(); // "from>to" -> timestamps, to stop ring spam
+const CALL_TYPES = new Set(['invite', 'accept', 'decline', 'busy', 'cancel', 'end', 'sdp', 'ice']);
+
+app.get('/api/rtc-config', needUser, (_req, res) => {
+  const iceServers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  // Optional TURN relay (needed when both people are behind strict NATs / mobile carriers).
+  if (process.env.TURN_URL) iceServers.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
+  res.json({ iceServers });
+});
+
+app.post('/api/calls/signal', callLimiter, needUser, (req, res) => {
+  const { type, callId, data } = req.body || {};
+  const to = Number(req.body && req.body.to);
+  if (!CALL_TYPES.has(type) || !/^[a-f0-9]{8,32}$/.test(String(callId || '')) || !Number.isInteger(to) || to === req.user.id) return fail(res, 400, 'Yêu cầu không hợp lệ');
+  if (data !== undefined && JSON.stringify(data).length > 20000) return fail(res, 400, 'Dữ liệu quá lớn');
+  const target = db.prepare('SELECT * FROM users WHERE id = ? AND banned = 0').get(to);
+  if (!target) return fail(res, 404, 'Không tìm thấy người dùng');
+  if (type === 'invite') {
+    if (target.allow_calls === 0) return fail(res, 403, 'Người này đang tắt nhận cuộc gọi video');
+    if (!userStreams.has(to)) return fail(res, 409, 'Người này hiện không trực tuyến');
+    const k = req.user.id + '>' + to, nowT = now(), recent = (inviteLog.get(k) || []).filter((t) => nowT - t < 60_000);
+    if (recent.length >= 3) return fail(res, 429, 'Bạn gọi quá nhiều lần, vui lòng thử lại sau ít phút');
+    recent.push(nowT); inviteLog.set(k, recent);
+  }
+  if (type === 'cancel' && data && data.missed) sendMessage(req.user.id, to, '📞 Cuộc gọi video nhỡ');
+  pushUser(to, 'call', { type, callId, from: { id: req.user.id, name: req.user.name, avatar: req.user.avatar }, data: data ?? null });
   res.json({ ok: true });
 });
 
