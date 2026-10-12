@@ -260,7 +260,7 @@ function createEditor(files, { onDone, onCancel }) {
   async function play(mode) {
     if (S.run) return;
     const all = segs(); if (!all.length) return;
-    ensureAudio(); await actx.resume(); route(mode);
+    stopPreview(); ensureAudio(); await actx.resume(); route(mode);
     const total = totalDur();
     let from = mode === 'export' || S.t >= total - 0.1 ? 0 : S.t;
     const run = (S.run = { mode, stop: false });
@@ -371,6 +371,7 @@ function createEditor(files, { onDone, onCancel }) {
   const tabBar = h('div', { class: 'ed-tabs', role: 'tablist' });
   let tab = 'cut';
   function showTab(name) {
+    if (name !== 'music') stopPreview();
     tab = name;
     tabBar.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.t === name); b.setAttribute('aria-selected', String(b.dataset.t === name)); });
     panel.replaceChildren(({ cut: panelCut, music: panelMusic, text: panelText, fx: panelFx, trans: panelTrans })[name]());
@@ -417,26 +418,88 @@ function createEditor(files, { onDone, onCancel }) {
     return box;
   }
 
+  // ----- built-in music library -----
+  const M = { genre: 'all', q: '', limit: 30, pvId: null, cache: new Map() };
+  const pv = new Audio(); pv.loop = true; pv.preload = 'auto';
+  function stopPreview() { pv.pause(); M.pvId = null; }
+
+  function setMusic(file, title) {
+    if (S.music) { S.music.el.pause(); URL.revokeObjectURL(S.music.url); S.music = null; }
+    const url = URL.createObjectURL(file), el = new Audio(url); el.preload = 'auto';
+    S.music = { file, url, el, node: null, title: title || file.name }; S.musicStart = 0;
+    el.addEventListener('loadedmetadata', () => { if (S.music) { S.music.dur = el.duration; if (tab === 'music') showTab('music'); } });
+    ensureAudio(); showTab('music');
+  }
+
   function panelMusic() {
     const box = h('div', {});
     const f = h('input', { type: 'file', accept: 'audio/*', class: 'sr', id: 'ed-music' });
-    f.addEventListener('change', () => {
-      const file = f.files[0]; if (!file) return;
-      if (S.music) { S.music.el.pause(); URL.revokeObjectURL(S.music.url); S.music = null; }
-      const url = URL.createObjectURL(file), el = new Audio(url); el.preload = 'auto';
-      S.music = { file, url, el, node: null }; S.musicStart = 0;
-      el.addEventListener('loadedmetadata', () => { S.music.dur = el.duration; showTab('music'); });
-      ensureAudio(); showTab('music');
-    });
-    box.append(h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Chọn file nhạc từ máy của bạn (MP3, M4A, WAV…). Chỉ dùng nhạc bạn có quyền sử dụng.'),
-      h('label', { class: 'btn', for: 'ed-music', html: ico('music') + (S.music ? 'Đổi bài nhạc' : 'Chọn nhạc từ máy') }), f);
+    f.addEventListener('change', () => { const file = f.files[0]; if (file) { stopPreview(); setMusic(file, file.name); } });
+
     if (S.music) {
-      box.append(h('p', { style: 'margin:12px 0;font-weight:600;word-break:break-all' }, '🎵 ' + S.music.file.name),
+      box.append(h('div', { class: 'ed-now' }, h('b', { html: ico('music') + ' Đang dùng' }), h('p', { style: 'word-break:break-all' }, S.music.title || S.music.file.name),
         slider('Bắt đầu từ giây thứ', 0, Math.max(1, Math.floor((S.music.dur || 60) - 1)), 1, S.musicStart, (v) => { S.musicStart = v; }, (v) => v + 's'),
         slider('Âm lượng nhạc', 0, 1, 0.05, S.musicVol, (v) => { S.musicVol = v; if (musGain) musGain.gain.value = v; }, (v) => Math.round(v * 100) + '%'),
-        h('button', { type: 'button', class: 'btn sm', style: 'margin-top:8px', html: ico('trash') + 'Gỡ nhạc', onclick: () => { S.music.el.pause(); S.music = null; showTab('music'); } }));
+        h('button', { type: 'button', class: 'btn sm', html: ico('trash') + 'Gỡ nhạc', onclick: () => { S.music.el.pause(); S.music = null; showTab('music'); } })));
     }
     box.append(slider('Âm lượng tiếng gốc của video', 0, 1, 0.05, S.vidVol, (v) => { S.vidVol = v; if (vidGain) vidGain.gain.value = v; }, (v) => Math.round(v * 100) + '%'));
+
+    // library
+    const lib = window.XGMusic;
+    if (lib) {
+      const list = h('div', { class: 'mlist' });
+      const chips = h('div', { class: 'ed-chips mgenres' });
+      const search = h('input', { type: 'search', placeholder: 'Tìm bài nhạc…', 'aria-label': 'Tìm bài nhạc', value: M.q });
+      const more = h('button', { type: 'button', class: 'btn sm', style: 'margin:12px auto 0;display:flex' }, 'Xem thêm');
+      const count = h('span', { class: 'muted', style: 'font-size:13px' });
+      const filtered = () => lib.tracks.filter((t) => (M.genre === 'all' || t.style === M.genre) && (!M.q || (t.title + ' ' + t.meta + ' ' + t.styleName).toLowerCase().includes(M.q)));
+
+      const drawList = () => {
+        const all = filtered(), shown = all.slice(0, M.limit);
+        list.replaceChildren();
+        shown.forEach((t) => {
+          const playing = M.pvId === t.id;
+          const pb = h('button', { type: 'button', class: 'iconbtn mplay', 'aria-label': (playing ? 'Dừng nghe thử ' : 'Nghe thử ') + t.title, html: ico(playing ? 'pause' : 'play') });
+          pb.addEventListener('click', async () => {
+            if (M.pvId === t.id) { stopPreview(); return drawList(); }
+            stopPreview(); M.pvId = t.id; pb.innerHTML = '<span class="mini-spin"></span>';
+            try {
+              let url = t.url || M.cache.get(t.id);
+              if (!url) { const file = await lib.renderFile(t, 12); url = URL.createObjectURL(file); M.cache.set(t.id, url); }
+              if (M.pvId !== t.id) return;
+              if (S.run) stop();
+              pv.src = url; await pv.play();
+            } catch (e) { M.pvId = null; toast('Không phát thử được bài này', true); }
+            drawList();
+          });
+          const use = h('button', { type: 'button', class: 'btn sm' + (S.music && S.music.title === t.title + ' · ' + t.meta ? ' primary' : ''), onclick: async (e) => {
+            const b = e.currentTarget; stopPreview(); b.disabled = true; b.textContent = 'Đang tạo nhạc…';
+            try { const file = await lib.renderFile(t, totalDur() + 2); setMusic(file, t.title + ' · ' + t.meta); toast('Đã gắn nhạc: ' + t.title); }
+            catch (er) { toast('Không tạo được bài nhạc: ' + er.message, true); b.disabled = false; b.textContent = 'Dùng'; }
+          } }, S.music && S.music.title === t.title + ' · ' + t.meta ? 'Đang dùng' : 'Dùng');
+          list.append(h('div', { class: 'mrow' + (playing ? ' on' : '') }, pb, h('div', { class: 'mt' }, h('b', {}, t.title), h('span', { class: 'muted' }, t.meta)), use));
+        });
+        if (!shown.length) list.append(h('p', { class: 'muted', style: 'padding:12px' }, 'Không tìm thấy bài nào.'));
+        count.textContent = all.length + ' bài';
+        more.hidden = all.length <= M.limit;
+      };
+      const drawChips = () => {
+        chips.replaceChildren();
+        const genres = [['all', 'Tất cả']];
+        const seen = new Set(); lib.tracks.forEach((t) => { if (!seen.has(t.style)) { seen.add(t.style); genres.push([t.style, t.styleName]); } });
+        genres.forEach(([id, name]) => chips.append(h('button', { type: 'button', class: 'chip' + (M.genre === id ? ' on' : ''), onclick: () => { M.genre = id; M.limit = 30; drawChips(); drawList(); } }, name)));
+      };
+      more.addEventListener('click', () => { M.limit += 30; drawList(); });
+      let st; search.addEventListener('input', () => { clearTimeout(st); st = setTimeout(() => { M.q = search.value.trim().toLowerCase(); M.limit = 30; drawList(); }, 200); });
+      drawChips(); drawList();
+      if (lib.ready) lib.ready.then(() => { if (tab === 'music') { drawChips(); drawList(); } });
+      box.append(h('div', { class: 'ed-label', style: 'display:flex;justify-content:space-between;align-items:center' }, h('span', {}, 'Thư viện nhạc của website'), count),
+        h('p', { class: 'muted', style: 'font-size:13px;margin-bottom:10px' }, 'Nhạc không lời do website tự sáng tác, dùng miễn phí cho video của bạn. Bấm ▶ để nghe thử, bấm "Dùng" để gắn vào video.'),
+        search, chips, list, more);
+    }
+    box.append(h('div', { class: 'ed-label' }, 'Hoặc dùng nhạc của bạn'),
+      h('p', { class: 'muted', style: 'font-size:13px;margin-bottom:8px' }, 'Chọn file từ máy (MP3, M4A, WAV…). Chỉ dùng nhạc bạn có quyền sử dụng.'),
+      h('label', { class: 'btn', for: 'ed-music', html: ico('music') + (S.music ? 'Đổi bằng nhạc từ máy' : 'Chọn nhạc từ máy') }), f);
     return box;
   }
 
@@ -532,6 +595,7 @@ function createEditor(files, { onDone, onCancel }) {
     stop();
     S.clips.forEach((c) => { c.v && c.v.pause(); URL.revokeObjectURL(c.url); });
     if (S.music) { S.music.el.pause(); URL.revokeObjectURL(S.music.url); }
+    stopPreview(); M.cache.forEach((u) => URL.revokeObjectURL(u));
     try { actx && actx.close(); } catch {}
     el.remove();
   }
