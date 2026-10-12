@@ -242,6 +242,16 @@ function mediaEl(v, { controls = false, lazy = false } = {}) {
   return el;
 }
 
+function setSound(on) {
+  S.sound = on;
+  document.querySelectorAll('.slide video').forEach((v) => { v.muted = !on; v._sync && v._sync(); });
+}
+// Browsers only allow autoplay while muted; the first tap/swipe anywhere on the page switches sound on.
+['pointerup', 'keydown'].forEach((ev) => window.addEventListener(ev, function once() {
+  window.removeEventListener(ev, once, true);
+  if (!S.sound) { setSound(true); S.unmutedAt = performance.now(); }
+}, true));
+
 let playObserver;
 function observePlay(el) {
   if (!playObserver) {
@@ -371,11 +381,11 @@ function actBtn(cls, label, ic, count, onclick) {
 
 function slide(v) {
   const media = mediaEl(v, { lazy: true });
-  const mute = h('button', { class: 'iconbtn mute', 'aria-label': 'Bật/tắt tiếng', html: icon('mute'), onclick: () => { S.sound = !S.sound; media.muted = !S.sound; mute.innerHTML = icon(S.sound ? 'vol' : 'mute'); } });
+  const mute = h('button', { class: 'mute soundbtn', 'aria-label': 'Bật/tắt tiếng', html: icon('mute') + '<span>Chạm để bật tiếng</span>', onclick: (e) => { e.stopPropagation(); setSound(!S.sound); } });
   if (media instanceof HTMLVideoElement) {
-    media._sync = () => { mute.innerHTML = icon(media.muted ? 'mute' : 'vol'); };
+    media._sync = () => { mute.innerHTML = media.muted ? icon('mute') + '<span>Chạm để bật tiếng</span>' : icon('vol'); mute.classList.toggle('on', !media.muted); };
     observePlay(media);
-    media.addEventListener('click', () => (media.paused ? media.play() : media.pause()));
+    media.addEventListener('click', () => { if (performance.now() - (S.unmutedAt || 0) < 500) return; media.paused ? media.play() : media.pause(); });
   } else { mute.hidden = true; if (media.dataset.yt) observePlay(media); }
   const like = actBtn('like' + (v.liked ? ' liked' : ''), 'Thích', 'heart', v.likes, () => toggleLike(v, like));
   const cm = actBtn('', 'Bình luận', 'msg', v.comments, () => openComments(v, cm.querySelector('.n')));
@@ -632,15 +642,24 @@ async function pageUpload() {
     editHost.append(editor.el);
     editHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+  const preview = h('div', { class: 'up-preview', hidden: true });
+  let previewUrl = null;
   fileIn.addEventListener('change', () => {
     edited = null; editNote.hidden = true; closeEditor();
-    if (fileIn.files.length && canEdit) openEditor([fileIn.files[0]]);
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+    preview.replaceChildren(); preview.hidden = true;
+    const file = fileIn.files[0];
+    if (!file) return;
+    previewUrl = URL.createObjectURL(file);
+    preview.append(h('video', { src: previewUrl, controls: true, playsinline: true, preload: 'metadata' }),
+      h('p', { class: 'muted', style: 'font-size:13px' }, 'Đã chọn: ' + file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB). Bạn có thể đăng ngay hoặc bấm "Chỉnh sửa video".'));
+    preview.hidden = false;
   });
   const f = h('form', {},
     h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Đăng video'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Video dọc (9:16) ngắn gọn, chân thật sẽ được xem nhiều nhất. Sau khi chọn video bạn có thể cắt, chỉnh tốc độ, thêm nhạc, chữ, icon và hiệu ứng.'), err,
     h('label', { class: 'f' }, h('span', {}, 'Chọn video (MP4/WebM, tối đa 100MB)'), fileIn),
-    editNote,
-    h('div', { class: 'row', style: 'margin:-6px 0 14px' }, h('button', { type: 'button', class: 'btn sm', html: icon('spark') + 'Chỉnh sửa video', onclick: () => { if (!fileIn.files[0]) return toast('Hãy chọn video trước', true); openEditor([fileIn.files[0]]); } })),
+    preview, editNote,
+    h('div', { class: 'row', style: 'margin:-6px 0 14px' }, h('button', { type: 'button', class: 'btn sm', html: icon('spark') + 'Chỉnh sửa video (không bắt buộc)', onclick: () => { if (!fileIn.files[0]) return toast('Hãy chọn video trước', true); openEditor([fileIn.files[0]]); } })),
     h('p', { class: 'muted', style: 'text-align:center;margin:-4px 0 12px' }, '— hoặc —'),
     h('label', { class: 'f' }, h('span', {}, 'Dán liên kết (YouTube, .mp4, .m3u8)'), h('input', { name: 'url', type: 'url', placeholder: 'https://' })),
     h('label', { class: 'f' }, h('span', {}, 'Mô tả'), h('textarea', { name: 'caption', maxlength: 300, placeholder: 'Giới thiệu ngắn về bạn, sở thích, mẫu người lý tưởng…' })),
@@ -648,7 +667,7 @@ async function pageUpload() {
     h('button', { class: 'btn primary lg', type: 'submit', style: 'width:100%' }, 'Đăng video'));
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (editor) { err.textContent = 'Bạn đang chỉnh sửa video. Hãy bấm "Xuất video & dùng để đăng" hoặc "Huỷ" trước.'; err.hidden = false; return; }
+    closeEditor(); // posting never requires exporting: unfinished edits are dropped and the chosen video is posted
     const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang tải lên…';
     const fd = new FormData(f); fd.delete('file');
     const file = edited || (fileIn.files[0] && fileIn.files[0].size ? fileIn.files[0] : null);
