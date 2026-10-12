@@ -717,7 +717,9 @@ async function pageMe() {
         h('button', { type: 'button', class: 'btn ghost sm', onclick: () => logout(true) }, 'Đăng xuất mọi tài khoản'))),
     h('div', { class: 'card', style: 'padding:24px' }, f),
     pw,
-    u.role === 'admin' && h('div', { class: 'row', style: 'margin-top:20px' }, h('a', { class: 'btn', href: '#/admin' }, 'Quản trị'))));
+    h('div', { class: 'row', style: 'margin-top:20px' }, u.role === 'admin' && h('a', { class: 'btn', href: '#/admin' }, 'Quản trị'),
+      h('button', { type: 'button', class: 'btn', onclick: openAccounts, html: icon('users') + 'Chuyển tài khoản' }),
+      h('button', { type: 'button', class: 'btn live', onclick: () => logout(false) }, 'Đăng xuất'))));
 }
 
 // ---------- regions (miền → tỉnh → huyện) ----------
@@ -1195,6 +1197,7 @@ async function route() {
   const page = async () => {
     main.innerHTML = '';
     const [a, b] = seg;
+    main.classList.toggle('nopad', !a || a === 'feed' || a === 'messages' || (a === 'live' && !!b));
     if (!a) return pageFeed(null, true);
     if (a === 'welcome') return pageHome();
     if (a === 'feed') return pageFeed(b);
