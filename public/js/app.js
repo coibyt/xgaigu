@@ -591,21 +591,54 @@ async function pageMe() {
 async function pageUpload() {
   if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
   const err = h('div', { class: 'err', hidden: true });
+  let edited = null, editor = null;
+  const canEdit = !!(window.XGEditor && XGEditor.supported());
+  const fileIn = h('input', { type: 'file', name: 'file', accept: 'video/mp4,video/webm,video/quicktime', id: 'upfile' });
+  const editHost = h('div', { class: 'ed-host' });
+  const editNote = h('div', { class: 'notice', style: 'margin-bottom:14px', hidden: true });
+  const closeEditor = () => { if (editor) { editor.destroy(); editor = null; } };
+  const openEditor = (files) => {
+    if (!canEdit) return toast('Trình duyệt này chưa hỗ trợ chỉnh sửa video. Hãy dùng Chrome/Edge/Firefox bản mới.', true);
+    closeEditor();
+    editor = XGEditor.createEditor(files, {
+      onDone: (file) => {
+        edited = file; closeEditor(); editNote.hidden = false;
+        editNote.replaceChildren(h('span', { html: icon('check') }), h('span', {}, 'Đã chuẩn bị video đã chỉnh sửa (' + (file.size / 1048576).toFixed(1) + ' MB). Thêm mô tả rồi bấm "Đăng video".'),
+          h('button', { type: 'button', class: 'btn sm', onclick: () => { edited = null; editNote.hidden = true; if (fileIn.files[0]) openEditor([fileIn.files[0]]); } }, 'Chỉnh lại'));
+        if (file.size > 100 * 1024 * 1024) toast('Video xuất ra lớn hơn 100MB, hãy cắt ngắn bớt.', true);
+        f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      },
+      onCancel: () => { editor = null; },
+    });
+    editHost.append(editor.el);
+    editHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  fileIn.addEventListener('change', () => {
+    edited = null; editNote.hidden = true; closeEditor();
+    if (fileIn.files.length && canEdit) openEditor([fileIn.files[0]]);
+  });
   const f = h('form', {},
-    h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Đăng video'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Video dọc (9:16) ngắn gọn, chân thật sẽ được xem nhiều nhất.'), err,
-    h('label', { class: 'f' }, h('span', {}, 'Chọn video (MP4/WebM, tối đa 100MB)'), h('input', { type: 'file', name: 'file', accept: 'video/mp4,video/webm,video/quicktime' })),
+    h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Đăng video'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Video dọc (9:16) ngắn gọn, chân thật sẽ được xem nhiều nhất. Sau khi chọn video bạn có thể cắt, chỉnh tốc độ, thêm nhạc, chữ, icon và hiệu ứng.'), err,
+    h('label', { class: 'f' }, h('span', {}, 'Chọn video (MP4/WebM, tối đa 100MB)'), fileIn),
+    editNote,
+    h('div', { class: 'row', style: 'margin:-6px 0 14px' }, h('button', { type: 'button', class: 'btn sm', html: icon('spark') + 'Chỉnh sửa video', onclick: () => { if (!fileIn.files[0]) return toast('Hãy chọn video trước', true); openEditor([fileIn.files[0]]); } })),
     h('p', { class: 'muted', style: 'text-align:center;margin:-4px 0 12px' }, '— hoặc —'),
     h('label', { class: 'f' }, h('span', {}, 'Dán liên kết (YouTube, .mp4, .m3u8)'), h('input', { name: 'url', type: 'url', placeholder: 'https://' })),
     h('label', { class: 'f' }, h('span', {}, 'Mô tả'), h('textarea', { name: 'caption', maxlength: 300, placeholder: 'Giới thiệu ngắn về bạn, sở thích, mẫu người lý tưởng…' })),
     h('div', { class: 'notice', style: 'margin-bottom:16px', html: icon('shield') + '<span>Không đăng nội dung khiêu dâm, ảnh/video của người khác hay quảng cáo dịch vụ tình dục. Vi phạm sẽ bị khoá tài khoản.</span>' }),
     h('button', { class: 'btn primary lg', type: 'submit', style: 'width:100%' }, 'Đăng video'));
   f.addEventListener('submit', async (e) => {
-    e.preventDefault(); const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang tải lên…';
-    const fd = new FormData(f); if (!fd.get('file') || !fd.get('file').size) fd.delete('file');
+    e.preventDefault();
+    if (editor) { err.textContent = 'Bạn đang chỉnh sửa video. Hãy bấm "Xuất video & dùng để đăng" hoặc "Huỷ" trước.'; err.hidden = false; return; }
+    const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang tải lên…';
+    const fd = new FormData(f); fd.delete('file');
+    const file = edited || (fileIn.files[0] && fileIn.files[0].size ? fileIn.files[0] : null);
+    if (file) fd.set('file', file, file.name);
     try { await api('/videos', { method: 'POST', body: fd }); toast('Đã đăng video 🎬'); location.hash = '#/feed'; }
     catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; btn.textContent = 'Đăng video'; }
   });
-  main.append(h('div', { class: 'wrap', style: 'max-width:620px;padding:32px 0' }, h('div', { class: 'card', style: 'padding:28px' }, f)));
+  onLeave(closeEditor);
+  main.append(h('div', { class: 'wrap', style: 'max-width:1100px;padding:32px 0' }, h('div', { class: 'card', style: 'padding:28px;max-width:620px;margin-inline:auto' }, f), editHost));
 }
 
 // ---------- messages ----------
@@ -847,6 +880,8 @@ async function route() {
   if (seq === routeSeq && !location.hash.startsWith('#/feed')) window.scrollTo(0, 0);
   main.focus({ preventScroll: true });
 }
+
+window.XG = { h, toast, icon };
 
 // ---------- boot ----------
 (async function boot() {

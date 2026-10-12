@@ -220,6 +220,38 @@ table.t{width:100%;border-collapse:collapse}.t th,.t td{text-align:left;padding:
 .suggest li.none{cursor:default;color:var(--muted)}
 .picker small{display:block;margin-top:6px}
 
+/* video editor */
+.ed-host{margin-top:24px}
+.ed{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:26px;padding:22px}
+.ed-main{display:flex;flex-direction:column;gap:12px;align-items:center}
+.ed-stage{width:100%;aspect-ratio:9/16;max-height:72vh;background:#000;border-radius:20px;overflow:hidden;border:1px solid var(--line);display:grid;place-items:center}
+.ed-canvas{height:100%;max-width:100%;aspect-ratio:9/16;touch-action:none;cursor:grab}
+.ed-transport{display:flex;gap:10px;align-items:center;width:100%}
+.ed-transport input[type=range]{flex:1;min-height:0;padding:0;border:0;background:none;accent-color:var(--primary)}
+.ed-time{font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ed-total{font-size:13px;color:var(--muted)}.ed-total.over{color:#ff8d99;font-weight:700}
+.ed-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;scrollbar-width:none}
+.ed-tabs button{display:flex;gap:6px;align-items:center;white-space:nowrap;min-height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.05);cursor:pointer;font-weight:600;font-size:14px;color:var(--muted)}
+.ed-tabs button.on{background:rgba(255,46,126,.18);border-color:rgba(255,46,126,.5);color:#fff}
+.ed-panel{min-height:240px}
+.ed-row{display:block;margin:12px 0;font-size:14px}
+.ed-row>span{display:flex;justify-content:space-between;margin-bottom:6px;color:#d9cce6;font-weight:600}
+.ed-row>span b{color:#ffb3cd;font-variant-numeric:tabular-nums}
+.ed-row input[type=range]{padding:0;min-height:30px;border:0;background:none;accent-color:var(--primary)}
+.ed-label{margin:16px 0 8px;font-size:14px;font-weight:600;color:#d9cce6}
+.ed-chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.06);cursor:pointer;font-size:14px;font-weight:600}
+.chip:hover{background:rgba(255,255,255,.12)}
+.chip.on{background:var(--grad);border-color:transparent}
+.chip.add{border-style:dashed}
+.emoji-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px}
+.emoji-grid button{min-height:46px;font-size:24px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.05);cursor:pointer}
+.emoji-grid button:hover{background:rgba(255,255,255,.14);transform:scale(1.08)}
+.ed-fx{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.03)}
+.ed-progress{height:8px;border-radius:99px;background:rgba(255,255,255,.1);margin-top:14px;overflow:hidden}
+.ed-progress i{display:block;height:100%;width:0;background:var(--grad);transition:width .2s}
+@media (max-width:900px){.ed{grid-template-columns:1fr;padding:14px}.ed-stage{max-height:60vh;max-width:340px;margin-inline:auto}}
+
 /* toast */
 #toast-root{position:fixed;left:50%;bottom:calc(var(--tab-h) + 20px);transform:translateX(-50%);z-index:300;display:grid;gap:8px;width:min(92vw,420px)}
 .toast{background:#fff;color:#18101f;padding:12px 16px;border-radius:14px;font-weight:600;box-shadow:0 12px 40px rgba(0,0,0,.5);animation:pop .3s var(--ease)}
