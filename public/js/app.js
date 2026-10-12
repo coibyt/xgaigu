@@ -58,6 +58,27 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// POST with upload progress (fetch can't report it). Returns { promise, abort }.
+function apiUpload(path, body, onProgress) {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise((resolve, reject) => {
+    xhr.open('POST', '/api' + path);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+    xhr.onload = () => {
+      let d = {}; try { d = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(d);
+      const er = new Error(d.error || (xhr.status === 413 ? 'File quá lớn' : 'Có lỗi xảy ra')); er.status = xhr.status; reject(er);
+    };
+    xhr.onerror = () => reject(new Error('Mất kết nối mạng, vui lòng thử lại'));
+    xhr.ontimeout = () => reject(new Error('Tải lên quá lâu, vui lòng thử lại'));
+    xhr.onabort = () => reject(Object.assign(new Error('Đã huỷ tải lên'), { aborted: true }));
+    xhr.send(body);
+  });
+  return { promise, abort: () => xhr.abort() };
+}
+const fmtMB = (b) => (b / 1048576).toFixed(b < 10485760 ? 1 : 0);
+
 function toast(msg, bad) {
   const t = h('div', { class: 'toast' + (bad ? ' bad' : '') }, msg);
   $('#toast-root').append(t);
@@ -646,6 +667,17 @@ async function pageUpload() {
   };
   const preview = h('div', { class: 'up-preview', hidden: true });
   let previewUrl = null;
+  const upFill = h('i'), upPct = h('b', {}, '0%'), upInfo = h('span', { class: 'muted' }, '');
+  const upCancel = h('button', { type: 'button', class: 'btn sm ghost' }, 'Huỷ tải lên');
+  const upBox = h('div', { class: 'up-progress', hidden: true, role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-live': 'polite' },
+    h('div', { class: 'up-head' }, h('span', {}, 'Đang tải video lên…'), upPct),
+    h('div', { class: 'up-track' }, upFill),
+    h('div', { class: 'up-foot' }, upInfo, upCancel),
+    h('p', { class: 'muted', style: 'font-size:13px;margin-top:8px' }, 'Vui lòng giữ trang này mở cho đến khi tải xong.'));
+  let uploading = null;
+  const warnLeave = (e) => { if (uploading) { e.preventDefault(); e.returnValue = ''; } };
+  window.addEventListener('beforeunload', warnLeave);
+  onLeave(() => { window.removeEventListener('beforeunload', warnLeave); if (uploading) uploading.abort(); });
 
   // ----- cover image (ảnh bìa): pick a frame from the video, or upload your own picture -----
   let cover = null, coverUrl = null, coverVideo = null, frameTimer = null, customCover = false;
@@ -717,17 +749,34 @@ async function pageUpload() {
     h('label', { class: 'f' }, h('span', {}, 'Dán liên kết (YouTube, .mp4, .m3u8)'), h('input', { name: 'url', type: 'url', placeholder: 'https://' })),
     h('label', { class: 'f' }, h('span', {}, 'Mô tả'), h('textarea', { name: 'caption', maxlength: 300, placeholder: 'Giới thiệu ngắn về bạn, sở thích, mẫu người lý tưởng…' })),
     h('div', { class: 'notice', style: 'margin-bottom:16px', html: icon('shield') + '<span>Không đăng nội dung khiêu dâm, ảnh/video của người khác hay quảng cáo dịch vụ tình dục. Vi phạm sẽ bị khoá tài khoản.</span>' }),
-    h('button', { class: 'btn primary lg', type: 'submit', style: 'width:100%' }, 'Đăng video'));
+    h('button', { class: 'btn primary lg', type: 'submit', style: 'width:100%' }, 'Đăng video'),
+    upBox);
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
     closeEditor(); // posting never requires exporting: unfinished edits are dropped and the chosen video is posted
-    const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang tải lên…';
+    err.hidden = true;
+    const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang tải lên… 0%';
     const fd = new FormData(f); fd.delete('file');
     const file = edited || (fileIn.files[0] && fileIn.files[0].size ? fileIn.files[0] : null);
     if (file) fd.set('file', file, file.name);
     fd.delete('thumb'); if (file && cover) fd.set('thumb', cover, cover.name || 'cover.jpg');
-    try { await api('/videos', { method: 'POST', body: fd }); toast('Đã đăng video 🎬'); location.hash = '#/feed'; }
-    catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; btn.textContent = 'Đăng video'; }
+    const reset = () => { uploading = null; upBox.hidden = true; btn.disabled = false; btn.textContent = 'Đăng video'; };
+    const setPct = (loaded, total) => {
+      const pct = Math.min(100, Math.floor((loaded / total) * 100));
+      upFill.style.width = pct + '%'; upPct.textContent = pct + '%'; upBox.setAttribute('aria-valuenow', String(pct));
+      upInfo.textContent = pct >= 100 ? 'Đang xử lý video trên máy chủ…' : fmtMB(loaded) + ' / ' + fmtMB(total) + ' MB';
+      btn.textContent = pct >= 100 ? 'Đang xử lý…' : 'Đang tải lên… ' + pct + '%';
+    };
+    upFill.style.width = '0%'; upPct.textContent = '0%'; upInfo.textContent = ''; upBox.hidden = false;
+    upBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    uploading = apiUpload('/videos', fd, setPct);
+    upCancel.onclick = () => uploading && uploading.abort();
+    try { await uploading.promise; uploading = null; toast('Đã đăng video 🎬'); location.hash = '#/feed'; }
+    catch (ex) {
+      reset();
+      if (ex.status === 401) return openAuth('login');
+      if (!ex.aborted) { err.textContent = ex.message; err.hidden = false; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); } else toast('Đã huỷ tải lên');
+    }
   });
   onLeave(closeEditor);
   main.append(h('div', { class: 'wrap', style: 'max-width:1100px;padding:32px 0' }, h('div', { class: 'card', style: 'padding:28px;max-width:620px;margin-inline:auto' }, f), editHost));
