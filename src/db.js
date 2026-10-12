@@ -112,6 +112,13 @@ for (const [col, ddl] of [
 
 const videoCols = db.prepare('PRAGMA table_info(videos)').all().map((c) => c.name);
 if (!videoCols.includes('thumb')) db.exec("ALTER TABLE videos ADD COLUMN thumb TEXT DEFAULT ''");
+for (const [col, ddl] of [
+  ['region', "region TEXT DEFAULT ''"],
+  ['province', "province TEXT DEFAULT ''"],
+  ['district', "district TEXT DEFAULT ''"],
+  ['info', "info TEXT DEFAULT ''"],
+  ['v_phone', "v_phone TEXT DEFAULT ''"],
+]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 
 // Streams left "live" by a previous process are no longer live.
 db.prepare('UPDATE streams SET live = 0, ended_at = ? WHERE live = 1').run(Date.now());

@@ -288,7 +288,30 @@ app.get('/api/users/:id/phone', needUser, (req, res) => {
 });
 
 // ---------- videos ----------
-function listVideos(viewer, { userId, before, limit = 12 } = {}) {
+// Region → province → district list (served to the client as /data/vn-geo.json); used to validate what uploaders pick.
+const GEO = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'data', 'vn-geo.json'), 'utf8'));
+function readArea(b) {
+  const region = Object.keys(GEO).includes(b.region) ? b.region : '';
+  const prov = region ? GEO[region].find((p) => p[0] === b.province) : null;
+  const province = prov ? prov[0] : '';
+  const district = prov && prov[1].includes(b.district) ? b.district : '';
+  return { region, province, district };
+}
+
+// Details an uploader can attach to a video (all optional; phone is stored separately and only released to signed-in viewers).
+function readInfo(b) {
+  const int = (v, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
+  const by = int(b.birthYear, currentYear() - 100, currentYear() - 18);
+  const rawInterests = Array.isArray(b.interests) ? b.interests : String(b.interests || '').split(/[,\n]/);
+  return {
+    birthYear: by, height: int(b.height, 120, 230), weight: int(b.weight, 30, 200),
+    origin: clean(b.origin, 60), occupation: clean(b.occupation, 60), address: clean(b.address, 200),
+    workTime: clean(b.workTime, 120), boundaries: clean(b.boundaries, 300),
+    interests: [...new Set(rawInterests.map((t) => clean(t, 24).replace(/\|/g, '')).filter(Boolean))].slice(0, 10),
+  };
+}
+
+function listVideos(viewer, { userId, before, limit = 12, id, region, province, district } = {}) {
   const rows = db.prepare(
     `SELECT v.*, u.name AS u_name, u.avatar AS u_avatar, u.city AS u_city, u.birth_year AS u_by,
        u.show_phone AS u_sp, u.phone AS u_phone,
@@ -297,19 +320,53 @@ function listVideos(viewer, { userId, before, limit = 12 } = {}) {
        (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id AND l.user_id = ?) AS liked
      FROM videos v JOIN users u ON u.id = v.user_id
      WHERE v.hidden = 0 AND u.banned = 0 AND (? IS NULL OR v.user_id = ?) AND (? IS NULL OR v.id < ?)
+       AND (? IS NULL OR v.id = ?) AND (? IS NULL OR v.region = ?) AND (? IS NULL OR v.province = ?) AND (? IS NULL OR v.district = ?)
      ORDER BY v.id DESC LIMIT ?`
-  ).all(viewer ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null, limit);
-  return rows.map((r) => ({
-    id: r.id, caption: r.caption, file: r.file, url: r.url, thumb: r.thumb || '', createdAt: r.created_at,
-    likes: r.likes, comments: r.comments, liked: !!r.liked,
-    user: { id: r.user_id, name: r.u_name, avatar: r.u_avatar, city: r.u_city,
-      age: currentYear() - r.u_by, canCall: !!(r.u_sp && r.u_phone) },
-  }));
+  ).all(viewer ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null, id ?? null, id ?? null,
+    region || null, region || null, province || null, province || null, district || null, district || null, limit);
+  return rows.map((r) => {
+    let info = {}; try { info = r.info ? JSON.parse(r.info) : {}; } catch {}
+    return {
+      id: r.id, caption: r.caption, file: r.file, url: r.url, thumb: r.thumb || '', createdAt: r.created_at,
+      region: r.region || '', province: r.province || '', district: r.district || '', info,
+      hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
+      likes: r.likes, comments: r.comments, liked: !!r.liked,
+      user: { id: r.user_id, name: r.u_name, avatar: r.u_avatar, city: r.u_city,
+        age: currentYear() - r.u_by, canCall: !!(r.u_sp && r.u_phone) },
+    };
+  });
 }
 
 app.get('/api/videos', (req, res) => {
   const before = parseInt(req.query.before, 10) || null;
-  res.json({ videos: listVideos(req.user, { before, limit: 12 }) });
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 48);
+  const area = readArea(req.query);
+  res.json({ videos: listVideos(req.user, { before, limit, ...area }) });
+});
+
+app.get('/api/videos/:id(\\d+)', (req, res) => {
+  const v = listVideos(req.user, { id: Number(req.params.id), limit: 1 })[0];
+  if (!v) return fail(res, 404, 'Không tìm thấy video');
+  res.json({ video: v });
+});
+
+// How many videos each region / province / district has (powers the "Khu vực" browser).
+app.get('/api/areas', (_req, res) => {
+  const rows = db.prepare(
+    `SELECT v.region, v.province, v.district, COUNT(*) AS n FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.hidden = 0 AND u.banned = 0 AND v.region != '' GROUP BY v.region, v.province, v.district`
+  ).all();
+  res.json({ areas: rows });
+});
+
+app.get('/api/videos/:id(\\d+)/phone', needUser, (req, res) => {
+  const r = db.prepare(
+    `SELECT v.v_phone, u.phone, u.show_phone FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.id = ? AND v.hidden = 0 AND u.banned = 0`
+  ).get(req.params.id);
+  const phone = r && (r.v_phone || (r.show_phone ? r.phone : ''));
+  if (!phone) return fail(res, 404, 'Người này chưa mở số điện thoại');
+  res.json({ phone });
 });
 
 app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'thumb', maxCount: 1 }]), (req, res) => {
@@ -321,9 +378,14 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   const dropAll = () => { if (file) rmUpload(file.filename); if (thumb) rmUpload(thumb.filename); };
   if (file && !VIDEO_TYPES[file.mimetype]) { dropAll(); return fail(res, 400, 'Chỉ nhận video MP4/WebM/MOV'); }
   if (!file && !/^https:\/\/\S+$/.test(url)) { dropAll(); return fail(res, 400, 'Hãy chọn file video hoặc dán liên kết https'); }
+  const area = readArea(req.body);
+  if (!area.region || !area.province) { dropAll(); return fail(res, 400, 'Vui lòng chọn khu vực (miền và tỉnh/thành) của video'); }
   if (file) url = '';
-  db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, created_at) VALUES (?,?,?,?,?,?)')
-    .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '', now());
+  const info = readInfo(req.body);
+  const phone = clean(req.body.phone, 20).replace(/[^\d+]/g, '');
+  db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '',
+      area.region, area.province, area.district, JSON.stringify(info), phone, now());
   res.json({ ok: true });
 });
 

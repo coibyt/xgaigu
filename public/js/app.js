@@ -6,6 +6,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const main = $('#main');
 const P = {
+  info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01',
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
   msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
   phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
@@ -216,7 +217,7 @@ function connectEvents() {
 
 // ---------- nav ----------
 const NAV = [
-  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
+  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/regions', 'Khu vực', 'pin'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
 ];
 function renderNav() {
   const cur = location.hash || '#/';
@@ -303,13 +304,13 @@ async function startChat(user) {
   location.hash = '#/messages/' + user.id;
 }
 
-async function openCall(user) {
+async function openCall(user, videoId) {
   if (!(await needLogin())) return;
   if (user.id === S.user.id) return;
   const m = modal(h('div', {}, h('h3', {}, 'Gọi cho ' + user.name), h('div', { class: 'spin' })));
   try {
     if (!user.canCall) throw new Error('nocall');
-    const { phone } = await api('/users/' + user.id + '/phone');
+    const { phone } = await api(videoId ? '/videos/' + videoId + '/phone' : '/users/' + user.id + '/phone');
     m.box.innerHTML = '';
     m.box.append(h('button', { class: 'iconbtn x', onclick: m.close, 'aria-label': 'Đóng', html: icon('x') }),
       h('h3', {}, 'Gọi cho ' + user.name), h('p', { class: 'sub' }, 'Người này đã đồng ý chia sẻ số điện thoại. Hãy lịch sự và tôn trọng.'),
@@ -413,14 +414,15 @@ function slide(v) {
   const rail = h('div', { class: 'rail' },
     like, cm,
     actBtn('chat', 'Nhắn tin', 'send', null, () => startChat(v.user)),
-    actBtn('call', 'Gọi', 'phone', null, () => openCall(v.user)),
+    actBtn('', 'Thông tin', 'info', null, () => openInfo(v)),
+    actBtn('call', 'Gọi', 'phone', null, () => openCall({ ...v.user, canCall: v.hasPhone }, v.id)),
     actBtn('book', 'Hẹn gặp', 'cal', null, () => openBook(v.user, v.id)),
     actBtn('', 'Chia sẻ', 'share', null, () => share(v)),
     actBtn('', 'Báo cáo', 'flag', null, () => openReport('video', v.id)));
   const el = h('article', { class: 'slide', 'data-id': v.id },
     h('div', { class: 'player' }, media, mute,
       h('div', { class: 'meta' },
-        h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.user.city && h('span', { class: 'muted', style: 'font-weight:500;font-size:14px', html: icon('pin') + esc(v.user.city) })),
+        h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : '')), (v.province || v.user.city) && h('span', { class: 'muted', style: 'font-weight:500;font-size:14px', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) })),
         v.caption && h('p', { class: 'cap' }, v.caption))),
     rail);
   return el;
@@ -429,7 +431,7 @@ function slide(v) {
 function feedTabs(cur) {
   const t = (href, label, key, extra) => h('a', { href, class: cur === key ? 'on' : '' }, extra, label);
   return h('nav', { class: 'feedtabs', 'aria-label': 'Loại nội dung' },
-    t('#/', 'Dành cho bạn', 'foryou'), t('#/nearby', 'Quanh đây', 'near'), t('#/live', 'Trực tiếp', 'live', h('i', { class: 'dot' })));
+    t('#/', 'Dành cho bạn', 'foryou'), t('#/regions', 'Khu vực', 'area'), t('#/nearby', 'Quanh đây', 'near'), t('#/live', 'Trực tiếp', 'live', h('i', { class: 'dot' })));
 }
 
 async function pageFeed(startId, home) {
@@ -448,6 +450,9 @@ async function pageFeed(startId, home) {
     loading = false;
   };
   await more();
+  if (startId && !box.querySelector(`[data-id="${startId}"]`)) {
+    try { const { video } = await api('/videos/' + startId); if (box.querySelector('.empty')) box.innerHTML = ''; box.prepend(slide(video)); } catch {}
+  }
   if (startId) { const t = box.querySelector(`[data-id="${startId}"]`); t && t.scrollIntoView(); }
   box.addEventListener('scroll', () => { if (box.scrollTop + box.clientHeight * 2 > box.scrollHeight) more(); }, { passive: true });
   box.addEventListener('keydown', () => {});
@@ -655,6 +660,85 @@ async function pageMe() {
       h('button', { class: 'btn ghost', onclick: async () => { await api('/logout', { method: 'POST' }); S.user = null; S.unread = 0; connectEvents(); renderNav(); location.hash = '#/'; toast('Đã đăng xuất'); } }, 'Đăng xuất'))));
 }
 
+// ---------- regions (miền → tỉnh → huyện) ----------
+const REGION_NAMES = { bac: 'Miền Bắc', trung: 'Miền Trung', nam: 'Miền Nam' };
+let geoData = null;
+async function loadGeo() { if (!geoData) geoData = await (await fetch('/data/vn-geo.json')).json(); return geoData; }
+
+function geoPicker(init = {}) {
+  const reg = h('select', { name: 'region', 'aria-label': 'Miền', disabled: true }, h('option', { value: '' }, 'Chọn miền'));
+  const prov = h('select', { name: 'province', 'aria-label': 'Tỉnh / thành phố', disabled: true }, h('option', { value: '' }, 'Chọn tỉnh / thành phố'));
+  const dist = h('select', { name: 'district', 'aria-label': 'Quận / huyện', disabled: true }, h('option', { value: '' }, 'Chọn quận / huyện (không bắt buộc)'));
+  const fill = (sel, first, items) => { sel.replaceChildren(h('option', { value: '' }, first), ...items.map((x) => h('option', { value: x }, x))); sel.disabled = !items.length; };
+  loadGeo().then((geo) => {
+    Object.keys(REGION_NAMES).forEach((k) => reg.append(h('option', { value: k }, REGION_NAMES[k]))); reg.disabled = false;
+    reg.addEventListener('change', () => { fill(prov, 'Chọn tỉnh / thành phố', reg.value ? geo[reg.value].map((p) => p[0]) : []); fill(dist, 'Chọn quận / huyện (không bắt buộc)', []); });
+    prov.addEventListener('change', () => { const p = reg.value && geo[reg.value].find((x) => x[0] === prov.value); fill(dist, 'Chọn quận / huyện (không bắt buộc)', p ? p[1] : []); });
+  }).catch(() => toast('Không tải được danh sách khu vực', true));
+  return { el: h('div', { class: 'geo-row' }, reg, prov, dist) };
+}
+
+function openInfo(v) {
+  const i = v.info || {};
+  const rows = [
+    ['Khu vực', [v.district, v.province, REGION_NAMES[v.region]].filter(Boolean).join(', ')],
+    ['Năm sinh', i.birthYear], ['Chiều cao', i.height && i.height + ' cm'], ['Cân nặng', i.weight && i.weight + ' kg'],
+    ['Xuất xứ', i.origin], ['Nghề nghiệp', i.occupation], ['Địa chỉ', i.address], ['Thời gian rảnh', i.workTime],
+  ].filter((r) => r[1]);
+  const body = h('div', {}, h('h3', {}, v.user.name), h('p', { class: 'sub' }, v.caption || 'Thông tin giới thiệu'),
+    h('dl', { class: 'info-list' }, rows.map(([k, val]) => h('div', {}, h('dt', {}, k), h('dd', {}, String(val))))),
+    i.interests && i.interests.length > 0 && h('div', { class: 'facts', style: 'margin:12px 0' }, i.interests.map((t) => h('span', { class: 'fact tag' }, t))),
+    i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
+    !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
+    h('div', { class: 'row', style: 'margin-top:14px' },
+      h('button', { class: 'btn primary', onclick: () => startChat(v.user), html: icon('send') + 'Nhắn tin' }),
+      v.hasPhone && h('button', { class: 'btn', onclick: () => openCall({ ...v.user, canCall: true }, v.id), html: icon('phone') + 'Gọi' }),
+      h('button', { class: 'btn', onclick: () => openBook(v.user, v.id), html: icon('cal') + 'Hẹn gặp' })));
+  modal(body, { sheet: true });
+}
+
+async function pageRegions(reg, prov, dist) {
+  const [geo, { areas }] = await Promise.all([loadGeo(), api('/areas')]);
+  const sum = (f) => areas.filter(f).reduce((n, x) => n + x.n, 0);
+  const enc = encodeURIComponent;
+  const crumb = [h('a', { href: '#/regions' }, 'Khu vực')];
+  if (reg && geo[reg]) crumb.push(h('span', {}, ' › '), h('a', { href: '#/regions/' + reg }, REGION_NAMES[reg]));
+  if (prov) crumb.push(h('span', {}, ' › '), h('a', { href: `#/regions/${reg}/${enc(prov)}` }, prov));
+  if (dist) crumb.push(h('span', {}, ' › '), h('span', {}, dist));
+  const wrap = h('div', { class: 'wrap', style: 'padding:28px 0' }, h('p', { class: 'crumbs' }, crumb));
+  if (!reg || !geo[reg]) {
+    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Chọn khu vực'),
+      h('div', { class: 'grid g3' }, Object.keys(REGION_NAMES).map((k) => h('a', { class: 'card region-card ' + k, href: '#/regions/' + k },
+        h('h3', {}, REGION_NAMES[k]), h('p', { class: 'muted' }, geo[k].length + ' tỉnh / thành phố'), h('span', { class: 'status st-accepted' }, sum((x) => x.region === k) + ' video')))));
+  } else if (!prov) {
+    const filter = h('input', { placeholder: 'Tìm tỉnh / thành phố…', 'aria-label': 'Tìm tỉnh' });
+    const grid = h('div', { class: 'grid g4 prov-grid' });
+    const draw = () => {
+      const q = filter.value.trim().toLowerCase(); grid.replaceChildren();
+      geo[reg].filter((p) => p[0].toLowerCase().includes(q)).forEach(([name, ds]) => {
+        const n = sum((x) => x.region === reg && x.province === name);
+        grid.append(h('a', { class: 'card prov-card' + (n ? ' has' : ''), href: `#/regions/${reg}/${enc(name)}` }, h('b', {}, name), h('span', { class: 'muted' }, ds.length + ' quận/huyện'), n > 0 && h('span', { class: 'badge', style: 'margin:0' }, n)));
+      });
+    };
+    filter.addEventListener('input', draw); draw();
+    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, REGION_NAMES[reg]), h('div', { class: 'filters' }, filter), grid);
+  } else {
+    const p = geo[reg].find((x) => x[0] === prov);
+    if (!p) { wrap.append(h('div', { class: 'empty' }, h('h3', {}, 'Không tìm thấy khu vực'))); main.append(wrap); return; }
+    const chips = h('div', { class: 'ed-chips', style: 'margin:14px 0 24px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}` }, 'Tất cả'),
+      p[1].map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, d, n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
+    const grid = h('div', { class: 'grid g4' }, h('div', { class: 'spin' }));
+    wrap.append(h('h2', { class: 'title' }, dist || prov), chips, grid);
+    const q = `/videos?limit=48&region=${reg}&province=${enc(prov)}` + (dist ? '&district=' + enc(dist) : '');
+    api(q).then(({ videos }) => {
+      grid.replaceChildren();
+      if (!videos.length) grid.append(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video ở khu vực này'), h('p', {}, 'Hãy là người đầu tiên đăng video tại đây.'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video')));
+      videos.forEach((v) => grid.append(vthumb(v)));
+    }).catch(fail);
+  }
+  main.append(wrap, footer());
+}
+
 // ---------- upload ----------
 async function pageUpload() {
   if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
@@ -683,6 +767,21 @@ async function pageUpload() {
   };
   const preview = h('div', { class: 'up-preview', hidden: true });
   let previewUrl = null;
+  const me = S.user;
+  const geoSel = geoPicker({ region: '', province: '', district: '' });
+  const geoBox = h('div', { class: 'f', id: 'geo-box' },
+    h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Video thuộc khu vực nào? *'), geoSel.el);
+  const field = (label, name, attrs = {}, tag = 'input') => h('label', { class: 'f' }, h('span', {}, label), h(tag, { name, ...attrs }, tag === 'textarea' ? attrs.value : null));
+  const detailsBox = h('details', { class: 'up-details', open: true },
+    h('summary', {}, 'Thông tin giới thiệu (không bắt buộc – đã điền sẵn từ hồ sơ, bạn có thể sửa)'),
+    h('div', { class: 'two' }, field('Năm sinh', 'birthYear', { type: 'number', inputmode: 'numeric', value: me.birthYear || '' }), field('Xuất xứ / quê quán', 'origin', { value: me.origin || '', maxlength: 60 })),
+    h('div', { class: 'two' }, field('Chiều cao (cm)', 'height', { type: 'number', inputmode: 'numeric', value: me.height || '' }), field('Cân nặng (kg)', 'weight', { type: 'number', inputmode: 'numeric', value: me.weight || '' })),
+    field('Nghề nghiệp', 'occupation', { value: me.occupation || '', maxlength: 60 }),
+    field('Sở thích', 'interests', { value: (me.interests || []).join(', '), maxlength: 240, placeholder: 'du lịch, cà phê, yoga' }),
+    field('Địa chỉ', 'address', { value: me.address || '', maxlength: 200 }),
+    field('Thời gian rảnh', 'workTime', { value: me.availability || '', maxlength: 120, placeholder: 'VD: Tối các ngày trong tuần' }),
+    h('label', { class: 'f' }, h('span', {}, 'Số điện thoại'), h('input', { name: 'phone', type: 'tel', value: me.phone || '', maxlength: 20, placeholder: '09xx xxx xxx' }), h('small', {}, 'Chỉ thành viên đã đăng nhập mới thấy khi bấm nút "Gọi" trên video.')),
+    h('label', { class: 'f' }, h('span', {}, 'Điều tôi không muốn / từ chối gặp'), h('textarea', { name: 'boundaries', maxlength: 300, style: 'min-height:70px' }, me.boundaries || '')));
   const upFill = h('i'), upPct = h('b', {}, '0%'), upInfo = h('span', { class: 'muted' }, '');
   const upCancel = h('button', { type: 'button', class: 'btn sm ghost' }, 'Huỷ tải lên');
   const upBox = h('div', { class: 'up-progress', hidden: true, role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-live': 'polite' },
@@ -764,6 +863,7 @@ async function pageUpload() {
     h('p', { class: 'muted', style: 'text-align:center;margin:-4px 0 12px' }, '— hoặc —'),
     h('label', { class: 'f' }, h('span', {}, 'Dán liên kết (YouTube, .mp4, .m3u8)'), h('input', { name: 'url', type: 'url', placeholder: 'https://' })),
     h('label', { class: 'f' }, h('span', {}, 'Mô tả'), h('textarea', { name: 'caption', maxlength: 300, placeholder: 'Giới thiệu ngắn về bạn, sở thích, mẫu người lý tưởng…' })),
+    geoBox, detailsBox,
     h('div', { class: 'notice', style: 'margin-bottom:16px', html: icon('shield') + '<span>Không đăng nội dung khiêu dâm, ảnh/video của người khác hay quảng cáo dịch vụ tình dục. Vi phạm sẽ bị khoá tài khoản.</span>' }),
     h('button', { class: 'btn primary lg', type: 'submit', style: 'width:100%' }, 'Đăng video'),
     upBox);
@@ -771,6 +871,9 @@ async function pageUpload() {
     e.preventDefault();
     closeEditor(); // posting never requires exporting: unfinished edits are dropped and the chosen video is posted
     err.hidden = true;
+    if (!f.elements.region.value || !f.elements.province.value) {
+      err.textContent = 'Vui lòng chọn khu vực của video (miền và tỉnh/thành phố).'; err.hidden = false; geoBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); return;
+    }
     const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang tải lên… 0%';
     const fd = new FormData(f); fd.delete('file');
     const file = edited || (fileIn.files[0] && fileIn.files[0].size ? fileIn.files[0] : null);
@@ -1020,6 +1123,7 @@ async function route() {
     if (a === 'feed') return pageFeed(b);
     if (a === 'people') return pagePeople();
     if (a === 'nearby') return pageNearby();
+    if (a === 'regions') return pageRegions(b && decodeURIComponent(b), seg[2] && decodeURIComponent(seg[2]), seg[3] && decodeURIComponent(seg[3]));
     if (a === 'u') return pageUser(b);
     if (a === 'me') return pageMe();
     if (a === 'upload') return pageUpload();

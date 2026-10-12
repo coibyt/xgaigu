@@ -284,6 +284,28 @@ table.t{width:100%;border-collapse:collapse}.t th,.t td{text-align:left;padding:
 .fact b{color:#ffb3cd;font-weight:600}
 .fact.tag{background:rgba(255,46,126,.12);border-color:rgba(255,46,126,.3)}
 
+/* regions & per-video info */
+.geo-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:760px){.geo-row{grid-template-columns:1fr}}
+.crumbs{font-size:14px;color:var(--muted);margin-bottom:12px}.crumbs a:hover{color:#fff}
+.region-card{padding:28px;display:grid;gap:8px;transition:transform .25s var(--ease),border-color .2s}
+.region-card:hover{transform:translateY(-4px);border-color:rgba(255,46,126,.5)}
+.region-card h3{font-size:24px}
+.region-card.bac{background:linear-gradient(135deg,rgba(139,92,246,.22),var(--surface))}
+.region-card.trung{background:linear-gradient(135deg,rgba(255,107,74,.22),var(--surface))}
+.region-card.nam{background:linear-gradient(135deg,rgba(255,46,126,.22),var(--surface))}
+.prov-card{padding:16px 18px;display:grid;gap:4px;position:relative;transition:border-color .2s,background .2s}
+.prov-card:hover{border-color:rgba(255,46,126,.5)}
+.prov-card.has{border-color:rgba(255,46,126,.35)}
+.prov-card .badge{position:absolute;top:14px;right:14px}
+.up-details{margin:6px 0 16px;border:1px solid var(--line);border-radius:16px;padding:12px 16px;background:rgba(255,255,255,.03)}
+.up-details summary{cursor:pointer;font-weight:600;font-size:14px;color:#d9cce6;margin-bottom:10px;min-height:32px}
+.info-list{display:grid;gap:8px;margin:12px 0}
+.info-list>div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding-bottom:8px;font-size:15px}
+.info-list dt{color:var(--muted)}.info-list dd{margin:0;text-align:right;font-weight:600}
+.feedtabs{overflow-x:auto;scrollbar-width:none}
+@media (max-width:760px){.feedtabs a{padding:0 10px;font-size:13px}}
+
 /* toast */
 #toast-root{position:fixed;left:50%;bottom:calc(var(--tab-h) + 20px);transform:translateX(-50%);z-index:300;display:grid;gap:8px;width:min(92vw,420px)}
 .toast{background:#fff;color:#18101f;padding:12px 16px;border-radius:14px;font-weight:600;box-shadow:0 12px 40px rgba(0,0,0,.5);animation:pop .3s var(--ease)}
