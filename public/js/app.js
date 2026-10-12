@@ -472,7 +472,8 @@ function vthumb(v) {
   else { media.style.pointerEvents = 'none'; }
   return h('a', { class: 'vcard', href: '#/feed/' + v.id, 'aria-label': 'Xem video của ' + v.user.name },
     media, h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(v.user), v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.caption && h('div', { class: 'cap' }, v.caption)),
-    h('span', { class: 'views', html: icon('heart') + v.likes }));
+    h('span', { class: 'views', html: icon('heart') + v.likes }),
+    v.distanceKm != null && h('span', { class: 'distance', html: icon('pin') + '≈ ' + v.distanceKm + ' km' }));
 }
 function lcard(s) {
   return h('a', { class: 'vcard', href: '#/live/' + s.id },
@@ -553,18 +554,20 @@ async function pagePeople() {
 
 const NEAR_KEY = 'xg_loc';
 async function pageNearby() {
-  const grid = h('div', { class: 'grid g4' });
+  const grid = h('div', { class: 'near-results' });
   const status = h('p', { class: 'muted', style: 'margin:12px 0 22px' });
   const radius = h('select', { 'aria-label': 'Bán kính', style: 'width:auto' }, [5, 10, 25, 50, 100].map((r) => h('option', { value: r, selected: r === 25 }, 'Trong ' + r + ' km')));
   let pos = null; try { pos = JSON.parse(sessionStorage.getItem(NEAR_KEY)); } catch {}
   const show = async () => {
     grid.innerHTML = ''; grid.append(h('div', { class: 'spin' }));
     try {
-      const { people } = await api(`/nearby?lat=${pos.lat}&lng=${pos.lng}&radius=${radius.value}`);
+      const q = `lat=${pos.lat}&lng=${pos.lng}&radius=${radius.value}`;
+      const [{ people }, { videos }] = await Promise.all([api('/nearby?' + q), api('/nearby-videos?' + q)]);
       grid.innerHTML = '';
-      status.textContent = people.length ? `Có ${people.length} người quanh bạn` : '';
-      if (!people.length) grid.append(h('div', { class: 'empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('pin') }), h('h3', {}, 'Chưa có ai trong bán kính này'), h('p', {}, 'Thử mở rộng bán kính tìm kiếm nhé.')));
-      people.forEach((u) => grid.append(pcard(u)));
+      status.textContent = videos.length || people.length ? `Có ${videos.length} video và ${people.length} thành viên quanh bạn` : '';
+      if (!videos.length && !people.length) grid.append(h('div', { class: 'empty' }, h('div', { class: 'ico', html: icon('pin') }), h('h3', {}, 'Chưa có ai trong bán kính này'), h('p', {}, 'Thử mở rộng bán kính tìm kiếm nhé.')));
+      if (videos.length) grid.append(h('h3', { class: 'sect' }, 'Video quanh bạn (gần nhất trước)'), h('div', { class: 'grid g4' }, videos.map(vthumb)));
+      if (people.length) grid.append(h('h3', { class: 'sect' }, 'Thành viên quanh bạn'), h('div', { class: 'grid g4' }, people.map(pcard)));
     } catch (e) { grid.innerHTML = ''; fail(e); }
   };
   const locate = () => {
@@ -779,6 +782,7 @@ async function pageUpload() {
   const preview = h('div', { class: 'up-preview', hidden: true });
   let previewUrl = null;
   const me = S.user;
+  const addrPicker = placePicker({ address: me.address, city: me.city, lat: me.hasLocation ? 0 : null });
   const geoSel = geoPicker({ region: '', province: '', district: '' });
   const geoBox = h('div', { class: 'f', id: 'geo-box' },
     h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Video thuộc khu vực nào? *'), geoSel.el);
@@ -791,7 +795,8 @@ async function pageUpload() {
     h('div', { class: 'two' }, field('Chiều cao (cm)', 'height', { type: 'number', inputmode: 'numeric', value: me.height || '' }), field('Cân nặng (kg)', 'weight', { type: 'number', inputmode: 'numeric', value: me.weight || '' })),
     field('Nghề nghiệp', 'occupation', { value: me.occupation || '', maxlength: 60 }),
     field('Sở thích', 'interests', { value: (me.interests || []).join(', '), maxlength: 240, placeholder: 'du lịch, cà phê, yoga' }),
-    field('Địa chỉ', 'address', { value: me.address || '', maxlength: 200 }),
+    h('div', { class: 'f' }, h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Địa chỉ'), addrPicker.el,
+      h('small', { class: 'muted', style: 'display:block;margin-top:2px' }, 'Chọn một gợi ý để video hiện ở mục "Quanh đây" của khách ở gần bạn.')),
     field('Thời gian rảnh', 'workTime', { value: me.availability || '', maxlength: 120, placeholder: 'VD: Tối các ngày trong tuần' }),
     h('label', { class: 'f' }, h('span', {}, 'Số điện thoại'), h('input', { name: 'phone', type: 'tel', value: me.phone || '', maxlength: 20, placeholder: '09xx xxx xxx' }), h('small', {}, 'Chỉ thành viên đã đăng nhập mới thấy khi bấm nút "Gọi" trên video.')),
     h('label', { class: 'f' }, h('span', {}, 'Điều tôi không muốn / từ chối gặp'), h('textarea', { name: 'boundaries', maxlength: 300, style: 'min-height:70px' }, me.boundaries || '')));
@@ -894,6 +899,7 @@ async function pageUpload() {
     const file = edited || (fileIn.files[0] && fileIn.files[0].size ? fileIn.files[0] : null);
     if (file) fd.set('file', file, file.name);
     fd.delete('thumb'); if (file && cover) fd.set('thumb', cover, cover.name || 'cover.jpg');
+    { const a = addrPicker.get(); fd.set('address', a.address || a.city || ''); fd.delete('lat'); fd.delete('lng'); if (a.lat) { fd.set('lat', a.lat); fd.set('lng', a.lng); } }
     const reset = () => { uploading = null; upBox.hidden = true; btn.disabled = false; btn.textContent = 'Đăng video'; };
     const setPct = (loaded, total) => {
       const pct = Math.min(100, Math.floor((loaded / total) * 100));

@@ -248,6 +248,22 @@ app.get('/api/nearby', (req, res) => {
   res.json({ people });
 });
 
+// Videos near a point, nearest first. A video uses the address picked when it was posted, falling back to the
+// uploader's profile location. Only a distance rounded to whole km is returned, never coordinates.
+app.get('/api/nearby-videos', (req, res) => {
+  const lat = num(req.query.lat), lng = num(req.query.lng);
+  if (lat === null || lng === null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return fail(res, 400, 'Thiếu vị trí');
+  const radius = Math.min(Math.max(num(req.query.radius) || 25, 1), 500);
+  const rows = db.prepare(
+    `SELECT v.id, COALESCE(v.lat, u.lat) AS lat, COALESCE(v.lng, u.lng) AS lng FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.hidden = 0 AND u.banned = 0 AND u.show_nearby = 1 AND COALESCE(v.lat, u.lat) IS NOT NULL AND COALESCE(v.lng, u.lng) IS NOT NULL`
+  ).all();
+  const near = rows.map((r) => ({ id: r.id, d: distanceKm(lat, lng, r.lat, r.lng) })).filter((x) => x.d <= radius).sort((a, b) => a.d - b.d).slice(0, 48);
+  if (!near.length) return res.json({ videos: [] });
+  const byId = new Map(listVideos(req.user, { ids: near.map((x) => x.id), limit: 48 }).map((v) => [v.id, v]));
+  res.json({ videos: near.map((x) => byId.has(x.id) ? { ...byId.get(x.id), distanceKm: Math.max(1, Math.round(x.d)) } : null).filter(Boolean) });
+});
+
 // Address autocomplete (OpenStreetMap Nominatim; ≤1 req/s, cached, identifying User-Agent as per its policy).
 const geoCache = new Map();
 let geoChain = Promise.resolve();
@@ -311,7 +327,7 @@ function readInfo(b) {
   };
 }
 
-function listVideos(viewer, { userId, before, limit = 12, id, region, province, district } = {}) {
+function listVideos(viewer, { userId, before, limit = 12, id, ids, region, province, district } = {}) {
   const rows = db.prepare(
     `SELECT v.*, u.name AS u_name, u.avatar AS u_avatar, u.city AS u_city, u.birth_year AS u_by,
        u.show_phone AS u_sp, u.phone AS u_phone,
@@ -320,9 +336,10 @@ function listVideos(viewer, { userId, before, limit = 12, id, region, province, 
        (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id AND l.user_id = ?) AS liked
      FROM videos v JOIN users u ON u.id = v.user_id
      WHERE v.hidden = 0 AND u.banned = 0 AND (? IS NULL OR v.user_id = ?) AND (? IS NULL OR v.id < ?)
-       AND (? IS NULL OR v.id = ?) AND (? IS NULL OR v.region = ?) AND (? IS NULL OR v.province = ?) AND (? IS NULL OR v.district = ?)
+       AND (? IS NULL OR instr(?, ',' || v.id || ',') > 0) AND (? IS NULL OR v.id = ?) AND (? IS NULL OR v.region = ?) AND (? IS NULL OR v.province = ?) AND (? IS NULL OR v.district = ?)
      ORDER BY v.id DESC LIMIT ?`
-  ).all(viewer ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null, id ?? null, id ?? null,
+  ).all(viewer ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null,
+    ids ? ',' + ids.join(',') + ',' : null, ids ? ',' + ids.join(',') + ',' : null, id ?? null, id ?? null,
     region || null, region || null, province || null, province || null, district || null, district || null, limit);
   return rows.map((r) => {
     let info = {}; try { info = r.info ? JSON.parse(r.info) : {}; } catch {}
@@ -385,9 +402,10 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   const info = readInfo(req.body);
   const phone = clean(req.body.phone, 20).replace(/[^\d+]/g, '');
   const nickname = clean(req.body.nickname, 40);
-  db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, nickname, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+  const place = readPlace(req.body);
+  db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, nickname, lat, lng, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '',
-      area.region, area.province, area.district, JSON.stringify(info), phone, nickname, now());
+      area.region, area.province, area.district, JSON.stringify(info), phone, nickname, place.lat, place.lng, now());
   res.json({ ok: true });
 });
 
