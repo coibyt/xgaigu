@@ -81,7 +81,7 @@ function avatar(u, cls = '') {
 }
 
 // ---------- state ----------
-const S = { user: null, unread: 0, es: null, cleanups: [] };
+const S = { user: null, unread: 0, es: null, cleanups: [], sound: false };
 const onLeave = (fn) => S.cleanups.push(fn);
 
 // ---------- modal ----------
@@ -230,9 +230,10 @@ function renderNav() {
 
 // ---------- media ----------
 const ytId = (u) => { const m = u.match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/); return m && m[1]; };
-function mediaEl(v, { controls = false } = {}) {
+function mediaEl(v, { controls = false, lazy = false } = {}) {
   const src = v.file || v.url;
   const y = !v.file && ytId(v.url);
+  if (y && lazy) return h('iframe', { 'data-yt': y, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video' });
   if (y) return h('iframe', { src: `https://www.youtube-nocookie.com/embed/${y}?playsinline=1&rel=0&modestbranding=1`, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video', loading: 'lazy' });
   const el = h('video', { playsinline: true, loop: true, muted: true, preload: 'metadata', controls: controls || null, 'aria-label': v.caption || 'Video' });
   el.muted = true;
@@ -245,8 +246,18 @@ let playObserver;
 function observePlay(el) {
   if (!playObserver) {
     playObserver = new IntersectionObserver((es) => es.forEach((e) => {
-      const v = e.target; if (!(v instanceof HTMLVideoElement)) return;
-      if (e.isIntersecting && e.intersectionRatio > 0.6) v.play().catch(() => {}); else v.pause();
+      const v = e.target;
+      if (v instanceof HTMLIFrameElement) {
+        const id = v.dataset.yt, on = e.isIntersecting && e.intersectionRatio > 0.6;
+        if (on && !v.src) v.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=${S.sound ? 0 : 1}&loop=1&playlist=${id}&playsinline=1&rel=0&modestbranding=1`;
+        else if (!on && v.src) v.removeAttribute('src');
+        return;
+      }
+      if (!(v instanceof HTMLVideoElement)) return;
+      if (e.isIntersecting && e.intersectionRatio > 0.6) {
+        v.muted = !S.sound; v._sync && v._sync();
+        v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
+      } else v.pause();
     }), { threshold: [0, 0.6, 1] });
   }
   playObserver.observe(el);
@@ -359,12 +370,13 @@ function actBtn(cls, label, ic, count, onclick) {
 }
 
 function slide(v) {
-  const media = mediaEl(v);
-  const mute = h('button', { class: 'iconbtn mute', 'aria-label': 'Bật/tắt tiếng', html: icon('mute'), onclick: () => { media.muted = !media.muted; mute.innerHTML = icon(media.muted ? 'mute' : 'vol'); } });
+  const media = mediaEl(v, { lazy: true });
+  const mute = h('button', { class: 'iconbtn mute', 'aria-label': 'Bật/tắt tiếng', html: icon('mute'), onclick: () => { S.sound = !S.sound; media.muted = !S.sound; mute.innerHTML = icon(S.sound ? 'vol' : 'mute'); } });
   if (media instanceof HTMLVideoElement) {
+    media._sync = () => { mute.innerHTML = icon(media.muted ? 'mute' : 'vol'); };
     observePlay(media);
     media.addEventListener('click', () => (media.paused ? media.play() : media.pause()));
-  } else mute.hidden = true;
+  } else { mute.hidden = true; if (media.dataset.yt) observePlay(media); }
   const like = actBtn('like' + (v.liked ? ' liked' : ''), 'Thích', 'heart', v.likes, () => toggleLike(v, like));
   const cm = actBtn('', 'Bình luận', 'msg', v.comments, () => openComments(v, cm.querySelector('.n')));
   const rail = h('div', { class: 'rail' },
@@ -383,14 +395,21 @@ function slide(v) {
   return el;
 }
 
-async function pageFeed(startId) {
+function feedTabs(cur) {
+  const t = (href, label, key, extra) => h('a', { href, class: cur === key ? 'on' : '' }, extra, label);
+  return h('nav', { class: 'feedtabs', 'aria-label': 'Loại nội dung' },
+    t('#/', 'Dành cho bạn', 'foryou'), t('#/nearby', 'Quanh đây', 'near'), t('#/live', 'Trực tiếp', 'live', h('i', { class: 'dot' })));
+}
+
+async function pageFeed(startId, home) {
   const box = h('div', { class: 'feedpage', id: 'feedbox' });
-  main.append(box);
+  main.append(h('div', { class: 'feedwrap' }, box, feedTabs('foryou')));
   let before = null, done = false, loading = false, first = true;
   const more = async () => {
     if (loading || done) return; loading = true;
     try {
       const { videos } = await api('/videos' + (before ? '?before=' + before : ''));
+      if (!videos.length && first && home) { loading = false; main.innerHTML = ''; return pageHome(); }
       if (!videos.length) { done = true; box.append(h('div', { class: 'slide' }, h('div', { class: 'endcap' }, videos.length || !first ? 'Bạn đã xem hết video 🎉' : ''))); if (first) { box.innerHTML = ''; box.append(emptyFeed()); } }
       else { videos.forEach((v) => box.append(slide(v))); before = videos[videos.length - 1].id; if (videos.length < 12) done = true; }
       first = false;
@@ -472,7 +491,7 @@ async function pageHome() {
 function footer() {
   return h('footer', { class: 'footer' }, h('div', { class: 'wrap cols' },
     h('div', {}, h('div', { class: 'logo' }, h('span', { class: 'logo-mark' }), h('span', {}, 'xgai', h('b', {}, 'gu'))), h('p', { style: 'margin-top:10px' }, '© ' + new Date().getFullYear() + ' xgaigu.com · Dành cho người từ 18 tuổi.')),
-    h('div', {}, h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
+    h('div', { class: 'row' }, h('a', { href: '#/welcome' }, 'Giới thiệu'), h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
 }
 
 // ---------- people & profiles ----------
@@ -858,7 +877,8 @@ async function route() {
   const page = async () => {
     main.innerHTML = '';
     const [a, b] = seg;
-    if (!a) return pageHome();
+    if (!a) return pageFeed(null, true);
+    if (a === 'welcome') return pageHome();
     if (a === 'feed') return pageFeed(b);
     if (a === 'people') return pagePeople();
     if (a === 'nearby') return pageNearby();
@@ -877,7 +897,7 @@ async function route() {
     if (seq !== routeSeq) return;
     main.innerHTML = ''; main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Rất tiếc, có lỗi xảy ra'), h('p', {}, e.message), h('a', { class: 'btn', style: 'margin-top:14px', href: '#/' }, 'Về trang chủ')));
   }
-  if (seq === routeSeq && !location.hash.startsWith('#/feed')) window.scrollTo(0, 0);
+  if (seq === routeSeq && !/^(#\/?)?$|^#\/feed/.test(location.hash)) window.scrollTo(0, 0);
   main.focus({ preventScroll: true });
 }
 
