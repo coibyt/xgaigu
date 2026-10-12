@@ -111,7 +111,7 @@ const upload = multer({
       cb(null, crypto.randomBytes(16).toString('hex') + ext);
     },
   }),
-  limits: { fileSize: 100 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 100 * 1024 * 1024, files: 2 },
   fileFilter: (_req, file, cb) => cb(null, !!(VIDEO_TYPES[file.mimetype] || IMAGE_TYPES[file.mimetype])),
 });
 const rmUpload = (name) => { if (name) fs.promises.unlink(path.join(UPLOAD_DIR, path.basename(name))).catch(() => {}); };
@@ -290,7 +290,7 @@ function listVideos(viewer, { userId, before, limit = 12 } = {}) {
      ORDER BY v.id DESC LIMIT ?`
   ).all(viewer ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null, limit);
   return rows.map((r) => ({
-    id: r.id, caption: r.caption, file: r.file, url: r.url, createdAt: r.created_at,
+    id: r.id, caption: r.caption, file: r.file, url: r.url, thumb: r.thumb || '', createdAt: r.created_at,
     likes: r.likes, comments: r.comments, liked: !!r.liked,
     user: { id: r.user_id, name: r.u_name, avatar: r.u_avatar, city: r.u_city,
       age: currentYear() - r.u_by, canCall: !!(r.u_sp && r.u_phone) },
@@ -302,15 +302,18 @@ app.get('/api/videos', (req, res) => {
   res.json({ videos: listVideos(req.user, { before, limit: 12 }) });
 });
 
-app.post('/api/videos', needUser, postLimiter, upload.single('file'), (req, res) => {
+app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'thumb', maxCount: 1 }]), (req, res) => {
   const caption = clean(req.body.caption, 300);
   let url = clean(req.body.url, 500);
-  const file = req.file;
-  if (file && !VIDEO_TYPES[file.mimetype]) { rmUpload(file.filename); return fail(res, 400, 'Chỉ nhận video MP4/WebM/MOV'); }
-  if (!file && !/^https:\/\/\S+$/.test(url)) return fail(res, 400, 'Hãy chọn file video hoặc dán liên kết https');
+  const file = req.files && req.files.file && req.files.file[0];
+  let thumb = req.files && req.files.thumb && req.files.thumb[0];
+  if (thumb && (!IMAGE_TYPES[thumb.mimetype] || thumb.size > 5 * 1024 * 1024)) { rmUpload(thumb.filename); thumb = null; }
+  const dropAll = () => { if (file) rmUpload(file.filename); if (thumb) rmUpload(thumb.filename); };
+  if (file && !VIDEO_TYPES[file.mimetype]) { dropAll(); return fail(res, 400, 'Chỉ nhận video MP4/WebM/MOV'); }
+  if (!file && !/^https:\/\/\S+$/.test(url)) { dropAll(); return fail(res, 400, 'Hãy chọn file video hoặc dán liên kết https'); }
   if (file) url = '';
-  db.prepare('INSERT INTO videos (user_id, caption, file, url, created_at) VALUES (?,?,?,?,?)')
-    .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, now());
+  db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, created_at) VALUES (?,?,?,?,?,?)')
+    .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '', now());
   res.json({ ok: true });
 });
 
@@ -320,6 +323,7 @@ app.delete('/api/videos/:id', needUser, (req, res) => {
   if (v.user_id !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'Không có quyền');
   db.prepare('DELETE FROM videos WHERE id = ?').run(v.id);
   rmUpload(v.file && v.file.replace('/uploads/', ''));
+  rmUpload(v.thumb && v.thumb.replace('/uploads/', ''));
   res.json({ ok: true });
 });
 

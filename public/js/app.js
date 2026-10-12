@@ -235,7 +235,7 @@ function mediaEl(v, { controls = false, lazy = false } = {}) {
   const y = !v.file && ytId(v.url);
   if (y && lazy) return h('iframe', { 'data-yt': y, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video' });
   if (y) return h('iframe', { src: `https://www.youtube-nocookie.com/embed/${y}?playsinline=1&rel=0&modestbranding=1`, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video', loading: 'lazy' });
-  const el = h('video', { playsinline: true, loop: true, muted: true, preload: 'metadata', controls: controls || null, 'aria-label': v.caption || 'Video' });
+  const el = h('video', { playsinline: true, loop: true, muted: true, preload: 'metadata', poster: v.thumb || null, controls: controls || null, 'aria-label': v.caption || 'Video' });
   el.muted = true;
   if (/\.m3u8(\?|$)/.test(src) && window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(src); hls.attachMedia(el); }
   else el.src = src;
@@ -438,7 +438,9 @@ function emptyFeed() {
 
 // ---------- home ----------
 function vthumb(v) {
-  const media = mediaEl(v);
+  const yt = !v.file && ytId(v.url);
+  const poster = v.thumb || (yt ? `https://i.ytimg.com/vi/${yt}/hqdefault.jpg` : '');
+  const media = poster ? h('img', { class: 'cover', src: poster, alt: v.caption || 'Ảnh bìa video', loading: 'lazy' }) : mediaEl(v);
   if (media instanceof HTMLVideoElement) { media.setAttribute('preload', 'metadata'); media.addEventListener('mouseenter', () => media.play().catch(() => {})); media.addEventListener('mouseleave', () => media.pause()); }
   else { media.style.pointerEvents = 'none'; }
   return h('a', { class: 'vcard', href: '#/feed/' + v.id, 'aria-label': 'Xem video của ' + v.user.name },
@@ -631,7 +633,7 @@ async function pageUpload() {
     closeEditor();
     editor = XGEditor.createEditor(files, {
       onDone: (file) => {
-        edited = file; closeEditor(); editNote.hidden = false;
+        edited = file; closeEditor(); editNote.hidden = false; customCover = false; setCover(null); loadCoverSource(file);
         editNote.replaceChildren(h('span', { html: icon('check') }), h('span', {}, 'Đã chuẩn bị video đã chỉnh sửa (' + (file.size / 1048576).toFixed(1) + ' MB). Thêm mô tả rồi bấm "Đăng video".'),
           h('button', { type: 'button', class: 'btn sm', onclick: () => { edited = null; editNote.hidden = true; if (fileIn.files[0]) openEditor([fileIn.files[0]]); } }, 'Chỉnh lại'));
         if (file.size > 100 * 1024 * 1024) toast('Video xuất ra lớn hơn 100MB, hãy cắt ngắn bớt.', true);
@@ -644,21 +646,72 @@ async function pageUpload() {
   };
   const preview = h('div', { class: 'up-preview', hidden: true });
   let previewUrl = null;
+
+  // ----- cover image (ảnh bìa): pick a frame from the video, or upload your own picture -----
+  let cover = null, coverUrl = null, coverVideo = null, frameTimer = null, customCover = false;
+  const coverImg = h('img', { class: 'cover-img', alt: 'Ảnh bìa video', hidden: true });
+  const coverRange = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: 0, 'aria-label': 'Chọn khung hình làm ảnh bìa', disabled: true });
+  const coverFile = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'sr', id: 'coverfile' });
+  const coverBox = h('div', { class: 'f cover-box', hidden: true },
+    h('span', { style: 'display:block;margin-bottom:8px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Ảnh bìa (hình đại diện của video)'),
+    h('div', { class: 'cover-row' }, coverImg,
+      h('div', { class: 'cover-ctl' },
+        h('label', { style: 'font-size:13px;color:var(--muted)' }, 'Kéo để chọn khung hình trong video', coverRange),
+        h('div', { class: 'row' }, h('label', { class: 'btn sm', for: 'coverfile' }, 'Tải ảnh từ máy'), coverFile,
+          h('button', { type: 'button', class: 'btn sm ghost', onclick: () => { customCover = false; captureFrame(); } }, 'Dùng khung hình hiện tại')))));
+  const setCover = (blob) => {
+    cover = blob;
+    if (coverUrl) URL.revokeObjectURL(coverUrl);
+    coverUrl = blob ? URL.createObjectURL(blob) : null;
+    coverImg.hidden = !blob; if (blob) coverImg.src = coverUrl;
+  };
+  function captureFrame() {
+    const v = coverVideo; if (!v || !v.videoWidth) return;
+    const k = Math.min(1, 720 / Math.max(v.videoWidth, v.videoHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    c.toBlob((b) => b && setCover(b), 'image/jpeg', 0.85);
+  }
+  function loadCoverSource(file) {
+    if (coverVideo) { coverVideo.src = ''; coverVideo = null; }
+    const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto';
+    const url = URL.createObjectURL(file); v.src = url; coverVideo = v;
+    v.addEventListener('loadedmetadata', () => {
+      const go = () => {
+        const d = isFinite(v.duration) ? v.duration : 10;
+        coverRange.max = String(d); coverRange.disabled = false; coverRange.value = String(Math.min(0.5, d / 4));
+        v.currentTime = +coverRange.value;
+      };
+      if (isFinite(v.duration)) go(); else { v.currentTime = 1e9; v.addEventListener('timeupdate', () => { v.currentTime = 0; go(); }, { once: true }); }
+    }, { once: true });
+    v.addEventListener('seeked', () => { if (!customCover) captureFrame(); });
+    coverBox.hidden = false;
+  }
+  coverRange.addEventListener('input', () => { customCover = false; clearTimeout(frameTimer); frameTimer = setTimeout(() => { if (coverVideo) coverVideo.currentTime = +coverRange.value; }, 80); });
+  coverFile.addEventListener('change', () => {
+    const f2 = coverFile.files[0]; if (!f2) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(f2.type)) return toast('Chỉ nhận ảnh JPG/PNG/WebP', true);
+    if (f2.size > 5 * 1024 * 1024) return toast('Ảnh bìa tối đa 5MB', true);
+    customCover = true; setCover(f2);
+  });
+
   fileIn.addEventListener('change', () => {
     edited = null; editNote.hidden = true; closeEditor();
     if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
     preview.replaceChildren(); preview.hidden = true;
+    customCover = false; setCover(null); coverBox.hidden = true; coverRange.disabled = true;
     const file = fileIn.files[0];
     if (!file) return;
     previewUrl = URL.createObjectURL(file);
     preview.append(h('video', { src: previewUrl, controls: true, playsinline: true, preload: 'metadata' }),
       h('p', { class: 'muted', style: 'font-size:13px' }, 'Đã chọn: ' + file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB). Bạn có thể đăng ngay hoặc bấm "Chỉnh sửa video".'));
     preview.hidden = false;
+    loadCoverSource(file);
   });
   const f = h('form', {},
     h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Đăng video'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Video dọc (9:16) ngắn gọn, chân thật sẽ được xem nhiều nhất. Sau khi chọn video bạn có thể cắt, chỉnh tốc độ, thêm nhạc, chữ, icon và hiệu ứng.'), err,
     h('label', { class: 'f' }, h('span', {}, 'Chọn video (MP4/WebM, tối đa 100MB)'), fileIn),
-    preview, editNote,
+    preview, coverBox, editNote,
     h('div', { class: 'row', style: 'margin:-6px 0 14px' }, h('button', { type: 'button', class: 'btn sm', html: icon('spark') + 'Chỉnh sửa video (không bắt buộc)', onclick: () => { if (!fileIn.files[0]) return toast('Hãy chọn video trước', true); openEditor([fileIn.files[0]]); } })),
     h('p', { class: 'muted', style: 'text-align:center;margin:-4px 0 12px' }, '— hoặc —'),
     h('label', { class: 'f' }, h('span', {}, 'Dán liên kết (YouTube, .mp4, .m3u8)'), h('input', { name: 'url', type: 'url', placeholder: 'https://' })),
@@ -672,6 +725,7 @@ async function pageUpload() {
     const fd = new FormData(f); fd.delete('file');
     const file = edited || (fileIn.files[0] && fileIn.files[0].size ? fileIn.files[0] : null);
     if (file) fd.set('file', file, file.name);
+    fd.delete('thumb'); if (file && cover) fd.set('thumb', cover, cover.name || 'cover.jpg');
     try { await api('/videos', { method: 'POST', body: fd }); toast('Đã đăng video 🎬'); location.hash = '#/feed'; }
     catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; btn.textContent = 'Đăng video'; }
   });
