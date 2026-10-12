@@ -2,8 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 
-const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
-fs.mkdirSync(DATA_DIR, { recursive: true });
+const { DATA_DIR } = require('./paths');
 
 const db = new DatabaseSync(path.join(DATA_DIR, 'xgaigu.db'));
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
