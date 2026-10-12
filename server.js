@@ -70,7 +70,8 @@ function publicUser(u) {
   return {
     id: u.id, name: u.name, age: currentYear() - u.birth_year, gender: u.gender,
     city: u.city, address: u.address || '', bio: u.bio, nickname: u.nickname || '', height: u.height || null,
-    weight: u.weight || null, origin: u.origin || '', availability: u.availability || '', boundaries: u.boundaries || '', avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
+    weight: u.weight || null, origin: u.origin || '', availability: u.availability || '', boundaries: u.boundaries || '',
+    occupation: u.occupation || '', interests: u.interests ? u.interests.split('|') : [], lookingFor: u.looking_for || '', avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
     role: u.role, createdAt: u.created_at,
   };
 }
@@ -204,9 +205,12 @@ app.patch('/api/me', needUser, (req, res) => {
     keep ? req.user.address : place.address, keep ? req.user.lat : place.lat, keep ? req.user.lng : place.lng, req.user.id
   );
   const intIn = (v, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
-  db.prepare('UPDATE users SET nickname=?, height=?, weight=?, origin=?, availability=?, boundaries=? WHERE id=?').run(
+  // interests arrive as a comma/newline separated string or an array; stored '|' separated, max 10 tags
+  const rawInterests = Array.isArray(b.interests) ? b.interests : String(b.interests || '').split(/[,\n]/);
+  const interests = [...new Set(rawInterests.map((t) => clean(t, 24).replace(/\|/g, '')).filter(Boolean))].slice(0, 10).join('|');
+  db.prepare('UPDATE users SET nickname=?, height=?, weight=?, origin=?, availability=?, boundaries=?, occupation=?, interests=?, looking_for=? WHERE id=?').run(
     clean(b.nickname, 40), intIn(b.height, 120, 230), intIn(b.weight, 30, 200), clean(b.origin, 60),
-    clean(b.availability, 120), clean(b.boundaries, 300), req.user.id
+    clean(b.availability, 120), clean(b.boundaries, 300), clean(b.occupation, 60), interests, clean(b.lookingFor, 300), req.user.id
   );
   res.json({ user: selfUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)) });
 });

@@ -105,6 +105,9 @@ for (const [col, ddl] of [
   ['origin', "origin TEXT DEFAULT ''"],
   ['availability', "availability TEXT DEFAULT ''"],
   ['boundaries', "boundaries TEXT DEFAULT ''"],
+  ['occupation', "occupation TEXT DEFAULT ''"],
+  ['interests', "interests TEXT DEFAULT ''"],
+  ['looking_for', "looking_for TEXT DEFAULT ''"],
 ]) if (!userCols.includes(col)) db.exec('ALTER TABLE users ADD COLUMN ' + ddl);
 
 const videoCols = db.prepare('PRAGMA table_info(videos)').all().map((c) => c.name);
