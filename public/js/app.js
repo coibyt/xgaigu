@@ -1,0 +1,785 @@
+/* xgaigu – single-page app (vanilla JS, no build step) */
+(() => {
+'use strict';
+
+// ---------- utils ----------
+const $ = (s, r = document) => r.querySelector(s);
+const main = $('#main');
+const P = {
+  heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
+  msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+  phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
+  cal: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  share: 'M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v14',
+  flag: 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7',
+  home: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  play: 'M5 3l14 9-14 9z',
+  users: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
+  live: 'M23 7l-7 5 7 5V7zM1 5h15a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H1a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z',
+  plus: 'M12 5v14M5 12h14',
+  x: 'M18 6 6 18M6 6l12 12',
+  send: 'M22 2 11 13M22 2l-7 20-4-9-9-4z',
+  vol: 'M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14',
+  mute: 'M11 5 6 9H2v6h4l5 4zM23 9l-6 6M17 9l6 6',
+  eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
+  user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  pin: 'M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0zM12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  check: 'M20 6 9 17l-5-5',
+  trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6',
+  back: 'M15 18l-6-6 6-6',
+  video: 'M23 7l-7 5 7 5V7zM3 5h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z',
+  spark: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z',
+};
+const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${P[n]}"/></svg>`;
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'html') el.innerHTML = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return el;
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function api(path, opts = {}) {
+  const o = { method: opts.method || 'GET', headers: {}, credentials: 'same-origin' };
+  if (opts.body instanceof FormData) o.body = opts.body;
+  else if (opts.body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opts.body); }
+  const r = await fetch('/api' + path, o);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(data.error || 'Có lỗi xảy ra'); e.status = r.status; throw e; }
+  return data;
+}
+
+function toast(msg, bad) {
+  const t = h('div', { class: 'toast' + (bad ? ' bad' : '') }, msg);
+  $('#toast-root').append(t);
+  setTimeout(() => t.remove(), 3600);
+}
+const fail = (e) => { if (e.status === 401) { openAuth('login'); } else toast(e.message, true); };
+
+const timeAgo = (t) => {
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return 'vừa xong'; if (s < 3600) return Math.floor(s / 60) + ' phút trước';
+  if (s < 86400) return Math.floor(s / 3600) + ' giờ trước'; return Math.floor(s / 86400) + ' ngày trước';
+};
+const fmtDate = (t) => new Date(t).toLocaleString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const fmtTime = (t) => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+function avatar(u, cls = '') {
+  const a = h('span', { class: 'avatar ' + cls });
+  if (u && u.avatar) a.append(h('img', { src: u.avatar, alt: '', loading: 'lazy' }));
+  else a.textContent = ((u && u.name) || '?').trim().charAt(0).toUpperCase();
+  return a;
+}
+
+// ---------- state ----------
+const S = { user: null, unread: 0, es: null, cleanups: [] };
+const onLeave = (fn) => S.cleanups.push(fn);
+
+// ---------- modal ----------
+function modal(content, { sheet = false, wide = false } = {}) {
+  const root = $('#modal-root');
+  const prev = document.activeElement;
+  const close = () => { ov.remove(); document.removeEventListener('keydown', esc_); prev && prev.focus && prev.focus(); };
+  const esc_ = (e) => { if (e.key === 'Escape') close(); };
+  const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true' },
+    h('button', { class: 'iconbtn x', 'aria-label': 'Đóng', onclick: close, html: icon('x') }), content);
+  const ov = h('div', { class: 'overlay' + (sheet ? ' sheet' : ''), onmousedown: (e) => { if (e.target === ov) close(); } }, box);
+  root.append(ov);
+  document.addEventListener('keydown', esc_);
+  const first = box.querySelector('input,textarea,select,button.btn');
+  first && first.focus();
+  return { close, box };
+}
+
+// ---------- auth ----------
+function openAuth(mode = 'login') {
+  let m;
+  const thisYear = new Date().getFullYear();
+  const render = (mode) => {
+    const reg = mode === 'register';
+    const err = h('div', { class: 'err', hidden: true });
+    const f = h('form', { novalidate: true },
+      h('h3', {}, reg ? 'Tạo tài khoản miễn phí' : 'Chào mừng trở lại'),
+      h('p', { class: 'sub' }, reg ? 'Chỉ mất 30 giây. Dành cho người từ 18 tuổi.' : 'Đăng nhập để chat, đặt hẹn và xem livestream.'),
+      h('div', { class: 'tabs' },
+        h('button', { type: 'button', class: reg ? '' : 'on', onclick: () => swap('login') }, 'Đăng nhập'),
+        h('button', { type: 'button', class: reg ? 'on' : '', onclick: () => swap('register') }, 'Đăng ký')),
+      err,
+      reg && h('label', { class: 'f' }, h('span', {}, 'Tên hiển thị'), h('input', { name: 'name', maxlength: 40, autocomplete: 'nickname', required: true })),
+      h('label', { class: 'f' }, h('span', {}, 'Email'), h('input', { name: 'email', type: 'email', autocomplete: 'email', required: true })),
+      h('label', { class: 'f' }, h('span', {}, 'Mật khẩu'), h('input', { name: 'password', type: 'password', autocomplete: reg ? 'new-password' : 'current-password', minlength: 8, required: true }),
+        reg && h('small', {}, 'Tối thiểu 8 ký tự')),
+      reg && h('div', { class: 'two' },
+        h('label', { class: 'f' }, h('span', {}, 'Năm sinh'), h('input', { name: 'birthYear', type: 'number', min: thisYear - 100, max: thisYear - 18, placeholder: String(thisYear - 25), required: true })),
+        h('label', { class: 'f' }, h('span', {}, 'Giới tính'), h('select', { name: 'gender' },
+          h('option', { value: '' }, 'Không nêu'), h('option', { value: 'nu' }, 'Nữ'), h('option', { value: 'nam' }, 'Nam'), h('option', { value: 'khac' }, 'Khác')))),
+      reg && h('label', { class: 'f' }, h('span', {}, 'Thành phố'), h('input', { name: 'city', maxlength: 60, placeholder: 'VD: Hà Nội' })),
+      reg && h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'agree' }),
+        h('span', { html: 'Tôi đủ 18 tuổi và đồng ý với <a href="#/terms" style="text-decoration:underline">Điều khoản & Quy tắc cộng đồng</a>.' })),
+      h('button', { class: 'btn primary lg', style: 'width:100%', type: 'submit' }, reg ? 'Tạo tài khoản' : 'Đăng nhập'));
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(f));
+      d.agree = !!f.agree?.checked;
+      const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
+      try {
+        const r = await api(reg ? '/register' : '/login', { method: 'POST', body: d });
+        S.user = r.user; m.close(); afterAuth(); toast(reg ? 'Chào mừng đến với xgaigu 💖' : 'Đã đăng nhập');
+      } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+    });
+    return f;
+  };
+  const swap = (mode) => { const nf = render(mode); m.box.querySelector('form').replaceWith(nf); nf.querySelector('input').focus(); };
+  m = modal(render(mode));
+}
+
+function afterAuth() { connectEvents(); renderNav(); route(); }
+
+function connectEvents() {
+  if (S.es) S.es.close();
+  S.es = null;
+  if (!S.user) return;
+  const es = new EventSource('/api/events');
+  es.addEventListener('message', (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.to === S.user.id) { S.unread++; renderNav(); if (!location.hash.startsWith('#/messages')) toast('💬 Bạn có tin nhắn mới'); }
+    window.dispatchEvent(new CustomEvent('dm', { detail: m }));
+  });
+  es.addEventListener('booking', () => { toast('📅 Có cập nhật lịch hẹn'); window.dispatchEvent(new Event('bookingupdate')); });
+  S.es = es;
+}
+
+// ---------- nav ----------
+const NAV = [
+  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
+];
+function renderNav() {
+  const cur = location.hash || '#/';
+  const on = (href) => (href === '#/' ? cur === '#/' : cur.startsWith(href));
+  const nav = $('#nav');
+  nav.innerHTML = '';
+  nav.append(
+    h('a', { class: 'logo', href: '#/', 'aria-label': 'xgaigu – trang chủ' }, h('span', { class: 'logo-mark' }), h('span', {}, 'xgai', h('b', {}, 'gu'))),
+    h('div', { class: 'links' }, NAV.map(([href, label]) => h('a', { href, class: on(href) ? 'on' : '' }, label)),
+      S.user && h('a', { href: '#/messages', class: on('#/messages') ? 'on' : '' }, 'Tin nhắn', S.unread > 0 && h('span', { class: 'badge' }, S.unread)),
+      S.user && h('a', { href: '#/dates', class: on('#/dates') ? 'on' : '' }, 'Lịch hẹn')),
+    h('div', { class: 'grow' }),
+    h('div', { class: 'nav-actions' },
+      S.user ? [
+        h('a', { class: 'btn primary sm', href: '#/upload', html: icon('plus') + '<span>Đăng video</span>' }),
+        h('a', { class: 'btn sm hide-m', href: '#/golive', html: icon('live') + '<span>Phát trực tiếp</span>' }),
+        h('a', { href: '#/me', 'aria-label': 'Hồ sơ của tôi' }, avatar(S.user, 'md')),
+      ] : [
+        h('button', { class: 'btn ghost sm', onclick: () => openAuth('login') }, 'Đăng nhập'),
+        h('button', { class: 'btn primary sm', onclick: () => openAuth('register') }, 'Đăng ký'),
+      ]));
+  const tb = $('#tabbar');
+  tb.innerHTML = '';
+  const tab = (href, label, ic, extra) => h('a', { href, class: on(href) ? 'on' : '', 'aria-label': label }, extra || h('span', { html: icon(ic) }), h('span', {}, label));
+  tb.append(
+    tab('#/', 'Trang chủ', 'home'), tab('#/feed', 'Video', 'play'),
+    h('a', { href: S.user ? '#/upload' : '#/', 'aria-label': 'Đăng video', onclick: (e) => { if (!S.user) { e.preventDefault(); openAuth('register'); } } }, h('span', { class: 'plus', html: icon('plus') })),
+    tab('#/live', 'Live', 'live'),
+    S.user ? tab('#/messages', 'Chat', 'msg', h('span', { html: icon('msg') })) : tab('#/people', 'Làm quen', 'users'));
+  if (S.user && S.unread > 0) tb.children[4].append(h('span', { class: 'badge' }, S.unread));
+}
+
+// ---------- media ----------
+const ytId = (u) => { const m = u.match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/); return m && m[1]; };
+function mediaEl(v, { controls = false } = {}) {
+  const src = v.file || v.url;
+  const y = !v.file && ytId(v.url);
+  if (y) return h('iframe', { src: `https://www.youtube-nocookie.com/embed/${y}?playsinline=1&rel=0&modestbranding=1`, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video', loading: 'lazy' });
+  const el = h('video', { playsinline: true, loop: true, muted: true, preload: 'metadata', controls: controls || null, 'aria-label': v.caption || 'Video' });
+  el.muted = true;
+  if (/\.m3u8(\?|$)/.test(src) && window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(src); hls.attachMedia(el); }
+  else el.src = src;
+  return el;
+}
+
+let playObserver;
+function observePlay(el) {
+  if (!playObserver) {
+    playObserver = new IntersectionObserver((es) => es.forEach((e) => {
+      const v = e.target; if (!(v instanceof HTMLVideoElement)) return;
+      if (e.isIntersecting && e.intersectionRatio > 0.6) v.play().catch(() => {}); else v.pause();
+    }), { threshold: [0, 0.6, 1] });
+  }
+  playObserver.observe(el);
+}
+
+// ---------- actions on videos ----------
+async function needLogin() { if (!S.user) { openAuth('login'); return false; } return true; }
+
+async function startChat(user) {
+  if (!(await needLogin())) return;
+  if (user.id === S.user.id) return toast('Đây là bạn mà 😊');
+  location.hash = '#/messages/' + user.id;
+}
+
+async function openCall(user) {
+  if (!(await needLogin())) return;
+  if (user.id === S.user.id) return;
+  const m = modal(h('div', {}, h('h3', {}, 'Gọi cho ' + user.name), h('div', { class: 'spin' })));
+  try {
+    if (!user.canCall) throw new Error('nocall');
+    const { phone } = await api('/users/' + user.id + '/phone');
+    m.box.innerHTML = '';
+    m.box.append(h('button', { class: 'iconbtn x', onclick: m.close, 'aria-label': 'Đóng', html: icon('x') }),
+      h('h3', {}, 'Gọi cho ' + user.name), h('p', { class: 'sub' }, 'Người này đã đồng ý chia sẻ số điện thoại. Hãy lịch sự và tôn trọng.'),
+      h('a', { class: 'btn primary lg', style: 'width:100%', href: 'tel:' + phone, html: icon('phone') + '<span>Gọi ' + esc(phone) + '</span>' }),
+      h('p', { class: 'muted', style: 'font-size:13px;margin-top:14px' }, 'Mẹo an toàn: không chuyển tiền cho người chưa gặp, nên gặp nơi công cộng.'));
+  } catch (e) {
+    m.box.innerHTML = '';
+    m.box.append(h('button', { class: 'iconbtn x', onclick: m.close, 'aria-label': 'Đóng', html: icon('x') }),
+      h('h3', {}, user.name + ' chưa mở số điện thoại'), h('p', { class: 'sub' }, 'Bạn có thể gửi lời nhờ gọi qua tin nhắn – họ sẽ quyết định có trả lời hay không.'),
+      h('button', { class: 'btn primary', style: 'width:100%', onclick: async () => {
+        try { await api('/messages/' + user.id, { method: 'POST', body: { body: '📞 Mình muốn trò chuyện qua điện thoại, bạn có tiện chia sẻ số không?' } }); toast('Đã gửi lời nhờ gọi'); m.close(); } catch (er) { fail(er); }
+      } }, 'Gửi lời nhờ gọi'));
+  }
+}
+
+async function openBook(user, videoId) {
+  if (!(await needLogin())) return;
+  if (user.id === S.user.id) return toast('Đây là video của bạn');
+  const err = h('div', { class: 'err', hidden: true });
+  const min = new Date(Date.now() + 3600e3 - new Date().getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
+  const f = h('form', {},
+    h('h3', {}, 'Hẹn gặp ' + user.name), h('p', { class: 'sub' }, 'Gửi lời mời – chỉ khi họ đồng ý, lịch hẹn mới được xác nhận.'),
+    err,
+    h('label', { class: 'f' }, h('span', {}, 'Thời gian'), h('input', { type: 'datetime-local', name: 'when', min, required: true })),
+    h('label', { class: 'f' }, h('span', {}, 'Địa điểm'), h('input', { name: 'place', maxlength: 120, placeholder: 'VD: Highlands Coffee, Nguyễn Huệ', required: true }),
+      h('small', {}, 'Chọn nơi công cộng, đông người, lần đầu nên đi một mình & báo bạn bè.')),
+    h('label', { class: 'f' }, h('span', {}, 'Lời nhắn (tuỳ chọn)'), h('textarea', { name: 'note', maxlength: 300, placeholder: 'Giới thiệu đôi chút về bạn…' })),
+    h('div', { class: 'notice', html: icon('shield') + '<span>Không trao đổi tiền bạc hay dịch vụ tình dục. Tài khoản vi phạm sẽ bị khoá vĩnh viễn.</span>' }),
+    h('button', { class: 'btn primary lg', style: 'width:100%;margin-top:16px', type: 'submit' }, 'Gửi lời mời hẹn'));
+  const m = modal(f, { wide: true });
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(f));
+    try {
+      await api('/bookings', { method: 'POST', body: { to: user.id, videoId, when: new Date(d.when).getTime(), place: d.place, note: d.note } });
+      m.close(); toast('Đã gửi lời mời hẹn 💌'); location.hash = '#/messages/' + user.id;
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+  });
+}
+
+function openReport(type, id) {
+  if (!S.user) return openAuth('login');
+  const f = h('form', {}, h('h3', {}, 'Báo cáo vi phạm'), h('p', { class: 'sub' }, 'Cho chúng tôi biết vấn đề. Đội ngũ kiểm duyệt sẽ xem xét sớm nhất.'),
+    h('label', { class: 'f' }, h('span', {}, 'Lý do'), h('select', { name: 'reason' }, ['Nội dung nhạy cảm / khiêu dâm', 'Lừa đảo, xin tiền', 'Quấy rối, xúc phạm', 'Giả mạo, ảnh người khác', 'Người dưới 18 tuổi', 'Khác'].map((r) => h('option', {}, r)))),
+    h('button', { class: 'btn primary', style: 'width:100%', type: 'submit' }, 'Gửi báo cáo'));
+  const m = modal(f);
+  f.addEventListener('submit', async (e) => { e.preventDefault(); try { await api('/reports', { method: 'POST', body: { type, id, reason: f.reason.value } }); m.close(); toast('Cảm ơn bạn, chúng tôi sẽ xem xét'); } catch (ex) { fail(ex); } });
+}
+
+async function openComments(v, countEl) {
+  const list = h('div', { style: 'display:grid;gap:14px;margin:16px 0;max-height:46vh;overflow:auto' }, h('div', { class: 'spin' }));
+  const input = h('input', { placeholder: 'Viết bình luận…', maxlength: 300, 'aria-label': 'Bình luận' });
+  const form = h('form', { class: 'composer', style: 'padding:0;border:0' }, input, h('button', { class: 'btn primary', type: 'submit', 'aria-label': 'Gửi', html: icon('send') }));
+  const m = modal(h('div', {}, h('h3', {}, 'Bình luận'), list, form), { sheet: true });
+  const load = async () => {
+    const { comments } = await api('/videos/' + v.id + '/comments');
+    list.innerHTML = '';
+    if (!comments.length) list.append(h('p', { class: 'muted' }, 'Chưa có bình luận. Hãy là người đầu tiên!'));
+    comments.forEach((c) => list.append(h('div', { class: 'lmsg' }, avatar(c.user), h('div', {}, h('b', {}, c.user.name), c.body, h('div', { class: 'muted', style: 'font-size:12px' }, timeAgo(c.createdAt))))));
+    if (countEl) countEl.textContent = comments.length;
+  };
+  load().catch(fail);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault(); if (!input.value.trim()) return;
+    if (!S.user) return openAuth('login');
+    try { await api('/videos/' + v.id + '/comments', { method: 'POST', body: { body: input.value } }); input.value = ''; load(); } catch (ex) { fail(ex); }
+  });
+}
+
+async function toggleLike(v, btn) {
+  if (!(await needLogin())) return;
+  try {
+    const r = await api('/videos/' + v.id + '/like', { method: 'POST' });
+    v.liked = r.liked; v.likes = r.likes;
+    btn.classList.toggle('liked', r.liked); btn.querySelector('span.n').textContent = r.likes;
+  } catch (e) { fail(e); }
+}
+
+async function share(v) {
+  const url = location.origin + '/#/feed/' + v.id;
+  if (navigator.share) { try { await navigator.share({ title: 'xgaigu', text: v.caption || 'Xem video này', url }); return; } catch {} }
+  try { await navigator.clipboard.writeText(url); toast('Đã sao chép liên kết'); } catch { toast(url); }
+}
+
+// ---------- feed ----------
+function actBtn(cls, label, ic, count, onclick) {
+  const b = h('button', { class: 'act ' + cls, onclick, 'aria-label': label }, h('span', { class: 'iconbtn', html: icon(ic) }), h('span', { class: 'n' }, count == null ? label : count));
+  return b;
+}
+
+function slide(v) {
+  const media = mediaEl(v);
+  const mute = h('button', { class: 'iconbtn mute', 'aria-label': 'Bật/tắt tiếng', html: icon('mute'), onclick: () => { media.muted = !media.muted; mute.innerHTML = icon(media.muted ? 'mute' : 'vol'); } });
+  if (media instanceof HTMLVideoElement) {
+    observePlay(media);
+    media.addEventListener('click', () => (media.paused ? media.play() : media.pause()));
+  } else mute.hidden = true;
+  const like = actBtn('like' + (v.liked ? ' liked' : ''), 'Thích', 'heart', v.likes, () => toggleLike(v, like));
+  const cm = actBtn('', 'Bình luận', 'msg', v.comments, () => openComments(v, cm.querySelector('.n')));
+  const rail = h('div', { class: 'rail' },
+    like, cm,
+    actBtn('chat', 'Nhắn tin', 'send', null, () => startChat(v.user)),
+    actBtn('call', 'Gọi', 'phone', null, () => openCall(v.user)),
+    actBtn('book', 'Hẹn gặp', 'cal', null, () => openBook(v.user, v.id)),
+    actBtn('', 'Chia sẻ', 'share', null, () => share(v)),
+    actBtn('', 'Báo cáo', 'flag', null, () => openReport('video', v.id)));
+  const el = h('article', { class: 'slide', 'data-id': v.id },
+    h('div', { class: 'player' }, media, mute,
+      h('div', { class: 'meta' },
+        h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.user.city && h('span', { class: 'muted', style: 'font-weight:500;font-size:14px', html: icon('pin') + esc(v.user.city) })),
+        v.caption && h('p', { class: 'cap' }, v.caption))),
+    rail);
+  return el;
+}
+
+async function pageFeed(startId) {
+  const box = h('div', { class: 'feedpage', id: 'feedbox' });
+  main.append(box);
+  let before = null, done = false, loading = false, first = true;
+  const more = async () => {
+    if (loading || done) return; loading = true;
+    try {
+      const { videos } = await api('/videos' + (before ? '?before=' + before : ''));
+      if (!videos.length) { done = true; box.append(h('div', { class: 'slide' }, h('div', { class: 'endcap' }, videos.length || !first ? 'Bạn đã xem hết video 🎉' : ''))); if (first) { box.innerHTML = ''; box.append(emptyFeed()); } }
+      else { videos.forEach((v) => box.append(slide(v))); before = videos[videos.length - 1].id; if (videos.length < 12) done = true; }
+      first = false;
+    } catch (e) { toast(e.message, true); }
+    loading = false;
+  };
+  await more();
+  if (startId) { const t = box.querySelector(`[data-id="${startId}"]`); t && t.scrollIntoView(); }
+  box.addEventListener('scroll', () => { if (box.scrollTop + box.clientHeight * 2 > box.scrollHeight) more(); }, { passive: true });
+  box.addEventListener('keydown', () => {});
+}
+function emptyFeed() {
+  return h('div', { class: 'slide' }, h('div', { class: 'empty' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video nào'),
+    h('p', {}, 'Hãy là người đầu tiên đăng video giới thiệu bản thân!'), h('a', { class: 'btn primary', style: 'margin-top:16px', href: '#/upload' }, 'Đăng video đầu tiên')));
+}
+
+// ---------- home ----------
+function vthumb(v) {
+  const media = mediaEl(v);
+  if (media instanceof HTMLVideoElement) { media.setAttribute('preload', 'metadata'); media.addEventListener('mouseenter', () => media.play().catch(() => {})); media.addEventListener('mouseleave', () => media.pause()); }
+  else { media.style.pointerEvents = 'none'; }
+  return h('a', { class: 'vcard', href: '#/feed/' + v.id, 'aria-label': 'Xem video của ' + v.user.name },
+    media, h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(v.user), v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.caption && h('div', { class: 'cap' }, v.caption)),
+    h('span', { class: 'views', html: icon('heart') + v.likes }));
+}
+function lcard(s) {
+  return h('a', { class: 'vcard', href: '#/live/' + s.id },
+    h('div', { class: 'ph', html: s.host.avatar ? '' : icon('live') }), s.host.avatar && h('img', { class: 'cover', src: s.host.avatar, alt: '' }),
+    h('span', { class: 'livepill live-tag' }, 'LIVE'), h('span', { class: 'views', html: icon('eye') + s.viewers }),
+    h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(s.host), s.host.name), h('div', { class: 'cap' }, s.title)));
+}
+function pcard(u) {
+  return h('a', { class: 'card pcard', href: '#/u/' + u.id },
+    h('div', { class: 'pic' }, u.avatar ? h('img', { src: u.avatar, alt: u.name, loading: 'lazy' }) : h('span', { class: 'init' }, u.name.charAt(0).toUpperCase())),
+    h('div', { class: 'info' }, h('b', {}, u.name + ', ' + u.age), h('div', { class: 'muted', style: 'font-size:14px' }, u.city || 'Việt Nam')));
+}
+
+async function pageHome() {
+  const [vids, lives, ppl] = await Promise.all([api('/videos'), api('/streams'), api('/people')]);
+  const w = h('div', {});
+  w.append(h('div', { class: 'wrap' },
+    h('section', { class: 'hero' },
+      h('div', {},
+        h('span', { class: 'eyebrow', html: icon('spark') + 'Nền tảng kết nối dành cho người từ 18+' }),
+        h('h1', {}, 'Gặp gỡ qua ', h('em', {}, 'video'), ', làm quen qua ', h('em', {}, 'livestream')),
+        h('p', { class: 'lead' }, 'Đăng video giới thiệu bản thân, trò chuyện trực tiếp, xem livestream và đặt lịch hẹn gặp mặt an toàn – tất cả trong một nơi.'),
+        h('div', { class: 'row' },
+          S.user ? h('a', { class: 'btn primary lg', href: '#/feed', html: icon('play') + 'Xem video' }) : h('button', { class: 'btn primary lg', onclick: () => openAuth('register') }, 'Tham gia miễn phí'),
+          h('a', { class: 'btn lg', href: '#/live', html: '<span class="livepill">LIVE</span> Xem livestream' })),
+        h('div', { class: 'stats' }, h('div', {}, h('b', {}, '18+'), h('span', {}, 'Chỉ người trưởng thành')), h('div', {}, h('b', {}, '24/7'), h('span', {}, 'Kiểm duyệt nội dung')), h('div', {}, h('b', {}, '0đ'), h('span', {}, 'Đăng ký & chat')))),
+      h('div', { class: 'mock', 'aria-hidden': 'true' },
+        h('div', { class: 'phone a' }, h('div', { class: 'tag' }, h('i'), 'Mai, 24')),
+        h('div', { class: 'phone b' }, h('span', { class: 'livepill pill' }, 'LIVE'), h('div', { class: 'tag' }, h('i'), 'Phòng trà chiều')),
+        h('div', { class: 'float f1', html: icon('heart') + 'Linh vừa thích video của bạn' }),
+        h('div', { class: 'float f2', html: icon('cal') + 'Lịch hẹn cà phê · 19:30' })))));
+
+  if (lives.streams.length) w.append(h('section', { class: 'block wrap' }, h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Đang phát trực tiếp'), h('a', { class: 'btn sm', href: '#/live' }, 'Xem tất cả')), h('div', { class: 'grid g4' }, lives.streams.slice(0, 4).map(lcard))));
+  w.append(h('section', { class: 'block wrap' }, h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Video mới nhất'), h('a', { class: 'btn sm', href: '#/feed' }, 'Lướt xem')),
+    vids.videos.length ? h('div', { class: 'grid g4' }, vids.videos.slice(0, 8).map(vthumb)) : h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video'), h('p', {}, 'Hãy là người đầu tiên chia sẻ!'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video'))));
+  if (ppl.people.length) w.append(h('section', { class: 'block wrap' }, h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Thành viên mới'), h('a', { class: 'btn sm', href: '#/people' }, 'Khám phá')), h('div', { class: 'grid g4' }, ppl.people.slice(0, 4).map(pcard))));
+
+  const step = (ic, t, d) => h('div', { class: 'card step' }, h('div', { class: 'ico', html: icon(ic) }), h('h3', {}, t), h('p', {}, d));
+  w.append(h('section', { class: 'block wrap' }, h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Hẹn hò hiện đại, đơn giản')),
+    h('div', { class: 'grid g3 steps' },
+      step('video', 'Đăng video', 'Giới thiệu bản thân bằng video ngắn – chân thật hơn mọi dòng mô tả.'),
+      step('msg', 'Chat & gọi', 'Nhắn tin thời gian thực, hoặc gọi điện khi cả hai thấy hợp.'),
+      step('live', 'Livestream', 'Phát trực tiếp hoặc tham gia phòng live để trò chuyện cùng mọi người.'),
+      step('cal', 'Đặt lịch hẹn', 'Gửi lời mời hẹn ngay dưới mỗi video, chỉ xác nhận khi cả hai đồng ý.'))));
+  w.append(h('section', { class: 'block wrap' }, h('div', { class: 'card step', style: 'display:flex;gap:20px;align-items:center;flex-wrap:wrap' },
+    h('div', { class: 'ico', style: 'margin:0', html: icon('shield') }), h('div', { style: 'flex:1;min-width:240px' }, h('h3', {}, 'An toàn là ưu tiên'),
+      h('p', {}, 'Chỉ dành cho 18+, có nút báo cáo ở mọi nơi, số điện thoại chỉ hiện khi chủ tài khoản cho phép. Không cho phép nội dung khiêu dâm, mua bán dịch vụ tình dục hay lừa đảo.')),
+    h('a', { class: 'btn', href: '#/terms' }, 'Quy tắc cộng đồng'))));
+  if (!S.user) w.append(h('section', { class: 'block wrap' }, h('div', { class: 'cta' }, h('h2', {}, 'Sẵn sàng gặp người ấy?'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Tạo tài khoản miễn phí trong 30 giây.'), h('button', { class: 'btn primary lg', onclick: () => openAuth('register') }, 'Bắt đầu ngay'))));
+  w.append(footer());
+  main.append(w);
+}
+
+function footer() {
+  return h('footer', { class: 'footer' }, h('div', { class: 'wrap cols' },
+    h('div', {}, h('div', { class: 'logo' }, h('span', { class: 'logo-mark' }), h('span', {}, 'xgai', h('b', {}, 'gu'))), h('p', { style: 'margin-top:10px' }, '© ' + new Date().getFullYear() + ' xgaigu.com · Dành cho người từ 18 tuổi.')),
+    h('div', {}, h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
+}
+
+// ---------- people & profiles ----------
+async function pagePeople() {
+  const wrap = h('div', { class: 'wrap', style: 'padding:32px 0' });
+  const city = h('input', { placeholder: 'Thành phố…', 'aria-label': 'Thành phố' });
+  const gender = h('select', { 'aria-label': 'Giới tính' }, h('option', { value: '' }, 'Tất cả'), h('option', { value: 'nu' }, 'Nữ'), h('option', { value: 'nam' }, 'Nam'), h('option', { value: 'khac' }, 'Khác'));
+  const grid = h('div', { class: 'grid g4' }, h('div', { class: 'spin' }));
+  let t;
+  const load = async () => {
+    const { people } = await api(`/people?city=${encodeURIComponent(city.value)}&gender=${gender.value}`);
+    grid.innerHTML = '';
+    if (!people.length) grid.append(h('div', { class: 'empty', style: 'grid-column:1/-1' }, h('h3', {}, 'Không tìm thấy ai'), h('p', {}, 'Thử đổi bộ lọc nhé.')));
+    people.forEach((u) => grid.append(pcard(u)));
+  };
+  city.addEventListener('input', () => { clearTimeout(t); t = setTimeout(load, 300); }); gender.addEventListener('change', load);
+  wrap.append(h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Làm quen')), h('div', { class: 'filters' }, city, gender), grid);
+  main.append(wrap); load();
+}
+
+async function pageUser(id) {
+  const { user, videos } = await api('/users/' + id);
+  const me = S.user && S.user.id === user.id;
+  const w = h('div', { class: 'wrap' },
+    h('div', { class: 'profile-head' }, avatar(user, 'lg'),
+      h('div', { style: 'flex:1;min-width:220px' }, h('h2', { class: 'title' }, user.name + ', ' + user.age), h('p', { class: 'muted', html: icon('pin') + ' ' + esc(user.city || 'Việt Nam') }), user.bio && h('p', { style: 'margin-top:10px;max-width:560px' }, user.bio)),
+      !me ? h('div', { class: 'row' },
+        h('button', { class: 'btn primary', onclick: () => startChat(user), html: icon('send') + 'Nhắn tin' }),
+        h('button', { class: 'btn', onclick: () => openCall(user), html: icon('phone') + 'Gọi' }),
+        h('button', { class: 'btn', onclick: () => openBook(user), html: icon('cal') + 'Hẹn gặp' }),
+        h('button', { class: 'iconbtn', 'aria-label': 'Báo cáo', onclick: () => openReport('user', user.id), html: icon('flag') })) : h('a', { class: 'btn', href: '#/me' }, 'Sửa hồ sơ')),
+    h('h3', { style: 'margin:8px 0 16px' }, 'Video'),
+    videos.length ? h('div', { class: 'grid g4' }, videos.map((v) => {
+      const c = vthumb(v);
+      if (me) c.append(h('button', { class: 'iconbtn', style: 'position:absolute;top:44px;right:10px;width:36px;height:36px;background:rgba(0,0,0,.6)', 'aria-label': 'Xoá video', html: icon('trash'), onclick: async (e) => { e.preventDefault(); e.stopPropagation(); if (!confirm('Xoá video này?')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); route(); } catch (er) { fail(er); } } }));
+      return c;
+    })) : h('div', { class: 'card empty' }, h('p', {}, 'Chưa có video.')));
+  main.append(w, footer());
+}
+
+async function pageMe() {
+  if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
+  const u = S.user;
+  const err = h('div', { class: 'err', hidden: true });
+  const file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'sr', id: 'avf' });
+  file.addEventListener('change', async () => {
+    if (!file.files[0]) return; const fd = new FormData(); fd.append('file', file.files[0]);
+    try { const r = await api('/me/avatar', { method: 'POST', body: fd }); S.user = r.user; toast('Đã cập nhật ảnh'); renderNav(); route(); } catch (e) { fail(e); }
+  });
+  const f = h('form', {},
+    err,
+    h('label', { class: 'f' }, h('span', {}, 'Tên hiển thị'), h('input', { name: 'name', value: u.name, maxlength: 40 })),
+    h('div', { class: 'two' },
+      h('label', { class: 'f' }, h('span', {}, 'Giới tính'), h('select', { name: 'gender' }, [['', 'Không nêu'], ['nu', 'Nữ'], ['nam', 'Nam'], ['khac', 'Khác']].map(([v, l]) => h('option', { value: v, selected: u.gender === v }, l)))),
+      h('label', { class: 'f' }, h('span', {}, 'Thành phố'), h('input', { name: 'city', value: u.city, maxlength: 60 }))),
+    h('label', { class: 'f' }, h('span', {}, 'Giới thiệu'), h('textarea', { name: 'bio', maxlength: 500 }, u.bio)),
+    h('label', { class: 'f' }, h('span', {}, 'Số điện thoại'), h('input', { name: 'phone', value: u.phone, type: 'tel', maxlength: 20, placeholder: '09xx xxx xxx' })),
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'showPhone', checked: u.showPhone }), h('span', {}, 'Hiện nút "Gọi" trên video của tôi (người đã đăng nhập mới xem được số).')),
+    h('button', { class: 'btn primary', type: 'submit' }, 'Lưu thay đổi'));
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); const d = Object.fromEntries(new FormData(f)); d.showPhone = f.showPhone.checked;
+    try { const r = await api('/me', { method: 'PATCH', body: d }); S.user = r.user; toast('Đã lưu'); renderNav(); } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+  });
+  main.append(h('div', { class: 'wrap', style: 'max-width:680px;padding:32px 0' },
+    h('div', { class: 'profile-head' }, avatar(u, 'lg'), h('div', {}, h('h2', { class: 'title' }, u.name), h('p', { class: 'muted' }, u.email), h('div', { class: 'row', style: 'margin-top:12px' },
+      h('label', { class: 'btn sm', for: 'avf' }, 'Đổi ảnh đại diện'), file, h('a', { class: 'btn sm', href: '#/u/' + u.id }, 'Xem hồ sơ công khai')))),
+    h('div', { class: 'card', style: 'padding:24px' }, f),
+    h('div', { class: 'row', style: 'margin-top:20px' }, u.role === 'admin' && h('a', { class: 'btn', href: '#/admin' }, 'Quản trị'),
+      h('button', { class: 'btn ghost', onclick: async () => { await api('/logout', { method: 'POST' }); S.user = null; S.unread = 0; connectEvents(); renderNav(); location.hash = '#/'; toast('Đã đăng xuất'); } }, 'Đăng xuất'))));
+}
+
+// ---------- upload ----------
+async function pageUpload() {
+  if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
+  const err = h('div', { class: 'err', hidden: true });
+  const f = h('form', {},
+    h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Đăng video'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Video dọc (9:16) ngắn gọn, chân thật sẽ được xem nhiều nhất.'), err,
+    h('label', { class: 'f' }, h('span', {}, 'Chọn video (MP4/WebM, tối đa 100MB)'), h('input', { type: 'file', name: 'file', accept: 'video/mp4,video/webm,video/quicktime' })),
+    h('p', { class: 'muted', style: 'text-align:center;margin:-4px 0 12px' }, '— hoặc —'),
+    h('label', { class: 'f' }, h('span', {}, 'Dán liên kết (YouTube, .mp4, .m3u8)'), h('input', { name: 'url', type: 'url', placeholder: 'https://' })),
+    h('label', { class: 'f' }, h('span', {}, 'Mô tả'), h('textarea', { name: 'caption', maxlength: 300, placeholder: 'Giới thiệu ngắn về bạn, sở thích, mẫu người lý tưởng…' })),
+    h('div', { class: 'notice', style: 'margin-bottom:16px', html: icon('shield') + '<span>Không đăng nội dung khiêu dâm, ảnh/video của người khác hay quảng cáo dịch vụ tình dục. Vi phạm sẽ bị khoá tài khoản.</span>' }),
+    h('button', { class: 'btn primary lg', type: 'submit', style: 'width:100%' }, 'Đăng video'));
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang tải lên…';
+    const fd = new FormData(f); if (!fd.get('file') || !fd.get('file').size) fd.delete('file');
+    try { await api('/videos', { method: 'POST', body: fd }); toast('Đã đăng video 🎬'); location.hash = '#/feed'; }
+    catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; btn.textContent = 'Đăng video'; }
+  });
+  main.append(h('div', { class: 'wrap', style: 'max-width:620px;padding:32px 0' }, h('div', { class: 'card', style: 'padding:28px' }, f)));
+}
+
+// ---------- messages ----------
+async function pageMessages(otherId) {
+  if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
+  const list = h('div', { class: 'card list' + (otherId ? ' hide-m' : '') });
+  const thread = h('div', { class: 'card thread' + (otherId ? '' : ' hide-m') });
+  main.append(h('div', { class: 'wrap inbox' }, list, thread));
+  const loadList = async () => {
+    const { conversations } = await api('/conversations');
+    list.innerHTML = '';
+    if (!conversations.length) list.append(h('div', { class: 'empty' }, h('div', { class: 'ico', html: icon('msg') }), h('h3', {}, 'Chưa có cuộc trò chuyện'), h('p', {}, 'Nhắn tin cho ai đó từ video hoặc trang Làm quen.')));
+    conversations.forEach((c) => list.append(h('a', { class: 'conv' + (String(c.user.id) === String(otherId) ? ' on' : ''), href: '#/messages/' + c.user.id },
+      avatar(c.user, 'md'), h('div', { class: 't' }, h('b', {}, c.user.name), h('p', {}, c.last.kind === 'booking' ? '📅 Lời mời hẹn gặp' : (c.last.from === S.user.id ? 'Bạn: ' : '') + c.last.body)), c.unread > 0 && h('span', { class: 'badge' }, c.unread))));
+  };
+  await loadList();
+  if (!otherId) { thread.append(h('div', { class: 'empty', style: 'margin:auto' }, h('div', { class: 'ico', html: icon('msg') }), h('h3', {}, 'Chọn một cuộc trò chuyện'))); return; }
+
+  const { user, messages } = await api('/messages/' + otherId);
+  S.unread = 0; renderNav();
+  const bubbles = h('div', { class: 'bubbles' });
+  const bookingCache = {};
+  const bubble = async (m) => {
+    const me = m.from === S.user.id;
+    let inner;
+    if (m.kind === 'booking') {
+      const { bookingId } = JSON.parse(m.body);
+      inner = h('div', { class: 'bk' }, h('b', { html: icon('cal') + ' Lời mời hẹn gặp' }), h('div', { class: 'muted', style: 'font-size:13px;margin:6px 0' }, 'Đang tải…'));
+      api('/bookings').then(({ bookings }) => {
+        const b = bookings.find((x) => x.id === bookingId); if (!b) return;
+        bookingCache[bookingId] = b;
+        inner.replaceChildren(h('b', { html: icon('cal') + ' Lời mời hẹn gặp' }),
+          h('div', { style: 'margin:8px 0;font-size:14px' }, fmtDate(b.when), h('br'), '📍 ' + b.place, b.note && h('div', { class: 'muted' }, '“' + b.note + '”')),
+          h('span', { class: 'status st-' + b.status }, { pending: 'Chờ phản hồi', accepted: 'Đã đồng ý', declined: 'Đã từ chối', cancelled: 'Đã huỷ' }[b.status]),
+          b.status === 'pending' && !b.mine && h('div', { class: 'row', style: 'margin-top:10px' },
+            h('button', { class: 'btn sm primary', onclick: () => act(b.id, 'accept') }, 'Đồng ý'), h('button', { class: 'btn sm', onclick: () => act(b.id, 'decline') }, 'Từ chối')));
+      }).catch(() => {});
+    } else inner = m.body;
+    return h('div', { class: 'b' + (me ? ' me' : ''), 'data-id': m.id }, inner, h('time', {}, fmtTime(m.createdAt)));
+  };
+  const act = async (id, a) => { try { await api(`/bookings/${id}/${a}`, { method: 'POST' }); route(); } catch (e) { fail(e); } };
+  const add = async (m) => { bubbles.append(await bubble(m)); bubbles.scrollTop = bubbles.scrollHeight; };
+  for (const m of messages) await add(m);
+
+  const input = h('input', { placeholder: 'Nhập tin nhắn…', maxlength: 1000, 'aria-label': 'Tin nhắn', autocomplete: 'off' });
+  const form = h('form', { class: 'composer' }, input,
+    h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Hẹn gặp', onclick: () => openBook(user), html: icon('cal') }),
+    h('button', { class: 'btn primary', type: 'submit', 'aria-label': 'Gửi', html: icon('send') }));
+  form.addEventListener('submit', async (e) => { e.preventDefault(); const body = input.value.trim(); if (!body) return; input.value = ''; try { await api('/messages/' + otherId, { method: 'POST', body: { body } }); } catch (ex) { fail(ex); input.value = body; } });
+  thread.append(h('header', { style: 'padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center' },
+    h('a', { class: 'iconbtn', href: '#/messages', 'aria-label': 'Quay lại', style: 'width:38px;height:38px', html: icon('back') }),
+    h('a', { href: '#/u/' + user.id, style: 'display:flex;gap:10px;align-items:center;flex:1' }, avatar(user, 'md'), h('b', {}, user.name)),
+    h('button', { class: 'iconbtn', 'aria-label': 'Gọi', onclick: () => openCall(user), html: icon('phone') }),
+    h('button', { class: 'iconbtn', 'aria-label': 'Báo cáo', onclick: () => openReport('user', user.id), html: icon('flag') })), bubbles, form);
+  bubbles.scrollTop = bubbles.scrollHeight;
+  const onDm = (e) => { const m = e.detail; if (m.from === user.id || m.to === user.id) { if (!bubbles.querySelector(`[data-id="${m.id}"]`)) add(m); if (m.from === user.id) api('/messages/' + otherId).then(() => { S.unread = 0; renderNav(); }); loadList(); } };
+  window.addEventListener('dm', onDm); onLeave(() => window.removeEventListener('dm', onDm));
+}
+
+// ---------- dates ----------
+async function pageDates() {
+  if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
+  const box = h('div', { class: 'wrap', style: 'max-width:760px;padding:32px 0' }, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Lịch hẹn của tôi'));
+  const body = h('div', { style: 'display:grid;gap:14px' });
+  box.append(body); main.append(box);
+  const load = async () => {
+    const { bookings } = await api('/bookings'); body.innerHTML = '';
+    if (!bookings.length) body.append(h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('cal') }), h('h3', {}, 'Chưa có lịch hẹn'), h('p', {}, 'Bấm “Hẹn gặp” dưới video của ai đó để gửi lời mời.')));
+    bookings.forEach((b) => body.append(h('div', { class: 'card', style: 'padding:18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap' },
+      avatar(b.other, 'md'), h('div', { style: 'flex:1;min-width:200px' }, h('b', {}, (b.mine ? 'Bạn mời ' : 'Lời mời từ ') + b.other.name), h('div', { class: 'muted', style: 'font-size:14px' }, fmtDate(b.when) + ' · ' + b.place)),
+      h('span', { class: 'status st-' + b.status }, { pending: 'Chờ phản hồi', accepted: 'Đã đồng ý', declined: 'Đã từ chối', cancelled: 'Đã huỷ' }[b.status]),
+      b.status === 'pending' && !b.mine && h('button', { class: 'btn sm primary', onclick: () => act(b.id, 'accept') }, 'Đồng ý'),
+      b.status === 'pending' && !b.mine && h('button', { class: 'btn sm', onclick: () => act(b.id, 'decline') }, 'Từ chối'),
+      ['pending', 'accepted'].includes(b.status) && h('button', { class: 'btn sm ghost', onclick: () => act(b.id, 'cancel') }, 'Huỷ'),
+      h('a', { class: 'btn sm', href: '#/messages/' + b.other.id }, 'Nhắn tin'))));
+  };
+  const act = async (id, a) => { try { await api(`/bookings/${id}/${a}`, { method: 'POST' }); load(); } catch (e) { fail(e); } };
+  await load();
+  window.addEventListener('bookingupdate', load); onLeave(() => window.removeEventListener('bookingupdate', load));
+}
+
+// ---------- live ----------
+async function pageLive() {
+  const { streams } = await api('/streams');
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' },
+    h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Livestream'), h('a', { class: 'btn live', href: '#/golive', html: icon('live') + 'Phát trực tiếp' })),
+    streams.length ? h('div', { class: 'grid g4' }, streams.map(lcard)) : h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('live') }), h('h3', {}, 'Hiện chưa có buổi live nào'), h('p', {}, 'Hãy mở buổi live đầu tiên và mời mọi người vào trò chuyện!'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/golive' }, 'Bắt đầu phát'))), footer());
+}
+
+async function pageGoLive() {
+  if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
+  const err = h('div', { class: 'err', hidden: true });
+  const url = h('label', { class: 'f', hidden: true }, h('span', {}, 'Liên kết phát'), h('input', { name: 'source', type: 'url', placeholder: 'https://…' }), h('small', {}, 'Dán liên kết YouTube Live hoặc luồng HLS (.m3u8) của bạn.'));
+  const kind = h('select', { name: 'kind' }, h('option', { value: 'webrtc' }, 'Phát bằng camera & micro trên trình duyệt'), h('option', { value: 'youtube' }, 'Nhúng YouTube Live'), h('option', { value: 'hls' }, 'Luồng HLS (.m3u8) từ OBS / dịch vụ stream'));
+  kind.addEventListener('change', () => { url.hidden = kind.value === 'webrtc'; });
+  const f = h('form', {}, h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Bắt đầu livestream'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Mọi người có thể xem và chat trực tiếp cùng bạn.'), err,
+    h('label', { class: 'f' }, h('span', {}, 'Tiêu đề'), h('input', { name: 'title', maxlength: 80, required: true, placeholder: 'VD: Trò chuyện tối thứ 6 ✨' })),
+    h('label', { class: 'f' }, h('span', {}, 'Cách phát'), kind), url,
+    h('div', { class: 'notice', style: 'margin-bottom:16px', html: icon('shield') + '<span>Livestream phải tuân thủ quy tắc cộng đồng: không nội dung khiêu dâm, không kêu gọi chuyển tiền.</span>' }),
+    h('button', { class: 'btn live lg', style: 'width:100%', type: 'submit' }, 'Phát trực tiếp ngay'));
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); const d = Object.fromEntries(new FormData(f));
+    try { const r = await api('/streams', { method: 'POST', body: d }); location.hash = '#/live/' + r.id + (d.kind === 'webrtc' ? '?host=1' : ''); }
+    catch (ex) { err.textContent = ex.message; err.hidden = false; }
+  });
+  main.append(h('div', { class: 'wrap', style: 'max-width:620px;padding:32px 0' }, h('div', { class: 'card', style: 'padding:28px' }, f)));
+}
+
+const RTC = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+
+async function pageStream(id, wantHost) {
+  const { stream } = await api('/streams/' + id);
+  if (!stream.live) { main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Buổi live đã kết thúc'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/live' }, 'Xem buổi live khác'))); return; }
+  const isHost = !!S.user && S.user.id === stream.host.id;
+  const stage = h('div', { class: 'stage' });
+  const vc = h('span', { class: 'vc', html: icon('eye') + '<span>0</span>' });
+  const msgs = h('div', { class: 'msgs', 'aria-live': 'polite' });
+  const hearts = h('div', { class: 'hearts', 'aria-hidden': 'true' });
+  let clientId = null; const peers = new Map(); let localStream = null;
+  const addMsg = (m) => { msgs.append(h('div', { class: 'lmsg' }, avatar(m.user), h('div', {}, h('b', {}, m.user.name), m.body))); msgs.scrollTop = msgs.scrollHeight; };
+  const heart = () => { const s = h('span', { style: `--dx:${Math.round(Math.random() * 50 - 25)}px;left:${Math.round(Math.random() * 30)}px` }, '💗'); hearts.append(s); setTimeout(() => s.remove(), 2400); };
+
+  const video = h('video', { playsinline: true, autoplay: true });
+  const wait = h('div', { class: 'wait' }, h('div', {}, h('div', { class: 'spin' }), h('p', {}, isHost ? 'Đang bật camera…' : 'Đang kết nối với người phát…')));
+  if (stream.kind === 'youtube') stage.append(h('iframe', { src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(stream.source)}?autoplay=1&rel=0`, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: stream.title }));
+  else if (stream.kind === 'hls') {
+    video.muted = true; stage.append(video);
+    if (window.Hls && Hls.isSupported()) { const hls = new Hls({ lowLatencyMode: true }); hls.loadSource(stream.source); hls.attachMedia(video); onLeave(() => hls.destroy()); } else video.src = stream.source;
+    video.play().catch(() => {});
+  } else stage.append(video, wait);
+  stage.append(h('div', { class: 'top' }, h('span', { class: 'livepill' }, 'LIVE'), vc),
+    h('div', { class: 'info' }, h('div', {}, h('b', { style: 'font-size:18px' }, stream.title), h('a', { href: '#/u/' + stream.host.id, class: 'who', style: 'display:flex;gap:8px;align-items:center;margin-top:6px' }, avatar(stream.host), stream.host.name)),
+      h('div', { class: 'row' },
+        !isHost && h('button', { class: 'iconbtn', 'aria-label': 'Thả tim', onclick: () => { api('/streams/' + id + '/heart', { method: 'POST' }); }, html: icon('heart') }),
+        !isHost && h('button', { class: 'btn sm', onclick: () => openBook(stream.host), html: icon('cal') + 'Hẹn gặp' }),
+        !isHost && h('button', { class: 'btn sm', onclick: () => startChat(stream.host), html: icon('send') + 'Nhắn riêng' }),
+        isHost ? h('button', { class: 'btn live sm', onclick: async () => { await api('/streams/' + id + '/end', { method: 'POST' }); toast('Đã kết thúc buổi live'); location.hash = '#/live'; } }, 'Kết thúc') : h('button', { class: 'iconbtn', 'aria-label': 'Báo cáo', onclick: () => openReport('stream', id), html: icon('flag') }))), hearts);
+
+  const input = h('input', { placeholder: S.user ? 'Nói gì đó…' : 'Đăng nhập để chat', maxlength: 200, 'aria-label': 'Chat', autocomplete: 'off' });
+  const form = h('form', { class: 'composer' }, input, h('button', { class: 'btn primary', type: 'submit', 'aria-label': 'Gửi', html: icon('send') }));
+  form.addEventListener('submit', async (e) => { e.preventDefault(); if (!S.user) return openAuth('login'); const body = input.value.trim(); if (!body) return; input.value = ''; try { await api('/streams/' + id + '/chat', { method: 'POST', body: { body } }); } catch (ex) { fail(ex); } });
+  main.append(h('div', { class: 'wrap livepage' }, stage, h('aside', { class: 'chatbox' }, h('header', {}, 'Chat trực tiếp'), msgs, form)));
+
+  const signal = (to, data) => api('/streams/' + id + '/signal', { method: 'POST', body: { from: clientId, to, data } }).catch(() => {});
+  async function hostPeer(viewerId) {
+    const pc = new RTCPeerConnection(RTC); peers.set(viewerId, pc);
+    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    pc.onicecandidate = (e) => e.candidate && signal(viewerId, { ice: e.candidate });
+    pc.onconnectionstatechange = () => { if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) { pc.close(); peers.delete(viewerId); } };
+    await pc.setLocalDescription(await pc.createOffer()); signal(viewerId, { sdp: pc.localDescription });
+  }
+  async function viewerSignal(from, data) {
+    let pc = peers.get(from);
+    if (!pc) {
+      pc = new RTCPeerConnection(RTC); peers.set(from, pc);
+      pc.ontrack = (e) => { video.srcObject = e.streams[0]; video.muted = true; video.play().catch(() => {}); wait.remove(); stage.append(h('button', { class: 'btn sm', style: 'position:absolute;right:16px;top:16px;z-index:3', onclick: (ev) => { video.muted = !video.muted; ev.currentTarget.textContent = video.muted ? '🔇 Bật tiếng' : '🔊 Tắt tiếng'; } }, '🔇 Bật tiếng')); };
+      pc.onicecandidate = (e) => e.candidate && signal(from, { ice: e.candidate });
+    }
+    if (data.sdp) { await pc.setRemoteDescription(data.sdp); if (data.sdp.type === 'offer') { await pc.setLocalDescription(await pc.createAnswer()); signal(from, { sdp: pc.localDescription }); } }
+    else if (data.ice) pc.addIceCandidate(data.ice).catch(() => {});
+  }
+
+  if (stream.kind === 'webrtc' && isHost) {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
+      video.srcObject = localStream; video.muted = true; wait.remove();
+      onLeave(() => localStream.getTracks().forEach((t) => t.stop()));
+    } catch { wait.innerHTML = '<p>Không truy cập được camera/micro. Hãy cấp quyền cho trình duyệt rồi tải lại trang.</p>'; }
+  }
+
+  const es = new EventSource(`/api/streams/${id}/events${isHost && stream.kind === 'webrtc' ? '?host=1' : ''}`);
+  onLeave(() => { es.close(); peers.forEach((p) => p.close()); });
+  es.addEventListener('hello', (e) => { const d = JSON.parse(e.data); clientId = d.clientId; vc.lastChild.textContent = d.viewers; d.chat.forEach(addMsg); });
+  es.addEventListener('viewers', (e) => { vc.lastChild.textContent = JSON.parse(e.data).viewers; });
+  es.addEventListener('chat', (e) => addMsg(JSON.parse(e.data)));
+  es.addEventListener('heart', heart);
+  es.addEventListener('ended', () => { toast('Buổi live đã kết thúc'); setTimeout(() => (location.hash = '#/live'), 1500); });
+  es.addEventListener('viewer-join', (e) => { if (localStream) hostPeer(JSON.parse(e.data).clientId); });
+  es.addEventListener('viewer-leave', (e) => { const p = peers.get(JSON.parse(e.data).clientId); if (p) { p.close(); peers.delete(JSON.parse(e.data).clientId); } });
+  es.addEventListener('signal', (e) => { const { from, data } = JSON.parse(e.data); if (!isHost) viewerSignal(from, data); else { const pc = peers.get(from); if (pc) { if (data.sdp) pc.setRemoteDescription(data.sdp).catch(() => {}); else if (data.ice) pc.addIceCandidate(data.ice).catch(() => {}); } } });
+}
+
+// ---------- terms ----------
+function pageTerms() {
+  main.append(h('div', { class: 'wrap' }, h('div', { class: 'prose' }, h('h2', { class: 'title' }, 'Điều khoản & Quy tắc cộng đồng'),
+    h('p', { class: 'muted' }, 'Bằng việc sử dụng xgaigu.com, bạn đồng ý với các điều sau.'),
+    h('h2', {}, '1. Độ tuổi'), h('p', {}, 'Chỉ người từ đủ 18 tuổi mới được đăng ký và sử dụng. Chúng tôi khoá ngay tài khoản nghi ngờ chưa đủ tuổi.'),
+    h('h2', {}, '2. Nội dung bị cấm'), h('ul', {}, ['Nội dung khiêu dâm, ảnh/video nhạy cảm.', 'Môi giới, rao bán hay mua dịch vụ tình dục; mại dâm.', 'Lừa đảo, kêu gọi chuyển tiền, đầu tư, cờ bạc.', 'Quấy rối, đe doạ, phân biệt đối xử, tiết lộ thông tin riêng tư của người khác.', 'Mạo danh hoặc dùng ảnh/video không thuộc về bạn.'].map((t) => h('li', {}, t))),
+    h('h2', {}, '3. Hẹn gặp an toàn'), h('ul', {}, ['Lần đầu nên gặp ở nơi công cộng, đông người.', 'Báo cho người thân/bạn bè về thời gian và địa điểm.', 'Không chuyển tiền cho người chưa gặp trực tiếp.', 'Tin vào trực giác – rời đi nếu bạn thấy không thoải mái.'].map((t) => h('li', {}, t))),
+    h('h2', {}, '4. Quyền riêng tư'), h('p', {}, 'Số điện thoại chỉ hiển thị cho thành viên đã đăng nhập khi bạn chủ động bật. Bạn có thể xoá video hoặc yêu cầu xoá tài khoản bất cứ lúc nào.'),
+    h('h2', {}, '5. Kiểm duyệt'), h('p', {}, 'Chúng tôi có quyền ẩn nội dung và khoá tài khoản vi phạm mà không cần báo trước. Nội dung nghi vấn có thể được chuyển cho cơ quan chức năng.'))), footer());
+}
+
+// ---------- admin ----------
+async function pageAdmin() {
+  if (!S.user || S.user.role !== 'admin') { location.hash = '#/'; return; }
+  const { reports } = await api('/admin/reports');
+  const rows = reports.map((r) => h('tr', {}, h('td', {}, '#' + r.id), h('td', {}, r.target_type + ' #' + r.target_id), h('td', {}, r.reason), h('td', {}, r.reporter),
+    h('td', {}, h('div', { class: 'row' },
+      r.target_type === 'video' && h('button', { class: 'btn sm', onclick: async () => { await api('/admin/videos/' + r.target_id + '/hide', { method: 'POST' }); toast('Đã ẩn'); } }, 'Ẩn video'),
+      r.target_type === 'user' && h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá người dùng này?')) { await api('/admin/users/' + r.target_id + '/ban', { method: 'POST' }); toast('Đã khoá'); } } }, 'Khoá user'),
+      h('button', { class: 'btn sm primary', onclick: async () => { await api('/admin/reports/' + r.id + '/resolve', { method: 'POST' }); route(); } }, 'Xong')))));
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+    reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
+}
+
+// ---------- router ----------
+let routeSeq = 0;
+async function route() {
+  const seq = ++routeSeq;
+  S.cleanups.forEach((f) => { try { f(); } catch {} }); S.cleanups = [];
+  document.querySelectorAll('video').forEach((v) => v.pause());
+  main.innerHTML = '<div class="spin"></div>';
+  renderNav();
+  const [path, query] = (location.hash.slice(1) || '/').split('?');
+  const seg = path.split('/').filter(Boolean);
+  const page = async () => {
+    main.innerHTML = '';
+    const [a, b] = seg;
+    if (!a) return pageHome();
+    if (a === 'feed') return pageFeed(b);
+    if (a === 'people') return pagePeople();
+    if (a === 'u') return pageUser(b);
+    if (a === 'me') return pageMe();
+    if (a === 'upload') return pageUpload();
+    if (a === 'messages') return pageMessages(b);
+    if (a === 'dates') return pageDates();
+    if (a === 'live') return b ? pageStream(b, /host=1/.test(query || '')) : pageLive();
+    if (a === 'golive') return pageGoLive();
+    if (a === 'terms') return pageTerms();
+    if (a === 'admin') return pageAdmin();
+    main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Không tìm thấy trang'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/' }, 'Về trang chủ')));
+  };
+  try { await page(); } catch (e) {
+    if (seq !== routeSeq) return;
+    main.innerHTML = ''; main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Rất tiếc, có lỗi xảy ra'), h('p', {}, e.message), h('a', { class: 'btn', style: 'margin-top:14px', href: '#/' }, 'Về trang chủ')));
+  }
+  if (seq === routeSeq && !location.hash.startsWith('#/feed')) window.scrollTo(0, 0);
+  main.focus({ preventScroll: true });
+}
+
+// ---------- boot ----------
+(async function boot() {
+  const gate = $('#agegate');
+  let ok = false; try { ok = localStorage.getItem('age18') === '1'; } catch {}
+  if (!ok) {
+    gate.hidden = false; document.body.style.overflow = 'hidden';
+    $('#age-yes').addEventListener('click', () => { try { localStorage.setItem('age18', '1'); } catch {} gate.hidden = true; document.body.style.overflow = ''; });
+    $('#age-yes').focus();
+  }
+  try { S.user = (await api('/me')).user; } catch {}
+  connectEvents();
+  window.addEventListener('hashchange', route);
+  route();
+})();
+})();
