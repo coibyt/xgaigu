@@ -331,7 +331,8 @@ function listVideos(viewer, { userId, before, limit = 12, id, region, province, 
       region: r.region || '', province: r.province || '', district: r.district || '', info,
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
       likes: r.likes, comments: r.comments, liked: !!r.liked,
-      user: { id: r.user_id, name: r.u_name, avatar: r.u_avatar, city: r.u_city,
+      // On a video only the uploader's chosen nickname is shown, not the account name.
+      user: { id: r.user_id, name: r.nickname || r.u_name, avatar: r.u_avatar, city: r.u_city,
         age: currentYear() - r.u_by, canCall: !!(r.u_sp && r.u_phone) },
     };
   });
@@ -383,9 +384,10 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   if (file) url = '';
   const info = readInfo(req.body);
   const phone = clean(req.body.phone, 20).replace(/[^\d+]/g, '');
-  db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+  const nickname = clean(req.body.nickname, 40);
+  db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, nickname, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '',
-      area.region, area.province, area.district, JSON.stringify(info), phone, now());
+      area.region, area.province, area.district, JSON.stringify(info), phone, nickname, now());
   res.json({ ok: true });
 });
 

@@ -306,6 +306,13 @@ table.t{width:100%;border-collapse:collapse}.t th,.t td{text-align:left;padding:
 .feedtabs{overflow-x:auto;scrollbar-width:none}
 @media (max-width:760px){.feedtabs a{padding:0 10px;font-size:13px}}
 
+.player .meta .loc{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:14px;color:#e9deef;max-width:calc(100% - 80px)}
+.player .meta .loc svg{width:16px;height:16px;color:#ff8ab4}
+.infobtn{display:inline-flex;align-items:center;gap:8px;margin-top:10px;min-height:42px;padding:0 20px;border:0;border-radius:999px;background:linear-gradient(135deg,#ff1f4b,#ff5a36);color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 6px 22px rgba(255,31,75,.55);animation:infoGlow 2.2s ease-in-out infinite}
+.infobtn svg{width:18px;height:18px}
+.infobtn:hover{filter:brightness(1.1)}
+@keyframes infoGlow{50%{box-shadow:0 6px 34px rgba(255,31,75,.95)}}
+
 /* toast */
 #toast-root{position:fixed;left:50%;bottom:calc(var(--tab-h) + 20px);transform:translateX(-50%);z-index:300;display:grid;gap:8px;width:min(92vw,420px)}
 .toast{background:#fff;color:#18101f;padding:12px 16px;border-radius:14px;font-weight:600;box-shadow:0 12px 40px rgba(0,0,0,.5);animation:pop .3s var(--ease)}

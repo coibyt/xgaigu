@@ -63,7 +63,7 @@ function createEditor(files, { onDone, onCancel }) {
       vidGain.connect(outGain); musGain.connect(outGain);
       dest = actx.createMediaStreamDestination();
     }
-    for (const c of S.clips) if (!c.node) { c.node = actx.createMediaElementSource(c.v); c.node.connect(vidGain); }
+    for (const c of S.clips) if (c.v && !c.node) { c.node = actx.createMediaElementSource(c.v); c.node.connect(vidGain); }
     if (S.music && !S.music.node) { S.music.node = actx.createMediaElementSource(S.music.el); S.music.node.connect(musGain); }
     vidGain.gain.value = S.vidVol; musGain.gain.value = S.musicVol;
   }
@@ -87,6 +87,13 @@ function createEditor(files, { onDone, onCancel }) {
   }
   async function addClip(file) {
     const url = URL.createObjectURL(file);
+    if (file.type.startsWith('image/')) {
+      const img = new Image();
+      try { await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; }); } catch { URL.revokeObjectURL(url); throw new Error('Không đọc được ảnh này'); }
+      const clip = { id: S.uid++, file, url, img, v: null, dur: 15, start: 0, end: 3, speed: 1, kb: true, node: null };
+      S.clips.push(clip); S.sel = S.clips.length - 1;
+      return clip;
+    }
     const v = document.createElement('video');
     v.src = url; v.playsInline = true; v.preload = 'auto'; v.muted = false;
     await loadMeta(v);
@@ -106,10 +113,10 @@ function createEditor(files, { onDone, onCancel }) {
     setTimeout(res, 1500);
   });
 
-  function drawVideo(v) {
-    const vw = v.videoWidth, vh = v.videoHeight;
+  function drawVideo(v, kb = 1) {
+    const vw = v.naturalWidth || v.videoWidth, vh = v.naturalHeight || v.videoHeight;
     if (!vw || !vh) return;
-    const cover = Math.max(W / vw, H / vh), contain = Math.min(W / vw, H / vh);
+    const cover = Math.max(W / vw, H / vh) * kb, contain = Math.min(W / vw, H / vh) * kb;
     if (S.fit === 'contain') {
       if ('filter' in g) { g.filter = 'blur(28px) brightness(.55)'; g.drawImage(v, (W - vw * cover) / 2, (H - vh * cover) / 2, vw * cover, vh * cover); g.filter = 'none'; }
       g.drawImage(v, (W - vw * contain) / 2, (H - vh * contain) / 2, vw * contain, vh * contain);
@@ -222,7 +229,7 @@ function createEditor(files, { onDone, onCancel }) {
       if (type === 'zoom') { const k = 1 + 0.4 * s; g.translate(W / 2, H / 2); g.scale(k, k); g.translate(-W / 2, -H / 2); }
       if (type === 'slide') g.translate(p < 0.5 ? -p * 2 * W : (2 - 2 * p) * W, 0);
     }
-    drawVideo(sg.clip.v);
+    drawVideo(sg.clip.img || sg.clip.v, sg.clip.img && sg.clip.kb ? 1 + 0.12 * clamp((t - sg.startOut) / Math.max(0.1, sg.outDur), 0, 1) : 1);
     g.restore();
     if (p !== null) {
       const s = Math.sin(Math.PI * p);
@@ -246,7 +253,7 @@ function createEditor(files, { onDone, onCancel }) {
   async function seekTimeline(t) {
     t = clamp(t, 0, Math.max(0, totalDur() - 0.01)); S.t = t;
     const sg = segs().find((s) => t >= s.startOut && t < s.startOut + s.outDur) || segs()[0];
-    if (sg) { await seek(sg.clip.v, sg.clip.start + (t - sg.startOut) * sg.clip.speed); }
+    if (sg && sg.clip.v) { await seek(sg.clip.v, sg.clip.start + (t - sg.startOut) * sg.clip.speed); }
     S.particles = []; render(t, sg); syncTransport();
   }
 
@@ -273,11 +280,28 @@ function createEditor(files, { onDone, onCancel }) {
     }
     for (let i = startIdx; i < all.length && !run.stop; i++) {
       const sg = all[i], v = sg.clip.v;
+      if (sg.clip.img) { // photo: timed by the wall clock
+        const nx = all[i + 1]; if (nx && nx.clip.v) { nx.clip.v.pause(); seek(nx.clip.v, nx.clip.start); }
+        const t0 = performance.now() - (i === startIdx ? (from - sg.startOut) * 1000 : 0);
+        await new Promise((res) => {
+          S.lastTs = performance.now();
+          const frame = (ts) => {
+            if (run.stop) return res();
+            const dt = Math.min(0.1, (ts - S.lastTs) / 1000); S.lastTs = ts;
+            const local = (performance.now() - t0) / 1000, t = sg.startOut + local;
+            S.t = t; updateFx(t, dt); render(t, sg); syncTransport();
+            if (local >= sg.outDur) return res();
+            requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        });
+        continue;
+      }
       v.playbackRate = sg.clip.speed;
       await seek(v, sg.clip.start + (i === startIdx ? (from - sg.startOut) * sg.clip.speed : 0));
       if (run.stop) break;
       try { await v.play(); } catch {}
-      const next = all[i + 1]; if (next) { next.clip.v.pause(); seek(next.clip.v, next.clip.start); }
+      const next = all[i + 1]; if (next && next.clip.v) { next.clip.v.pause(); seek(next.clip.v, next.clip.start); }
       await new Promise((res) => {
         S.lastTs = performance.now();
         const frame = (ts) => {
@@ -294,7 +318,7 @@ function createEditor(files, { onDone, onCancel }) {
     }
     const stopped = run.stop;
     if (S.music) S.music.el.pause();
-    S.clips.forEach((c) => c.v.pause());
+    S.clips.forEach((c) => c.v && c.v.pause());
     S.run = null; syncTransport();
     if (mode === 'export') {
       await new Promise((res) => { rec.onstop = res; try { rec.stop(); } catch { res(); } });
@@ -362,22 +386,25 @@ function createEditor(files, { onDone, onCancel }) {
   function panelCut() {
     const box = h('div', {});
     const list = h('div', { class: 'ed-chips' });
-    S.clips.forEach((c, i) => list.append(h('button', { type: 'button', class: 'chip' + (i === S.sel ? ' on' : ''), onclick: async () => { S.sel = i; S.t = segs()[i].startOut; await seekTimeline(S.t); showTab('cut'); } }, 'Clip ' + (i + 1) + ' · ' + fmt(outDur(c)))));
-    const fileIn = h('input', { type: 'file', accept: 'video/*', multiple: true, class: 'sr', id: 'ed-add' });
+    S.clips.forEach((c, i) => list.append(h('button', { type: 'button', class: 'chip' + (i === S.sel ? ' on' : ''), onclick: async () => { S.sel = i; S.t = segs()[i].startOut; await seekTimeline(S.t); showTab('cut'); } }, (c.img ? 'Ảnh ' : 'Clip ') + (i + 1) + ' · ' + fmt(outDur(c)))));
+    const fileIn = h('input', { type: 'file', accept: 'video/*,image/*', multiple: true, class: 'sr', id: 'ed-add' });
     fileIn.addEventListener('change', async () => {
       try { for (const f of fileIn.files) await addClip(f); ensureAudio(); showTab('cut'); await seekTimeline(segs()[S.sel].startOut); toast('Đã thêm clip'); } catch (e) { toast(e.message, true); }
     });
-    list.append(h('label', { class: 'chip add', for: 'ed-add', html: ico('plus') + ' Thêm video' }), fileIn);
+    list.append(h('label', { class: 'chip add', for: 'ed-add', html: ico('plus') + ' Thêm ảnh / video' }), fileIn);
     box.append(list);
     const c = S.clips[S.sel];
     if (c) {
       const sg = () => segs()[S.sel];
-      box.append(
+      if (!c.img) box.append(
         slider('Bắt đầu cắt', 0, c.dur, 0.1, c.start, async (v, inp) => { c.start = Math.min(v, c.end - 0.3); inp.value = c.start; await seekTimeline(sg().startOut); syncTransport(); }, fmt),
         slider('Kết thúc cắt', 0, c.dur, 0.1, c.end, async (v, inp) => { c.end = Math.max(v, c.start + 0.3); inp.value = c.end; await seekTimeline(Math.max(sg().startOut, sg().startOut + sg().outDur - 0.1)); syncTransport(); }, fmt));
       const sp = h('div', { class: 'ed-chips' });
       SPEEDS.forEach((s) => sp.append(h('button', { type: 'button', class: 'chip' + (c.speed === s ? ' on' : ''), onclick: () => { c.speed = s; showTab('cut'); syncTransport(); } }, s + '×')));
-      box.append(h('div', { class: 'ed-label' }, 'Tốc độ phát (', h('span', { class: 'muted' }, '0.25× = chậm, 3× = nhanh'), ')'), sp);
+      if (c.img) box.append(
+        slider('Thời gian hiển thị ảnh này', 1, 15, 0.5, c.end, (v) => { c.end = v; syncTransport(); idleRender(); }, (v) => v + 's'),
+        h('div', { class: 'ed-chips' }, h('button', { type: 'button', class: 'chip' + (c.kb ? ' on' : ''), onclick: () => { c.kb = !c.kb; showTab('cut'); idleRender(); } }, 'Phóng to nhẹ khi chiếu: ' + (c.kb ? 'Bật' : 'Tắt'))));
+      else box.append(h('div', { class: 'ed-label' }, 'Tốc độ phát (', h('span', { class: 'muted' }, '0.25× = chậm, 3× = nhanh'), ')'), sp);
       const mv = h('div', { class: 'row', style: 'margin-top:12px' },
         S.clips.length > 1 && h('button', { type: 'button', class: 'btn sm', html: ico('up') + 'Lên', onclick: () => { if (S.sel > 0) { [S.clips[S.sel - 1], S.clips[S.sel]] = [S.clips[S.sel], S.clips[S.sel - 1]]; S.sel--; showTab('cut'); syncTransport(); } } }),
         S.clips.length > 1 && h('button', { type: 'button', class: 'btn sm', html: ico('down') + 'Xuống', onclick: () => { if (S.sel < S.clips.length - 1) { [S.clips[S.sel + 1], S.clips[S.sel]] = [S.clips[S.sel], S.clips[S.sel + 1]]; S.sel++; showTab('cut'); syncTransport(); } } }),
@@ -503,7 +530,7 @@ function createEditor(files, { onDone, onCancel }) {
 
   function destroy() {
     stop();
-    S.clips.forEach((c) => { c.v.pause(); URL.revokeObjectURL(c.url); });
+    S.clips.forEach((c) => { c.v && c.v.pause(); URL.revokeObjectURL(c.url); });
     if (S.music) { S.music.el.pause(); URL.revokeObjectURL(S.music.url); }
     try { actx && actx.close(); } catch {}
     el.remove();
@@ -512,6 +539,7 @@ function createEditor(files, { onDone, onCancel }) {
   (async () => {
     try {
       for (const f of files) await addClip(f);
+      S.sel = 0;
       ensureAudio(); showTab('cut'); await seekTimeline(0); syncTransport();
     } catch (e) { toast(e.message, true); destroy(); onCancel(); }
   })();

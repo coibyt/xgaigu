@@ -118,6 +118,7 @@ for (const [col, ddl] of [
   ['district', "district TEXT DEFAULT ''"],
   ['info', "info TEXT DEFAULT ''"],
   ['v_phone', "v_phone TEXT DEFAULT ''"],
+  ['nickname', "nickname TEXT DEFAULT ''"],
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 
 // Streams left "live" by a previous process are no longer live.

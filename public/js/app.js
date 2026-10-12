@@ -414,7 +414,6 @@ function slide(v) {
   const rail = h('div', { class: 'rail' },
     like, cm,
     actBtn('chat', 'Nhắn tin', 'send', null, () => startChat(v.user)),
-    actBtn('', 'Thông tin', 'info', null, () => openInfo(v)),
     actBtn('call', 'Gọi', 'phone', null, () => openCall({ ...v.user, canCall: v.hasPhone }, v.id)),
     actBtn('book', 'Hẹn gặp', 'cal', null, () => openBook(v.user, v.id)),
     actBtn('', 'Chia sẻ', 'share', null, () => share(v)),
@@ -422,7 +421,9 @@ function slide(v) {
   const el = h('article', { class: 'slide', 'data-id': v.id },
     h('div', { class: 'player' }, media, mute,
       h('div', { class: 'meta' },
-        h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : '')), (v.province || v.user.city) && h('span', { class: 'muted', style: 'font-weight:500;font-size:14px', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) })),
+        h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
+        (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
+        h('button', { class: 'infobtn', type: 'button', onclick: () => openInfo(v), html: icon('info') + 'Thông tin' }),
         v.caption && h('p', { class: 'cap' }, v.caption))),
     rail);
   return el;
@@ -749,14 +750,24 @@ async function pageUpload() {
   const editHost = h('div', { class: 'ed-host' });
   const editNote = h('div', { class: 'notice', style: 'margin-bottom:14px', hidden: true });
   const closeEditor = () => { if (editor) { editor.destroy(); editor = null; } };
+  const photoIn = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', multiple: true, class: 'sr', id: 'photofiles' });
+  photoIn.addEventListener('change', () => {
+    const imgs = [...photoIn.files].filter((x) => /^image\//.test(x.type)).slice(0, 40);
+    photoIn.value = '';
+    if (!imgs.length) return;
+    fileIn.value = ''; edited = null; editNote.hidden = true; preview.replaceChildren(); preview.hidden = true; coverBox.hidden = true;
+    openEditor(imgs);
+  });
+  let lastSrc = null;
   const openEditor = (files) => {
+    lastSrc = files;
     if (!canEdit) return toast('Trình duyệt này chưa hỗ trợ chỉnh sửa video. Hãy dùng Chrome/Edge/Firefox bản mới.', true);
     closeEditor();
     editor = XGEditor.createEditor(files, {
       onDone: (file) => {
         edited = file; closeEditor(); editNote.hidden = false; customCover = false; setCover(null); loadCoverSource(file);
         editNote.replaceChildren(h('span', { html: icon('check') }), h('span', {}, 'Đã chuẩn bị video đã chỉnh sửa (' + (file.size / 1048576).toFixed(1) + ' MB). Thêm mô tả rồi bấm "Đăng video".'),
-          h('button', { type: 'button', class: 'btn sm', onclick: () => { edited = null; editNote.hidden = true; if (fileIn.files[0]) openEditor([fileIn.files[0]]); } }, 'Chỉnh lại'));
+          h('button', { type: 'button', class: 'btn sm', onclick: () => { edited = null; editNote.hidden = true; if (lastSrc) openEditor(lastSrc); } }, 'Chỉnh lại'));
         if (file.size > 100 * 1024 * 1024) toast('Video xuất ra lớn hơn 100MB, hãy cắt ngắn bớt.', true);
         f.scrollIntoView({ behavior: 'smooth', block: 'center' });
       },
@@ -771,6 +782,8 @@ async function pageUpload() {
   const geoSel = geoPicker({ region: '', province: '', district: '' });
   const geoBox = h('div', { class: 'f', id: 'geo-box' },
     h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Video thuộc khu vực nào? *'), geoSel.el);
+  const nickBox = h('label', { class: 'f' }, h('span', {}, 'Biệt danh hiển thị trên video'),
+    h('input', { name: 'nickname', maxlength: 40, value: me.nickname || me.name || '', required: true }), h('small', {}, 'Người xem chỉ thấy biệt danh này trên video, không thấy tên tài khoản.'));
   const field = (label, name, attrs = {}, tag = 'input') => h('label', { class: 'f' }, h('span', {}, label), h(tag, { name, ...attrs }, tag === 'textarea' ? attrs.value : null));
   const detailsBox = h('details', { class: 'up-details', open: true },
     h('summary', {}, 'Thông tin giới thiệu (không bắt buộc – đã điền sẵn từ hồ sơ, bạn có thể sửa)'),
@@ -856,14 +869,16 @@ async function pageUpload() {
     loadCoverSource(file);
   });
   const f = h('form', {},
-    h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Đăng video'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Video dọc (9:16) ngắn gọn, chân thật sẽ được xem nhiều nhất. Sau khi chọn video bạn có thể cắt, chỉnh tốc độ, thêm nhạc, chữ, icon và hiệu ứng.'), err,
+    h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Đăng video'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Video dọc (9:16) ngắn gọn, chân thật sẽ được xem nhiều nhất. Bạn có thể cắt, chỉnh tốc độ, thêm nhạc, chữ, icon, hiệu ứng, hoặc tạo video từ nhiều ảnh.'), err,
     h('label', { class: 'f' }, h('span', {}, 'Chọn video (MP4/WebM, tối đa 100MB)'), fileIn),
     preview, coverBox, editNote,
-    h('div', { class: 'row', style: 'margin:-6px 0 14px' }, h('button', { type: 'button', class: 'btn sm', html: icon('spark') + 'Chỉnh sửa video (không bắt buộc)', onclick: () => { if (!fileIn.files[0]) return toast('Hãy chọn video trước', true); openEditor([fileIn.files[0]]); } })),
+    h('div', { class: 'row', style: 'margin:-6px 0 14px' },
+      h('button', { type: 'button', class: 'btn sm', html: icon('spark') + 'Chỉnh sửa video (không bắt buộc)', onclick: () => { if (!fileIn.files[0]) return toast('Hãy chọn video trước', true); openEditor([fileIn.files[0]]); } }),
+      h('label', { class: 'btn sm primary', for: 'photofiles', html: icon('video') + 'Tạo video từ nhiều ảnh' }), photoIn),
     h('p', { class: 'muted', style: 'text-align:center;margin:-4px 0 12px' }, '— hoặc —'),
     h('label', { class: 'f' }, h('span', {}, 'Dán liên kết (YouTube, .mp4, .m3u8)'), h('input', { name: 'url', type: 'url', placeholder: 'https://' })),
     h('label', { class: 'f' }, h('span', {}, 'Mô tả'), h('textarea', { name: 'caption', maxlength: 300, placeholder: 'Giới thiệu ngắn về bạn, sở thích, mẫu người lý tưởng…' })),
-    geoBox, detailsBox,
+    geoBox, nickBox, detailsBox,
     h('div', { class: 'notice', style: 'margin-bottom:16px', html: icon('shield') + '<span>Không đăng nội dung khiêu dâm, ảnh/video của người khác hay quảng cáo dịch vụ tình dục. Vi phạm sẽ bị khoá tài khoản.</span>' }),
     h('button', { class: 'btn primary lg', type: 'submit', style: 'width:100%' }, 'Đăng video'),
     upBox);
