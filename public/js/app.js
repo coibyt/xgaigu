@@ -423,7 +423,7 @@ function slide(v) {
       h('div', { class: 'meta' },
         h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
         (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
-        h('button', { class: 'infobtn', type: 'button', onclick: () => openInfo(v), html: icon('info') + 'Thông tin' }),
+        h('button', { class: 'infobtn', type: 'button', onclick: () => openInfo(v), html: icon('info') + 'Xem thông tin' }),
         v.caption && h('p', { class: 'cap' }, v.caption))),
     rail);
   return el;
