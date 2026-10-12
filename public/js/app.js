@@ -100,6 +100,39 @@ function modal(content, { sheet = false, wide = false } = {}) {
   return { close, box };
 }
 
+// ---------- address picker (autocomplete, like varaai) ----------
+function placePicker(init = {}) {
+  const val = { address: init.address || '', city: init.city || '', lat: init.lat ?? null, lng: init.lng ?? null };
+  const hint = 'Chọn một gợi ý để bật tính năng "Tìm quanh đây".';
+  const input = h('input', { placeholder: 'Nhập địa chỉ hoặc khu vực, VD: Quận 1, TP.HCM', autocomplete: 'off', maxlength: 200, value: val.address || val.city, role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': 'false' });
+  const list = h('ul', { class: 'suggest', role: 'listbox', hidden: true });
+  const note = h('small', { class: 'muted' }, val.lat != null ? '✓ Đã chọn vị trí' : hint);
+  let t, seq = 0;
+  const hide = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); };
+  const pick = (sg) => {
+    val.address = sg.displayName; val.city = sg.city || sg.displayName.split(',')[0]; val.lat = sg.lat; val.lng = sg.lng;
+    input.value = sg.displayName; note.textContent = '✓ Đã chọn vị trí'; hide();
+  };
+  input.addEventListener('input', () => {
+    val.lat = val.lng = null; val.address = ''; val.city = input.value.trim(); note.textContent = hint;
+    clearTimeout(t);
+    if (input.value.trim().length < 3) return hide();
+    const my = ++seq;
+    t = setTimeout(async () => {
+      try {
+        const { suggestions } = await api('/geocode?q=' + encodeURIComponent(input.value.trim()));
+        if (my !== seq) return;
+        list.innerHTML = '';
+        if (!suggestions.length) list.append(h('li', { class: 'none' }, 'Không tìm thấy địa điểm phù hợp'));
+        suggestions.forEach((sg) => list.append(h('li', { role: 'option', tabindex: '0', onclick: () => pick(sg), onkeydown: (e) => { if (e.key === 'Enter') pick(sg); } }, h('span', { html: icon('pin') }), h('span', {}, sg.displayName))));
+        list.hidden = false; input.setAttribute('aria-expanded', 'true');
+      } catch { hide(); }
+    }, 450);
+  });
+  input.addEventListener('blur', () => setTimeout(hide, 250));
+  return { el: h('div', { class: 'picker' }, input, list, note), get: () => ({ ...val }) };
+}
+
 // ---------- auth ----------
 function openAuth(mode = 'login') {
   let m;
@@ -107,6 +140,7 @@ function openAuth(mode = 'login') {
   const render = (mode) => {
     const reg = mode === 'register';
     const err = h('div', { class: 'err', hidden: true });
+    const picker = placePicker();
     const f = h('form', { novalidate: true },
       h('h3', {}, reg ? 'Tạo tài khoản miễn phí' : 'Chào mừng trở lại'),
       h('p', { class: 'sub' }, reg ? 'Chỉ mất 30 giây. Dành cho người từ 18 tuổi.' : 'Đăng nhập để chat, đặt hẹn và xem livestream.'),
@@ -122,7 +156,7 @@ function openAuth(mode = 'login') {
         h('label', { class: 'f' }, h('span', {}, 'Năm sinh'), h('input', { name: 'birthYear', type: 'number', min: thisYear - 100, max: thisYear - 18, placeholder: String(thisYear - 25), required: true })),
         h('label', { class: 'f' }, h('span', {}, 'Giới tính'), h('select', { name: 'gender' },
           h('option', { value: '' }, 'Không nêu'), h('option', { value: 'nu' }, 'Nữ'), h('option', { value: 'nam' }, 'Nam'), h('option', { value: 'khac' }, 'Khác')))),
-      reg && h('label', { class: 'f' }, h('span', {}, 'Thành phố'), h('input', { name: 'city', maxlength: 60, placeholder: 'VD: Hà Nội' })),
+      reg && h('div', { class: 'f' }, h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Địa chỉ / khu vực của bạn'), picker.el),
       reg && h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'agree' }),
         h('span', { html: 'Tôi đủ 18 tuổi và đồng ý với <a href="#/terms" style="text-decoration:underline">Điều khoản & Quy tắc cộng đồng</a>.' })),
       h('button', { class: 'btn primary lg', style: 'width:100%', type: 'submit' }, reg ? 'Tạo tài khoản' : 'Đăng nhập'));
@@ -130,6 +164,7 @@ function openAuth(mode = 'login') {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(f));
       d.agree = !!f.agree?.checked;
+      if (reg) Object.assign(d, picker.get());
       const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
       try {
         const r = await api(reg ? '/register' : '/login', { method: 'POST', body: d });
@@ -160,7 +195,7 @@ function connectEvents() {
 
 // ---------- nav ----------
 const NAV = [
-  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
+  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
 ];
 function renderNav() {
   const cur = location.hash || '#/';
@@ -189,7 +224,7 @@ function renderNav() {
     tab('#/', 'Trang chủ', 'home'), tab('#/feed', 'Video', 'play'),
     h('a', { href: S.user ? '#/upload' : '#/', 'aria-label': 'Đăng video', onclick: (e) => { if (!S.user) { e.preventDefault(); openAuth('register'); } } }, h('span', { class: 'plus', html: icon('plus') })),
     tab('#/live', 'Live', 'live'),
-    S.user ? tab('#/messages', 'Chat', 'msg', h('span', { html: icon('msg') })) : tab('#/people', 'Làm quen', 'users'));
+    S.user ? tab('#/messages', 'Chat', 'msg', h('span', { html: icon('msg') })) : tab('#/nearby', 'Quanh đây', 'pin'));
   if (S.user && S.unread > 0) tb.children[4].append(h('span', { class: 'badge' }, S.unread));
 }
 
@@ -390,7 +425,7 @@ function lcard(s) {
 function pcard(u) {
   return h('a', { class: 'card pcard', href: '#/u/' + u.id },
     h('div', { class: 'pic' }, u.avatar ? h('img', { src: u.avatar, alt: u.name, loading: 'lazy' }) : h('span', { class: 'init' }, u.name.charAt(0).toUpperCase())),
-    h('div', { class: 'info' }, h('b', {}, u.name + ', ' + u.age), h('div', { class: 'muted', style: 'font-size:14px' }, u.city || 'Việt Nam')));
+    h('div', { class: 'info' }, h('b', {}, u.name + ', ' + u.age), h('div', { class: 'muted', style: 'font-size:14px' }, u.distanceKm != null ? (u.distanceKm <= 1 ? '≈ 1 km' : '≈ ' + u.distanceKm + ' km') + (u.city ? ' · ' + u.city : '') : (u.city || 'Việt Nam'))));
 }
 
 async function pageHome() {
@@ -404,7 +439,8 @@ async function pageHome() {
         h('p', { class: 'lead' }, 'Đăng video giới thiệu bản thân, trò chuyện trực tiếp, xem livestream và đặt lịch hẹn gặp mặt an toàn – tất cả trong một nơi.'),
         h('div', { class: 'row' },
           S.user ? h('a', { class: 'btn primary lg', href: '#/feed', html: icon('play') + 'Xem video' }) : h('button', { class: 'btn primary lg', onclick: () => openAuth('register') }, 'Tham gia miễn phí'),
-          h('a', { class: 'btn lg', href: '#/live', html: '<span class="livepill">LIVE</span> Xem livestream' })),
+          h('a', { class: 'btn lg', href: '#/live', html: '<span class="livepill">LIVE</span> Xem livestream' }),
+          h('a', { class: 'btn lg', href: '#/nearby', html: icon('pin') + 'Tìm quanh đây' })),
         h('div', { class: 'stats' }, h('div', {}, h('b', {}, '18+'), h('span', {}, 'Chỉ người trưởng thành')), h('div', {}, h('b', {}, '24/7'), h('span', {}, 'Kiểm duyệt nội dung')), h('div', {}, h('b', {}, '0đ'), h('span', {}, 'Đăng ký & chat')))),
       h('div', { class: 'mock', 'aria-hidden': 'true' },
         h('div', { class: 'phone a' }, h('div', { class: 'tag' }, h('i'), 'Mai, 24')),
@@ -457,6 +493,46 @@ async function pagePeople() {
   main.append(wrap); load();
 }
 
+const NEAR_KEY = 'xg_loc';
+async function pageNearby() {
+  const grid = h('div', { class: 'grid g4' });
+  const status = h('p', { class: 'muted', style: 'margin:12px 0 22px' });
+  const radius = h('select', { 'aria-label': 'Bán kính', style: 'width:auto' }, [5, 10, 25, 50, 100].map((r) => h('option', { value: r, selected: r === 25 }, 'Trong ' + r + ' km')));
+  let pos = null; try { pos = JSON.parse(sessionStorage.getItem(NEAR_KEY)); } catch {}
+  const show = async () => {
+    grid.innerHTML = ''; grid.append(h('div', { class: 'spin' }));
+    try {
+      const { people } = await api(`/nearby?lat=${pos.lat}&lng=${pos.lng}&radius=${radius.value}`);
+      grid.innerHTML = '';
+      status.textContent = people.length ? `Có ${people.length} người quanh bạn` : '';
+      if (!people.length) grid.append(h('div', { class: 'empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('pin') }), h('h3', {}, 'Chưa có ai trong bán kính này'), h('p', {}, 'Thử mở rộng bán kính tìm kiếm nhé.')));
+      people.forEach((u) => grid.append(pcard(u)));
+    } catch (e) { grid.innerHTML = ''; fail(e); }
+  };
+  const locate = () => {
+    if (!navigator.geolocation) { status.textContent = 'Trình duyệt không hỗ trợ định vị.'; return; }
+    status.textContent = 'Đang xác định vị trí của bạn…';
+    navigator.geolocation.getCurrentPosition((p) => {
+      pos = { lat: p.coords.latitude, lng: p.coords.longitude };
+      try { sessionStorage.setItem(NEAR_KEY, JSON.stringify(pos)); } catch {}
+      show();
+    }, (err) => {
+      status.textContent = err.code === 1 ? 'Bạn đã từ chối quyền vị trí. Hãy bật quyền vị trí cho trang này trong cài đặt trình duyệt, hoặc nhập khu vực của bạn bên dưới.' : 'Không xác định được vị trí. Hãy nhập khu vực của bạn bên dưới.';
+    }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+  };
+  const picker = placePicker();
+  const go = h('button', { class: 'btn', type: 'button', onclick: () => { const v = picker.get(); if (v.lat == null) return toast('Hãy chọn một gợi ý địa chỉ', true); pos = { lat: v.lat, lng: v.lng }; show(); } }, 'Tìm quanh khu vực này');
+  radius.addEventListener('change', () => pos && show());
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' },
+    h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Tìm quanh đây'), radius),
+    h('div', { class: 'card', style: 'padding:20px;display:grid;gap:14px' },
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'button', onclick: locate, html: icon('pin') + 'Dùng vị trí hiện tại của tôi' }), h('span', { class: 'muted' }, 'hoặc nhập khu vực:')),
+      h('div', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, h('div', { style: 'flex:1;min-width:0' }, picker.el), go),
+      h('p', { class: 'muted', style: 'font-size:13px' }, 'Vị trí của bạn chỉ dùng để tìm kiếm, không được lưu lên máy chủ. Người khác chỉ thấy khoảng cách làm tròn.')),
+    status, grid), footer());
+  if (pos) show();
+}
+
 async function pageUser(id) {
   const { user, videos } = await api('/users/' + id);
   const me = S.user && S.user.id === user.id;
@@ -486,18 +562,21 @@ async function pageMe() {
     if (!file.files[0]) return; const fd = new FormData(); fd.append('file', file.files[0]);
     try { const r = await api('/me/avatar', { method: 'POST', body: fd }); S.user = r.user; toast('Đã cập nhật ảnh'); renderNav(); route(); } catch (e) { fail(e); }
   });
+  const picker = placePicker({ address: u.address, city: u.city, lat: u.hasLocation ? 0 : null });
   const f = h('form', {},
     err,
     h('label', { class: 'f' }, h('span', {}, 'Tên hiển thị'), h('input', { name: 'name', value: u.name, maxlength: 40 })),
     h('div', { class: 'two' },
       h('label', { class: 'f' }, h('span', {}, 'Giới tính'), h('select', { name: 'gender' }, [['', 'Không nêu'], ['nu', 'Nữ'], ['nam', 'Nam'], ['khac', 'Khác']].map(([v, l]) => h('option', { value: v, selected: u.gender === v }, l)))),
-      h('label', { class: 'f' }, h('span', {}, 'Thành phố'), h('input', { name: 'city', value: u.city, maxlength: 60 }))),
+      h('div', { class: 'f' }, h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Địa chỉ / khu vực'), picker.el)),
     h('label', { class: 'f' }, h('span', {}, 'Giới thiệu'), h('textarea', { name: 'bio', maxlength: 500 }, u.bio)),
     h('label', { class: 'f' }, h('span', {}, 'Số điện thoại'), h('input', { name: 'phone', value: u.phone, type: 'tel', maxlength: 20, placeholder: '09xx xxx xxx' })),
     h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'showPhone', checked: u.showPhone }), h('span', {}, 'Hiện nút "Gọi" trên video của tôi (người đã đăng nhập mới xem được số).')),
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'showNearby', checked: u.showNearby }), h('span', {}, 'Cho phép hiện tôi trong "Tìm quanh đây" (chỉ hiện khoảng cách làm tròn, không lộ địa chỉ chính xác).')),
     h('button', { class: 'btn primary', type: 'submit' }, 'Lưu thay đổi'));
   f.addEventListener('submit', async (e) => {
-    e.preventDefault(); const d = Object.fromEntries(new FormData(f)); d.showPhone = f.showPhone.checked;
+    e.preventDefault(); const d = Object.fromEntries(new FormData(f)); d.showPhone = f.showPhone.checked; d.showNearby = f.showNearby.checked;
+    const pv = picker.get(); d.city = pv.city; if (pv.lat != null && pv.lat !== 0) { d.address = pv.address; d.lat = pv.lat; d.lng = pv.lng; }
     try { const r = await api('/me', { method: 'PATCH', body: d }); S.user = r.user; toast('Đã lưu'); renderNav(); } catch (ex) { err.textContent = ex.message; err.hidden = false; }
   });
   main.append(h('div', { class: 'wrap', style: 'max-width:680px;padding:32px 0' },
@@ -749,6 +828,7 @@ async function route() {
     if (!a) return pageHome();
     if (a === 'feed') return pageFeed(b);
     if (a === 'people') return pagePeople();
+    if (a === 'nearby') return pageNearby();
     if (a === 'u') return pageUser(b);
     if (a === 'me') return pageMe();
     if (a === 'upload') return pageUpload();

@@ -54,16 +54,29 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 
 function currentYear() { return new Date().getFullYear(); }
 
+const num = (v) => { const n = typeof v === 'number' ? v : parseFloat(v); return Number.isFinite(n) ? n : null; };
+function readPlace(b) {
+  const lat = num(b.lat), lng = num(b.lng);
+  const ok = lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  return { address: clean(b.address, 200), lat: ok ? Math.round(lat * 1000) / 1000 : null, lng: ok ? Math.round(lng * 1000) / 1000 : null };
+}
+function distanceKm(aLat, aLng, bLat, bLng) {
+  const r = (d) => (d * Math.PI) / 180;
+  const x = Math.sin(r(bLat - aLat) / 2) ** 2 + Math.cos(r(aLat)) * Math.cos(r(bLat)) * Math.sin(r(bLng - aLng) / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(x));
+}
+
 function publicUser(u) {
   if (!u) return null;
   return {
     id: u.id, name: u.name, age: currentYear() - u.birth_year, gender: u.gender,
-    city: u.city, bio: u.bio, avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
+    city: u.city, address: u.address || '', bio: u.bio, avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
     role: u.role, createdAt: u.created_at,
   };
 }
 function selfUser(u) {
-  return { ...publicUser(u), email: u.email, phone: u.phone, showPhone: !!u.show_phone, birthYear: u.birth_year };
+  return { ...publicUser(u), email: u.email, phone: u.phone, showPhone: !!u.show_phone, birthYear: u.birth_year,
+    showNearby: u.show_nearby !== 0, hasLocation: u.lat != null };
 }
 
 function auth(req, _res, next) {
@@ -152,9 +165,10 @@ app.post('/api/register', authLimiter, wrap(async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
   const role = ADMIN_EMAIL && email === ADMIN_EMAIL ? 'admin' : 'user';
   const gender = ['nam', 'nu', 'khac'].includes(req.body.gender) ? req.body.gender : '';
+  const place = readPlace(req.body);
   const info = db.prepare(
-    'INSERT INTO users (email, pass_hash, name, birth_year, gender, city, role, created_at) VALUES (?,?,?,?,?,?,?,?)'
-  ).run(email, hash, name, birthYear, gender, clean(req.body.city, 60), role, now());
+    'INSERT INTO users (email, pass_hash, name, birth_year, gender, city, address, lat, lng, role, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+  ).run(email, hash, name, birthYear, gender, clean(req.body.city, 60), place.address, place.lat, place.lng, role, now());
   startSession(res, Number(info.lastInsertRowid));
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
   res.json({ user: selfUser(u) });
@@ -182,9 +196,12 @@ app.patch('/api/me', needUser, (req, res) => {
   const b = req.body;
   const phone = clean(b.phone, 20).replace(/[^\d+]/g, '');
   const gender = ['nam', 'nu', 'khac', ''].includes(b.gender) ? b.gender : req.user.gender;
-  db.prepare('UPDATE users SET name=?, gender=?, city=?, bio=?, phone=?, show_phone=? WHERE id=?').run(
+  const place = readPlace(b);
+  const keep = !place.address && place.lat === null; // no new place picked → keep the old one
+  db.prepare('UPDATE users SET name=?, gender=?, city=?, bio=?, phone=?, show_phone=?, show_nearby=?, address=?, lat=?, lng=? WHERE id=?').run(
     clean(b.name, 40) || req.user.name, gender, clean(b.city, 60), clean(b.bio, 500),
-    phone, b.showPhone && phone ? 1 : 0, req.user.id
+    phone, b.showPhone && phone ? 1 : 0, b.showNearby === false ? 0 : 1,
+    keep ? req.user.address : place.address, keep ? req.user.lat : place.lat, keep ? req.user.lng : place.lng, req.user.id
   );
   res.json({ user: selfUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)) });
 });
@@ -206,6 +223,47 @@ app.get('/api/people', (req, res) => {
      ORDER BY (avatar != '') DESC, created_at DESC LIMIT 60`
   ).all(city, `%${city}%`, gender, gender);
   res.json({ people: rows.map(publicUser) });
+});
+
+// Nearby: sorted by distance. Exact coordinates and distances finer than 1 km are never returned.
+app.get('/api/nearby', (req, res) => {
+  const lat = num(req.query.lat), lng = num(req.query.lng);
+  if (lat === null || lng === null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return fail(res, 400, 'Thiếu vị trí');
+  const radius = Math.min(Math.max(num(req.query.radius) || 25, 1), 500);
+  const rows = db.prepare('SELECT * FROM users WHERE banned = 0 AND show_nearby = 1 AND lat IS NOT NULL AND lng IS NOT NULL').all();
+  const people = rows
+    .map((u) => ({ u, d: distanceKm(lat, lng, u.lat, u.lng) }))
+    .filter((x) => x.d <= radius && (!req.user || x.u.id !== req.user.id))
+    .sort((a, b) => a.d - b.d).slice(0, 60)
+    .map((x) => ({ ...publicUser(x.u), distanceKm: Math.max(1, Math.round(x.d)) }));
+  res.json({ people });
+});
+
+// Address autocomplete (OpenStreetMap Nominatim; ≤1 req/s, cached, identifying User-Agent as per its policy).
+const geoCache = new Map();
+let geoChain = Promise.resolve();
+const geoLimiter = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false });
+app.get('/api/geocode', geoLimiter, (req, res) => {
+  const q = clean(req.query.q, 120);
+  if (q.length < 3) return res.json({ suggestions: [] });
+  const key = q.toLowerCase();
+  if (geoCache.has(key)) return res.json({ suggestions: geoCache.get(key) });
+  geoChain = geoChain.then(async () => {
+    try {
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=vn&accept-language=vi&q=' + encodeURIComponent(q);
+      const r = await fetch(url, { headers: { 'User-Agent': 'xgaigu.com (contact: ' + (ADMIN_EMAIL || 'admin@xgaigu.com') + ')' }, signal: AbortSignal.timeout(8000) });
+      const data = r.ok ? await r.json() : [];
+      const out = data.map((x) => {
+        const a = x.address || {};
+        return { displayName: x.display_name, lat: parseFloat(x.lat), lng: parseFloat(x.lon),
+          city: a.city || a.town || a.village || a.county || a.state || '' };
+      });
+      if (geoCache.size > 500) geoCache.delete(geoCache.keys().next().value);
+      geoCache.set(key, out);
+      res.json({ suggestions: out });
+    } catch { res.json({ suggestions: [] }); }
+    await new Promise((ok) => setTimeout(ok, 1100));
+  });
 });
 
 app.get('/api/users/:id', (req, res) => {

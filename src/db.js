@@ -93,6 +93,15 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 `);
 
+// Lightweight migrations for columns added after first release.
+const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+for (const [col, ddl] of [
+  ['address', "address TEXT DEFAULT ''"],
+  ['lat', 'lat REAL'],
+  ['lng', 'lng REAL'],
+  ['show_nearby', 'show_nearby INTEGER DEFAULT 1'],
+]) if (!userCols.includes(col)) db.exec('ALTER TABLE users ADD COLUMN ' + ddl);
+
 // Streams left "live" by a previous process are no longer live.
 db.prepare('UPDATE streams SET live = 0, ended_at = ? WHERE live = 1').run(Date.now());
 
