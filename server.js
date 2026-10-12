@@ -94,12 +94,21 @@ app.use(auth);
 const needUser = (req, res, next) => (req.user ? next() : fail(res, 401, 'Vui lòng đăng nhập'));
 const needAdmin = (req, res, next) => (req.user && req.user.role === 'admin' ? next() : fail(res, 403, 'Không có quyền'));
 
-function startSession(res, userId) {
+const COOKIE = { httpOnly: true, sameSite: 'lax', secure: PROD, maxAge: 30 * 24 * 3600 * 1000, path: '/' };
+// Session tokens of every account signed in on this browser (httpOnly cookie, max 5) so the user can switch without retyping passwords.
+const readAccts = (req) => String(req.cookies.accts || '').split(',').filter((t) => /^[a-f0-9]{64}$/.test(t)).slice(0, 5);
+function startSession(req, res, userId) {
   const token = crypto.randomBytes(32).toString('hex');
   db.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?,?,?)').run(token, userId, now());
-  res.cookie('sid', token, {
-    httpOnly: true, sameSite: 'lax', secure: PROD, maxAge: 30 * 24 * 3600 * 1000, path: '/',
-  });
+  const keep = [];
+  for (const t of [...new Set([req.cookies.sid, ...readAccts(req)])].filter((x) => /^[a-f0-9]{64}$/.test(x || ''))) {
+    const row = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(t);
+    if (!row) continue;
+    if (row.user_id === userId) db.prepare('DELETE FROM sessions WHERE token = ?').run(t); // replaced by the new session
+    else keep.push(t);
+  }
+  res.cookie('accts', [token, ...keep].slice(0, 5).join(','), COOKIE);
+  res.cookie('sid', token, COOKIE);
 }
 
 // ---------- uploads ----------
@@ -170,7 +179,7 @@ app.post('/api/register', authLimiter, wrap(async (req, res) => {
   const info = db.prepare(
     'INSERT INTO users (email, pass_hash, name, birth_year, gender, city, address, lat, lng, role, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
   ).run(email, hash, name, birthYear, gender, clean(req.body.city, 60), place.address, place.lat, place.lng, role, now());
-  startSession(res, Number(info.lastInsertRowid));
+  startSession(req, res, Number(info.lastInsertRowid));
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
   res.json({ user: selfUser(u) });
 }));
@@ -181,15 +190,49 @@ app.post('/api/login', authLimiter, wrap(async (req, res) => {
   if (!u || !(await bcrypt.compare(String(req.body.password || ''), u.pass_hash)))
     return fail(res, 401, 'Sai email hoặc mật khẩu');
   if (u.banned) return fail(res, 403, 'Tài khoản đã bị khóa');
-  startSession(res, u.id);
+  startSession(req, res, u.id);
   res.json({ user: selfUser(u) });
 }));
 
 app.post('/api/logout', (req, res) => {
-  if (req.cookies.sid) db.prepare('DELETE FROM sessions WHERE token = ?').run(req.cookies.sid);
+  const cur = req.cookies.sid;
+  if (cur) db.prepare('DELETE FROM sessions WHERE token = ?').run(cur);
+  let rest = readAccts(req).filter((t) => t !== cur);
+  if (req.body && req.body.all) { for (const t of rest) db.prepare('DELETE FROM sessions WHERE token = ?').run(t); rest = []; }
+  if (rest.length) res.cookie('accts', rest.join(','), COOKIE); else res.clearCookie('accts', { path: '/' });
   res.clearCookie('sid', { path: '/' });
   res.json({ ok: true });
 });
+
+// Accounts signed in on this browser.
+app.get('/api/accounts', (req, res) => {
+  const out = [];
+  for (const t of readAccts(req)) {
+    const u = db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND u.banned = 0').get(t);
+    if (u) out.push({ id: u.id, name: u.name, email: u.email, avatar: u.avatar, current: t === req.cookies.sid });
+  }
+  if (req.user && !out.some((x) => x.current)) out.unshift({ id: req.user.id, name: req.user.name, email: req.user.email, avatar: req.user.avatar, current: true });
+  res.json({ accounts: out });
+});
+
+app.post('/api/switch', (req, res) => {
+  const id = Number(req.body.userId);
+  for (const t of readAccts(req)) {
+    const u = db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND u.banned = 0').get(t);
+    if (u && u.id === id) { res.cookie('sid', t, COOKIE); return res.json({ user: selfUser(u) }); }
+  }
+  fail(res, 404, 'Tài khoản này chưa đăng nhập trên thiết bị. Hãy đăng nhập lại.');
+});
+
+app.post('/api/me/password', authLimiter, needUser, wrap(async (req, res) => {
+  const cur = String(req.body.current || ''), next = String(req.body.next || '');
+  if (next.length < 8) return fail(res, 400, 'Mật khẩu mới tối thiểu 8 ký tự');
+  if (!(await bcrypt.compare(cur, req.user.pass_hash))) return fail(res, 403, 'Mật khẩu hiện tại không đúng');
+  if (cur === next) return fail(res, 400, 'Mật khẩu mới phải khác mật khẩu cũ');
+  db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(await bcrypt.hash(next, 10), req.user.id);
+  db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(req.user.id, req.cookies.sid); // sign out other devices
+  res.json({ ok: true });
+}));
 
 app.get('/api/me', (req, res) => res.json({ user: req.user ? selfUser(req.user) : null }));
 

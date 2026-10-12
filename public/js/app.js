@@ -155,6 +155,27 @@ function placePicker(init = {}) {
   return { el: h('div', { class: 'picker' }, input, list, note), get: () => ({ ...val }) };
 }
 
+// ---------- accounts on this device ----------
+async function switchAccount(id) {
+  try {
+    const r = await api('/switch', { method: 'POST', body: { userId: id } });
+    S.user = r.user; S.unread = 0; connectEvents(); renderNav(); location.hash = '#/'; route(); toast('Đã chuyển sang ' + r.user.name);
+  } catch (e) { fail(e); }
+}
+function accountRows(accounts, onPick) {
+  return accounts.map((a) => h('div', { class: 'acct' + (a.current ? ' cur' : '') }, avatar(a, 'md'),
+    h('div', { class: 'at' }, h('b', {}, a.name), h('span', { class: 'muted' }, a.email)),
+    a.current ? h('span', { class: 'status st-accepted' }, 'Đang dùng') : h('button', { type: 'button', class: 'btn sm primary', onclick: () => onPick(a) }, 'Chuyển')));
+}
+async function openAccounts() {
+  const list = h('div', { class: 'acct-list' }, h('div', { class: 'spin' }));
+  let m;
+  const box = h('div', {}, h('h3', {}, 'Chuyển tài khoản'), h('p', { class: 'sub' }, 'Các tài khoản đã đăng nhập trên trình duyệt này.'), list,
+    h('button', { type: 'button', class: 'btn', style: 'width:100%;margin-top:14px', html: icon('plus') + 'Thêm tài khoản khác', onclick: () => { m.close(); openAuth('login'); } }));
+  m = modal(box);
+  try { const { accounts } = await api('/accounts'); list.replaceChildren(...accountRows(accounts, (a) => { m.close(); switchAccount(a.id); })); } catch (e) { list.textContent = e.message; }
+}
+
 // ---------- auth ----------
 function openAuth(mode = 'login') {
   let m;
@@ -163,12 +184,20 @@ function openAuth(mode = 'login') {
     const reg = mode === 'register';
     const err = h('div', { class: 'err', hidden: true });
     const picker = placePicker();
+    const saved = h('div', { class: 'saved-accts', hidden: true });
+    if (!reg) api('/accounts').then(({ accounts }) => {
+      const others = accounts.filter((a) => !a.current);
+      if (!others.length) return;
+      saved.replaceChildren(h('p', { class: 'muted', style: 'font-size:13px;margin-bottom:8px' }, 'Tài khoản đã đăng nhập trên thiết bị này'), ...accountRows(others, (a) => { m.close(); switchAccount(a.id); }));
+      saved.hidden = false;
+    }).catch(() => {});
     const f = h('form', { novalidate: true },
       h('h3', {}, reg ? 'Tạo tài khoản miễn phí' : 'Chào mừng trở lại'),
       h('p', { class: 'sub' }, reg ? 'Chỉ mất 30 giây. Dành cho người từ 18 tuổi.' : 'Đăng nhập để chat, đặt hẹn và xem livestream.'),
       h('div', { class: 'tabs' },
         h('button', { type: 'button', class: reg ? '' : 'on', onclick: () => swap('login') }, 'Đăng nhập'),
         h('button', { type: 'button', class: reg ? 'on' : '', onclick: () => swap('register') }, 'Đăng ký')),
+      !reg && saved,
       err,
       reg && h('label', { class: 'f' }, h('span', {}, 'Tên hiển thị'), h('input', { name: 'name', maxlength: 40, autocomplete: 'nickname', required: true })),
       h('label', { class: 'f' }, h('span', {}, 'Email'), h('input', { name: 'email', type: 'email', autocomplete: 'email', required: true })),
@@ -656,12 +685,39 @@ async function pageMe() {
     const pv = picker.get(); d.city = pv.city; if (pv.lat != null && pv.lat !== 0) { d.address = pv.address; d.lat = pv.lat; d.lng = pv.lng; }
     try { const r = await api('/me', { method: 'PATCH', body: d }); S.user = r.user; toast('Đã lưu'); renderNav(); } catch (ex) { err.textContent = ex.message; err.hidden = false; }
   });
+  // ----- password -----
+  const pwErr = h('div', { class: 'err', hidden: true });
+  const pw = h('form', { class: 'card', style: 'padding:24px;margin-top:20px', autocomplete: 'on' },
+    h('h3', { style: 'margin-bottom:4px' }, 'Đổi mật khẩu'), h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:16px' }, 'Sau khi đổi, các thiết bị khác sẽ bị đăng xuất.'), pwErr,
+    h('label', { class: 'f' }, h('span', {}, 'Mật khẩu hiện tại'), h('input', { name: 'current', type: 'password', autocomplete: 'current-password', required: true })),
+    h('label', { class: 'f' }, h('span', {}, 'Mật khẩu mới'), h('input', { name: 'next', type: 'password', autocomplete: 'new-password', minlength: 8, required: true }), h('small', {}, 'Tối thiểu 8 ký tự')),
+    h('label', { class: 'f' }, h('span', {}, 'Nhập lại mật khẩu mới'), h('input', { name: 'again', type: 'password', autocomplete: 'new-password', minlength: 8, required: true })),
+    h('button', { class: 'btn primary', type: 'submit' }, 'Đổi mật khẩu'));
+  pw.addEventListener('submit', async (e) => {
+    e.preventDefault(); pwErr.hidden = true;
+    if (pw.next.value !== pw.again.value) { pwErr.textContent = 'Hai mật khẩu mới không khớp'; pwErr.hidden = false; return; }
+    const b = pw.querySelector('button[type=submit]'); b.disabled = true;
+    try { await api('/me/password', { method: 'POST', body: { current: pw.current.value, next: pw.next.value } }); pw.reset(); toast('Đã đổi mật khẩu'); }
+    catch (ex) { pwErr.textContent = ex.message; pwErr.hidden = false; }
+    b.disabled = false;
+  });
+  const logout = async (all) => {
+    await api('/logout', { method: 'POST', body: all ? { all: true } : {} });
+    S.user = null; S.unread = 0; connectEvents(); renderNav(); location.hash = '#/'; toast(all ? 'Đã đăng xuất mọi tài khoản' : 'Đã đăng xuất');
+  };
   main.append(h('div', { class: 'wrap', style: 'max-width:680px;padding:32px 0' },
     h('div', { class: 'profile-head' }, avatar(u, 'lg'), h('div', {}, h('h2', { class: 'title' }, u.name), h('p', { class: 'muted' }, u.email), h('div', { class: 'row', style: 'margin-top:12px' },
       h('label', { class: 'btn sm', for: 'avf' }, 'Đổi ảnh đại diện'), file, h('a', { class: 'btn sm', href: '#/u/' + u.id }, 'Xem hồ sơ công khai')))),
+    h('div', { class: 'card', style: 'padding:24px;margin-bottom:20px' },
+      h('h3', { style: 'margin-bottom:12px' }, 'Tài khoản'),
+      h('label', { class: 'f', style: 'margin-bottom:0' }, h('span', {}, 'Email đăng nhập'), h('input', { value: u.email, readonly: true, type: 'email', 'aria-describedby': 'em-note' }), h('small', { id: 'em-note' }, 'Email không hiển thị công khai trên hồ sơ hay video.')),
+      h('div', { class: 'row', style: 'margin-top:16px' },
+        h('button', { type: 'button', class: 'btn', onclick: openAccounts, html: icon('users') + 'Chuyển tài khoản' }),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => logout(false) }, 'Đăng xuất'),
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => logout(true) }, 'Đăng xuất mọi tài khoản'))),
     h('div', { class: 'card', style: 'padding:24px' }, f),
-    h('div', { class: 'row', style: 'margin-top:20px' }, u.role === 'admin' && h('a', { class: 'btn', href: '#/admin' }, 'Quản trị'),
-      h('button', { class: 'btn ghost', onclick: async () => { await api('/logout', { method: 'POST' }); S.user = null; S.unread = 0; connectEvents(); renderNav(); location.hash = '#/'; toast('Đã đăng xuất'); } }, 'Đăng xuất'))));
+    pw,
+    u.role === 'admin' && h('div', { class: 'row', style: 'margin-top:20px' }, h('a', { class: 'btn', href: '#/admin' }, 'Quản trị'))));
 }
 
 // ---------- regions (miền → tỉnh → huyện) ----------
