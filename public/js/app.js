@@ -566,7 +566,7 @@ async function openComments(v, countEl) {
     const { comments } = await api('/videos/' + v.id + '/comments');
     list.innerHTML = '';
     if (!comments.length) list.append(h('p', { class: 'muted' }, 'Chưa có bình luận. Hãy là người đầu tiên!'));
-    comments.forEach((c) => list.append(h('div', { class: 'lmsg' }, avatar(c.user), h('div', {}, h('b', {}, c.user.name), c.body, h('div', { class: 'muted', style: 'font-size:12px' }, timeAgo(c.createdAt))))));
+    comments.forEach((c) => list.append(h('div', { class: 'lmsg' }, avatar(c.user), h('div', {}, h('b', {}, c.user.name), h('span', { translate: 'no' }, c.body), h('div', { class: 'muted', style: 'font-size:12px' }, timeAgo(c.createdAt))))));
     if (countEl) countEl.textContent = comments.length;
   };
   load().catch(fail);
@@ -621,7 +621,7 @@ function slide(v) {
         h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
         (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
         h('button', { class: 'infobtn', type: 'button', onclick: () => openInfo(v), html: icon('info') + 'Xem thông tin' }),
-        v.caption && h('p', { class: 'cap' }, v.caption))),
+        v.caption && h('p', { class: 'cap', translate: 'no' }, v.caption))),
     rail);
   return el;
 }
@@ -668,7 +668,7 @@ function vthumb(v) {
   if (media instanceof HTMLVideoElement) { media.setAttribute('preload', 'metadata'); media.addEventListener('mouseenter', () => media.play().catch(() => {})); media.addEventListener('mouseleave', () => media.pause()); }
   else { media.style.pointerEvents = 'none'; }
   return h('a', { class: 'vcard', href: '#/feed/' + v.id, 'aria-label': 'Xem video của ' + v.user.name },
-    media, h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(v.user), v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.caption && h('div', { class: 'cap' }, v.caption)),
+    media, h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(v.user), v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.caption && h('div', { class: 'cap', translate: 'no' }, v.caption)),
     h('span', { class: 'views', html: icon('heart') + v.likes }),
     v.distanceKm != null && h('span', { class: 'distance', html: icon('pin') + '≈ ' + v.distanceKm + ' km' }));
 }
@@ -796,7 +796,7 @@ async function pageUser(id) {
   const me = S.user && S.user.id === user.id;
   const w = h('div', { class: 'wrap' },
     h('div', { class: 'profile-head' }, avatar(user, 'lg'),
-      h('div', { style: 'flex:1;min-width:220px' }, h('h2', { class: 'title' }, user.name + ', ' + user.age), user.nickname && h('p', { class: 'muted' }, 'Biệt danh: ' + user.nickname), h('p', { class: 'muted', html: icon('pin') + ' ' + esc(user.city || 'Việt Nam') }), user.bio && h('p', { style: 'margin-top:10px;max-width:560px' }, user.bio),
+      h('div', { style: 'flex:1;min-width:220px' }, h('h2', { class: 'title' }, user.name + ', ' + user.age), user.nickname && h('p', { class: 'muted' }, 'Biệt danh: ' + user.nickname), h('p', { class: 'muted', html: icon('pin') + ' ' + esc(user.city || 'Việt Nam') }), user.bio && h('p', { style: 'margin-top:10px;max-width:560px', translate: 'no' }, user.bio),
         h('div', { class: 'facts' }, [['Nghề nghiệp', user.occupation], ['Xuất xứ', user.origin], ['Chiều cao', user.height && user.height + ' cm'], ['Cân nặng', user.weight && user.weight + ' kg'], ['Thời gian rảnh', user.availability]].filter((x) => x[1]).map(([k, v]) => h('span', { class: 'fact' }, h('b', {}, k), v))),
         user.interests && user.interests.length > 0 && h('div', { class: 'facts' }, h('b', { class: 'muted', style: 'font-size:14px;align-self:center' }, 'Sở thích:'), user.interests.map((t) => h('span', { class: 'fact tag' }, t))),
         user.lookingFor && h('p', { style: 'margin-top:10px;max-width:560px;font-size:15px' }, h('b', { style: 'color:#ffb3cd' }, 'Kiểu người mong muốn: '), user.lookingFor),
@@ -917,7 +917,7 @@ function openInfo(v) {
     ['Năm sinh', i.birthYear], ['Chiều cao', i.height && i.height + ' cm'], ['Cân nặng', i.weight && i.weight + ' kg'],
     ['Xuất xứ', i.origin], ['Nghề nghiệp', i.occupation], ['Địa chỉ', i.address], ['Thời gian rảnh', i.workTime],
   ].filter((r) => r[1]);
-  const body = h('div', {}, h('h3', {}, v.user.name), h('p', { class: 'sub' }, v.caption || 'Thông tin giới thiệu'),
+  const body = h('div', {}, h('h3', {}, v.user.name), (v.caption ? h('p', { class: 'sub', translate: 'no' }, v.caption) : h('p', { class: 'sub' }, 'Thông tin giới thiệu')),
     h('dl', { class: 'info-list' }, rows.map(([k, val]) => h('div', {}, h('dt', {}, k), h('dd', {}, String(val))))),
     i.interests && i.interests.length > 0 && h('div', { class: 'facts', style: 'margin:12px 0' }, i.interests.map((t) => h('span', { class: 'fact tag' }, t))),
     i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
@@ -1162,7 +1162,7 @@ async function pageMessages(otherId) {
     list.innerHTML = '';
     if (!conversations.length) list.append(h('div', { class: 'empty' }, h('div', { class: 'ico', html: icon('msg') }), h('h3', {}, 'Chưa có cuộc trò chuyện'), h('p', {}, 'Nhắn tin cho ai đó từ video hoặc trang Làm quen.')));
     conversations.forEach((c) => list.append(h('a', { class: 'conv' + (String(c.user.id) === String(otherId) ? ' on' : ''), href: '#/messages/' + c.user.id },
-      avatar(c.user, 'md'), h('div', { class: 't' }, h('b', {}, c.user.name), h('p', {}, c.last.kind === 'booking' ? '📅 Lời mời hẹn gặp' : (c.last.from === S.user.id ? 'Bạn: ' : '') + c.last.body)), c.unread > 0 && h('span', { class: 'badge' }, c.unread))));
+      avatar(c.user, 'md'), h('div', { class: 't' }, h('b', {}, c.user.name), h('p', {}, c.last.kind === 'booking' ? '📅 Lời mời hẹn gặp' : [c.last.from === S.user.id && h('span', {}, 'Bạn: '), h('span', { translate: 'no' }, c.last.body)])), c.unread > 0 && h('span', { class: 'badge' }, c.unread))));
   };
   await loadList();
   if (!otherId) { thread.append(h('div', { class: 'empty', style: 'margin:auto' }, h('div', { class: 'ico', html: icon('msg') }), h('h3', {}, 'Chọn một cuộc trò chuyện'))); return; }
@@ -1187,7 +1187,7 @@ async function pageMessages(otherId) {
             h('button', { class: 'btn sm primary', onclick: () => act(b.id, 'accept') }, 'Đồng ý'), h('button', { class: 'btn sm', onclick: () => act(b.id, 'decline') }, 'Từ chối')));
       }).catch(() => {});
     } else inner = m.body;
-    return h('div', { class: 'b' + (me ? ' me' : ''), 'data-id': m.id }, inner, h('time', {}, fmtTime(m.createdAt)));
+    return h('div', { class: 'b' + (me ? ' me' : ''), 'data-id': m.id, translate: m.kind === 'booking' ? null : 'no' }, inner, h('time', {}, fmtTime(m.createdAt)));
   };
   const act = async (id, a) => { try { await api(`/bookings/${id}/${a}`, { method: 'POST' }); route(); } catch (e) { fail(e); } };
   const add = async (m) => { bubbles.append(await bubble(m)); bubbles.scrollTop = bubbles.scrollHeight; };
@@ -1269,7 +1269,7 @@ async function pageStream(id, wantHost) {
   const msgs = h('div', { class: 'msgs', 'aria-live': 'polite' });
   const hearts = h('div', { class: 'hearts', 'aria-hidden': 'true' });
   let clientId = null; const peers = new Map(); let localStream = null;
-  const addMsg = (m) => { msgs.append(h('div', { class: 'lmsg' }, avatar(m.user), h('div', {}, h('b', {}, m.user.name), m.body))); msgs.scrollTop = msgs.scrollHeight; };
+  const addMsg = (m) => { msgs.append(h('div', { class: 'lmsg', translate: 'no' }, avatar(m.user), h('div', {}, h('b', {}, m.user.name), m.body))); msgs.scrollTop = msgs.scrollHeight; };
   const heart = () => { const s = h('span', { style: `--dx:${Math.round(Math.random() * 50 - 25)}px;left:${Math.round(Math.random() * 30)}px` }, '💗'); hearts.append(s); setTimeout(() => s.remove(), 2400); };
 
   const video = h('video', { playsinline: true, autoplay: true });

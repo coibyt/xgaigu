@@ -55,14 +55,10 @@ git push -u origin main
 - Mặc định chỉ dùng STUN công cộng của Google; khoảng 10–20% cuộc gọi (mạng di động/NAT chặt) cần máy chủ TURN. Khi có TURN, đặt biến môi trường `TURN_URL` (vd `turn:turn.example.com:3478`), `TURN_USER`, `TURN_PASS`.
 
 ## Ngôn ngữ (đa quốc gia)
-- Giao diện viết bằng tiếng Việt và được **tự dịch** sang 100+ ngôn ngữ bằng bộ dịch riêng của website (`public/js/i18n.js` + `POST /api/translate`). Mỗi câu chỉ dịch **một lần cho mỗi ngôn ngữ** rồi lưu vào bảng `translations` trong database, những khách sau dùng lại bản đã lưu (nhanh, không tốn thêm).
-- Ngôn ngữ chọn tự động theo **quốc gia** của khách: ưu tiên header của lớp hosting/CDN (`CF-IPCountry`, `CloudFront-Viewer-Country`…) qua `/api/geo`, nếu không có thì dựa vào **múi giờ** thiết bị. Khách vào từ Việt Nam giữ tiếng Việt, không phát sinh yêu cầu dịch.
-- Nút 🌐 trên thanh đầu trang (và ở chân trang) để đổi ngôn ngữ thủ công hoặc quay về "Tự động"; lựa chọn được nhớ.
-- Nguồn dịch: nếu có biến môi trường `GOOGLE_TRANSLATE_KEY` (Google Cloud Translation API, 500.000 ký tự/tháng miễn phí) thì dùng API chính thức – **khuyến nghị cho production**. Nếu không có khóa, server dùng điểm cuối công khai của Google (không khóa, có thể bị giới hạn tốc độ).
-- Bản dịch là dịch máy; nội dung do thành viên đăng cũng được dịch. Có thể xem/sửa bản dịch trong bảng `translations` để chỉnh tay những câu quan trọng.
-
-### Bật dịch chất lượng cao (khuyến nghị)
-Không có khóa API thì server chỉ dùng các điểm cuối miễn phí/không khóa (đôi khi bị Google giới hạn, chất lượng câu ngắn không đều). Để dịch chuẩn và ổn định:
-1. Vào Google Cloud Console → tạo project → bật **Cloud Translation API** (cần gắn thẻ thanh toán, nhưng 500.000 ký tự đầu mỗi tháng miễn phí; nhờ bộ nhớ đệm, mỗi ngôn ngữ chỉ tốn vài chục nghìn ký tự).
-2. Tạo **API key** (giới hạn chỉ cho Cloud Translation API).
-3. Trên Hostinger thêm biến môi trường `GOOGLE_TRANSLATE_KEY=<khóa>` rồi Redeploy.
+- Giao diện viết bằng tiếng Việt. Có **2 chế độ dịch**, tự chọn theo ngôn ngữ của khách:
+  1. **Từ điển viết sẵn (chất lượng cao)** – chỉ dịch chữ của website (danh sách ở `scripts/i18n/catalog.json`, ~560 câu), **không đụng đến nội dung thành viên tự nhập** (tên, mô tả video, tin nhắn, bình luận, giới thiệu…). Hiện có: `en`, `zh-CN`. File nguồn `scripts/i18n/<mã>.txt`, dạng mỗi dòng `số thứ tự|bản dịch`; chạy `node scripts/i18n-build.js` để tạo `public/i18n/*.json`.
+  2. **Dịch máy (dự phòng)** cho ngôn ngữ chưa có từ điển – qua `POST /api/translate`, có lưu bộ nhớ đệm; các phần tử đánh dấu `translate="no"` (nội dung thành viên) bị bỏ qua.
+- Thêm ngôn ngữ mới: tạo `scripts/i18n/<mã>.txt` (đủ các dòng như `en.txt`), chạy lệnh build, commit `public/i18n/`.
+- Thêm chữ mới vào giao diện: chạy `node scripts/i18n-catalog.js` (chỉ **nối thêm** vào cuối danh sách, không đổi thứ tự), rồi bổ sung bản dịch cho các dòng mới.
+- Ngôn ngữ chọn tự động theo **quốc gia** của khách (header của CDN qua `/api/geo`, nếu không có thì múi giờ thiết bị). Nút 🌐 để đổi tay hoặc về "Tự động".
+- Chế độ dịch máy: nếu có `GOOGLE_TRANSLATE_KEY` (Google Cloud Translation) thì dùng API chính thức, nếu không dùng điểm cuối miễn phí (chất lượng không đều).

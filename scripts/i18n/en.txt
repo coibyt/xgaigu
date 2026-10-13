@@ -1,0 +1,557 @@
+0|Something went wrong
+1|File too large
+2|Network connection lost, please try again
+3|Upload took too long, please try again
+4|Upload cancelled
+5|just now
+6|minutes ago
+7|hours ago
+8|days ago
+9|Close
+10|Pick a suggestion to enable "Near me".
+11|Enter an address or area, e.g. District 1, Ho Chi Minh City
+12|✓ Location selected
+13|No matching place found
+14|Video call
+15|Never send money to someone you don't know. Tap the flag to report harassment.
+16|Decline
+17|Report
+18|End
+19|Cancel
+20|You need to allow camera and microphone access to make a video call
+21|Couldn't open the camera/microphone
+22|Call connection lost
+23|The call was interrupted
+24|That's you 😊
+25|has turned off video calls
+26|You are already in a call
+27|This browser doesn't support video calls yet
+28|Calling…
+29|No answer
+30|Connecting…
+31|Couldn't connect the call
+32|is video calling you…
+33|declined the call
+34|is busy on another call
+35|Missed call from
+36|The call has ended
+37|Switched to
+38|In use
+39|Switch
+40|Switch account
+41|Accounts signed in on this browser.
+42|Add another account
+43|Accounts signed in on this device
+44|Create a free account
+45|Welcome back
+46|Takes only 30 seconds. For ages 18 and over.
+47|Sign in to chat, book dates and watch livestreams.
+48|Sign in
+49|Sign up
+50|Display name
+51|Password
+52|At least 8 characters
+53|Year of birth
+54|Gender
+55|Prefer not to say
+56|Female
+57|Other
+58|Your address / area
+59|I am 18 or older and agree to the
+60|Terms & Community Rules
+61|Create account
+62|Welcome to xgaigu 💖
+63|Signed in
+64|💬 You have a new message
+65|📅 Your date schedule was updated
+66|Search language…
+67|Search languages
+68|Automatic, based on your country
+69|Language
+70|The website is translated into the language you choose. Automatic translation may not be perfect.
+71|Home
+72|Regions
+73|Near me
+74|Meet people
+75|xgaigu – home
+76|Messages
+77|Dates
+78|Post video
+79|Go live
+80|My profile
+81|Call
+82|This person has agreed to share their phone number. Please be polite and respectful.
+83|Call
+84|Safety tip: never send money to someone you haven't met, and meet in a public place.
+85|hasn't shared a phone number
+86|You can send a call request by message – they will decide whether to reply.
+87|📞 I'd like to chat by phone, would you be happy to share your number?
+88|Call request sent
+89|Send call request
+90|This is your own video
+91|Meet
+92|Send an invitation – the date is only confirmed once they accept.
+93|Time
+94|Place
+95|e.g. Highlands Coffee, Nguyen Hue
+96|Choose a public, busy place, go alone the first time and tell a friend.
+97|Message (optional)
+98|Say a little about yourself…
+99|No exchange of money or sexual services. Accounts that break this rule will be banned permanently.
+100|Send date invitation
+101|Date invitation sent 💌
+102|Report a violation
+103|Tell us what's wrong. Our moderation team will review it as soon as possible.
+104|Reason
+105|Sensitive / sexual content
+106|Scam, asking for money
+107|Harassment, abuse
+108|Fake profile, someone else's photos
+109|Under 18
+110|Submit report
+111|Thank you, we will review it
+112|Write a comment…
+113|Comments
+114|Send
+115|No comments yet. Be the first!
+116|Watch this video
+117|Link copied
+118|Mute / unmute
+119|Tap to turn sound on
+120|Like
+121|Message
+122|Call
+123|Meet
+124|Share
+125|View info
+126|Content type
+127|For you
+128|Live
+129|You've watched all videos 🎉
+130|No videos yet
+131|Be the first to post an intro video!
+132|Post your first video
+133|Video cover image
+134|Watch the video by
+135|Vietnam
+136|A connection platform for people aged 18+
+137|Meet through
+138|, get to know each other through
+139|Post an intro video, chat live, watch livestreams and book safe dates – all in one place.
+140|Join for free
+141|Near me
+142|Adults only
+143|Content moderation
+144|$0
+145|Sign-up & chat
+146|Afternoon tea room
+147|Linh just liked your video
+148|Coffee date · 19:30
+149|Live now
+150|See all
+151|Latest videos
+152|Browse
+153|No videos yet
+154|Be the first to share!
+155|New members
+156|Explore
+157|Modern dating, made simple
+158|Introduce yourself with a short video – more genuine than any description.
+159|Chat & call
+160|Chat in real time, or call when you both feel it's right.
+161|Go live or join a live room to chat with everyone.
+162|Book a date
+163|Send a date invitation right below each video – confirmed only when you both agree.
+164|Safety comes first
+165|18+ only, report buttons everywhere, and phone numbers are only shown when the account owner allows it. No sexual content, no sexual services, no scams.
+166|Community rules
+167|Ready to meet them?
+168|Create a free account in 30 seconds.
+169|Get started
+170|xgaigu.com · For ages 18 and over.
+171|🌐 Language
+172|About
+173|City…
+174|City
+175|All
+176|No one found
+177|Try changing the filters.
+178|Radius
+179|No one within this radius yet
+180|Try widening the search radius.
+181|Videos near you (closest first)
+182|Members near you
+183|Your browser doesn't support location.
+184|Finding your location…
+185|You declined location access. Turn on location for this page in your browser settings, or enter your area below.
+186|Couldn't determine your location. Please enter your area below.
+187|Please pick one of the address suggestions
+188|Search around this area
+189|Use my current location
+190|or enter an area:
+191|Your location is only used for searching and is not stored on our servers. Others only see a rounded distance.
+192|Nickname:
+193|Occupation
+194|Origin
+195|Height
+196|Weight
+197|Free time
+198|Interests:
+199|Looking for:
+200|Not looking for:
+201|Video call
+202|Edit profile
+203|Delete video
+204|Delete this video?
+205|No videos yet.
+206|Photo updated
+207|Address / area
+208|Nickname
+209|What friends call you
+210|Cannot be changed after sign-up.
+211|Origin / hometown
+212|e.g. Da Nang
+213|Height (cm)
+214|Weight (kg)
+215|e.g. Office worker, student, designer…
+216|Interests
+217|e.g. travel, coffee, cooking, yoga
+218|Separate with commas, up to 10 interests.
+219|The kind of person I'd like to meet
+220|e.g. Sincere, funny, loves travelling, over 25…
+221|e.g. Weekday evenings, weekends
+222|What I don't want / won't meet
+223|e.g. No heavy drinkers, no messages late at night…
+224|Phone number
+225|Show a "Call" button on my videos (only signed-in members can see the number).
+226|Allow other members to video call me (untick if you don't want to be called).
+227|Let me appear in "Near me" (only a rounded distance is shown, never your exact address).
+228|Save changes
+229|Saved
+230|Change password
+231|After changing it, your other devices will be signed out.
+232|Current password
+233|New password
+234|Re-enter new password
+235|The two new passwords don't match
+236|Password changed
+237|Signed out of all accounts
+238|Signed out
+239|Change profile photo
+240|View public profile
+241|Account
+242|Sign-in email
+243|Your email is not shown publicly on your profile or videos.
+244|Sign out
+245|Sign out of all accounts
+246|Admin
+247|Northern Vietnam
+248|Central Vietnam
+249|Southern Vietnam
+250|Region
+251|Choose a region
+252|Province / city
+253|Choose a province / city
+254|District
+255|Choose a district (optional)
+256|Address
+257|Intro details
+258|The poster hasn't added more details.
+259|Choose a region
+260|provinces / cities
+261|Search provinces / cities…
+262|Search provinces
+263|districts
+264|Region not found
+265|No videos in this region yet
+266|Be the first to post a video here.
+267|This browser doesn't support video editing yet. Please use a recent Chrome, Edge or Firefox.
+268|Your edited video is ready (
+269|MB). Add a description, then tap "Post video".
+270|Edit again
+271|The exported video is larger than 100MB, please trim it.
+272|Which region is this video from? *
+273|Nickname shown on the video
+274|Viewers only see this nickname on the video, not your account name.
+275|Intro details (optional – pre-filled from your profile, you can edit them)
+276|travel, coffee, yoga
+277|Pick a suggestion so your video shows up in "Near me" for people close to you.
+278|e.g. Weekday evenings
+279|Only signed-in members see this when they tap "Call" on the video.
+280|Cancel upload
+281|Uploading video…
+282|Please keep this page open until the upload finishes.
+283|Choose a frame as the cover
+284|Cover image (the video's thumbnail)
+285|Drag to choose a frame from the video
+286|Upload an image
+287|Use the current frame
+288|Only JPG/PNG/WebP images are accepted
+289|Cover image must be 5MB or smaller
+290|Selected:
+291|MB). You can post right away or tap "Edit video".
+292|Short, genuine vertical videos (9:16) get watched the most. You can trim, change speed, add music, text, icons and effects, or make a video from several photos.
+293|Choose a video (MP4/WebM, up to 100MB)
+294|Edit video (optional)
+295|Please choose a video first
+296|Make a video from several photos
+297|— or —
+298|Paste a link (YouTube, .mp4, .m3u8)
+299|Description
+300|A short intro about you, your interests, your ideal type…
+301|Don't post sexual content, other people's photos/videos or ads for sexual services. Violations lead to account bans.
+302|Please choose the region of the video (region and province/city).
+303|Uploading… 0%
+304|Processing the video on the server…
+305|Processing…
+306|Uploading…
+307|Video posted 🎬
+308|No conversations yet
+309|Message someone from a video or the Meet people page.
+310|📅 Date invitation
+311|You:
+312|Choose a conversation
+313|Date invitation
+314|Loading…
+315|Awaiting reply
+316|Accepted
+317|Declined
+318|Cancelled
+319|Accept
+320|Type a message…
+321|Back
+322|My dates
+323|No dates yet
+324|Tap "Meet" under someone's video to send an invitation.
+325|You invited
+326|Invitation from
+327|No live streams right now
+328|Start the first live stream and invite everyone to chat!
+329|Start streaming
+330|Streaming link
+331|Paste your YouTube Live link or HLS stream (.m3u8).
+332|Stream with the camera & microphone in the browser
+333|Embed YouTube Live
+334|HLS stream (.m3u8) from OBS / a streaming service
+335|Start a livestream
+336|Everyone can watch and chat live with you.
+337|Title
+338|e.g. Friday night chat ✨
+339|How to stream
+340|Livestreams must follow the community rules: no sexual content, no asking for money.
+341|Go live now
+342|The live stream has ended
+343|Watch another live stream
+344|Turning on the camera…
+345|Connecting to the broadcaster…
+346|Send a heart
+347|Message privately
+348|Live stream ended
+349|Say something…
+350|Sign in to chat
+351|Live chat
+352|🔇 Turn sound on
+353|🔊 Turn sound off
+354|Couldn't access the camera/microphone. Allow access in your browser, then reload the page.
+355|By using xgaigu.com you agree to the following.
+356|1. Age
+357|Only people aged 18 or over may sign up and use the site. We immediately ban accounts suspected of being under age.
+358|2. Prohibited content
+359|Sexual content and sensitive photos/videos.
+360|Brokering, advertising or buying sexual services; prostitution.
+361|Scams, asking for money, investment or gambling.
+362|Harassment, threats, discrimination, or revealing other people's private information.
+363|Impersonation, or using photos/videos that aren't yours.
+364|3. Meeting safely
+365|Meet in a public, busy place the first time.
+366|Tell a friend or family member the time and place.
+367|Never send money to someone you haven't met in person.
+368|Trust your instincts – leave if you feel uncomfortable.
+369|4. Privacy
+370|Your phone number is only shown to signed-in members when you choose to turn it on. You can delete your videos or ask to delete your account at any time.
+371|5. Moderation
+372|We may hide content and ban accounts that break the rules without prior notice. Suspicious content may be passed to the authorities.
+373|Hidden
+374|Hide video
+375|Ban this user?
+376|Banned
+377|Ban user
+378|Reports awaiting review
+379|Target
+380|Reported by
+381|No reports 🎉
+382|Page not found
+383|Back to home
+384|Sorry, something went wrong
+385|Use this video
+386|None
+387|Fade
+388|Zoom
+389|Slide
+390|Colour wipe
+391|Flash
+392|🎆 Fireworks
+393|⚡ Blink
+394|✨ Sparkle
+395|Video preview
+396|Couldn't read this video
+397|Couldn't read this image
+398|Play / pause
+399|Timeline
+400|Video length:
+401|Trim & speed
+402|Music
+403|Text & icons
+404|Effects
+405|Transitions
+406|Photo
+407|Clip added
+408|Add photo / video
+409|Trim start
+410|Trim end
+411|How long this photo is shown
+412|Gentle zoom while showing:
+413|On
+414|Off
+415|Playback speed (
+416|0.25× = slow, 3× = fast
+417|Up
+418|Down
+419|Delete clip
+420|Fill the frame
+421|Fit the frame + blurred background
+422|How the video is displayed
+423|In use
+424|Start from second
+425|Music volume
+426|Remove music
+427|Original video sound volume
+428|Search music…
+429|Search music
+430|Show more
+431|Stop preview
+432|Preview
+433|Couldn't preview this track
+434|Creating music…
+435|Music added:
+436|Couldn't create the track:
+437|Use
+438|No tracks found.
+439|tracks
+440|Website music library
+441|Instrumental music composed by the website, free to use in your videos. Tap ▶ to preview, tap "Use" to add it to your video.
+442|Or use your own music
+443|Choose a file from your device (MP3, M4A, WAV…). Only use music you have the right to use.
+444|Replace with music from your device
+445|Choose music from your device
+446|Type the text to insert…
+447|Text content
+448|Add text
+449|Insert
+450|Insert an icon
+451|Inserted items (drag them directly on the video to move)
+452|Content
+453|Text colour
+454|Size
+455|Animation
+456|Still
+457|Pulse
+458|Bounce
+459|Blink
+460|Show from second
+461|Hide at second
+462|Delete this item
+463|Tap to add an effect, then choose when it appears.
+464|Delete effect
+465|From second
+466|To second
+467|Preview from the start
+468|Transitions apply between clips and at the start/end of the video.
+469|Transition length
+470|Preview
+471|Exporting the video… please keep this tab in front and don't switch to another app.
+472|Export stopped.
+473|Video export failed:
+474|Export video & use it for posting
+475|Stop
+476|Video editor
+477|Cheerful Pop
+478|Energetic EDM
+479|Romantic Ballad
+480|Gentle Acoustic
+481|Dance-floor Disco
+482|Emotional Piano
+483|Relaxing Ambient
+484|Lively Latin
+485|Café Jazz
+486|Ready-made music
+487|xgaigu.com – post videos, meet people, chat, watch livestreams and book safe dates. For ages 18 and over.
+488|xgaigu – Video, livestream & dating
+489|Post videos, meet people, chat and book safe dates.
+490|Main navigation
+491|Please sign in
+492|No permission
+493|Invalid email
+494|Password must be at least 8 characters
+495|Please enter a display name
+496|You must be at least 18 years old to use this website
+497|You need to agree to the Terms of Use
+498|This email is already registered
+499|Wrong email or password
+500|This account has been banned
+501|This account isn't signed in on this device. Please sign in again.
+502|New password must be at least 8 characters
+503|Current password is incorrect
+504|New password must be different from the old one
+505|Image must be 5MB or smaller
+506|Location missing
+507|User not found
+508|This person hasn't shared a phone number
+509|Video not found
+510|Only MP4/WebM/MOV videos are accepted
+511|Choose a video file or paste an https link
+512|Please choose the region (region and province/city) of the video
+513|Comment is empty
+514|Message is empty
+515|You can't message yourself
+516|You can't invite yourself on a date
+517|Please choose a time in the future
+518|Please enter a place (preferably a public one)
+519|Date not found
+520|Invalid action
+521|Please enter a title for the live stream
+522|The link must start with https://
+523|Invalid YouTube link
+524|Live stream not found
+525|Couldn't send
+526|Invalid request
+527|Data too large
+528|This person has turned off video calls
+529|This person is not online right now
+530|You've called too many times, please try again in a few minutes
+531|📞 Missed video call
+532|Invalid signal
+533|Invalid
+534|Missing report details
+535|You can't ban yourself
+536|Not found
+537|Video by
+538|xgaigu – Connect, video & livestream dating
+539|Post videos, meet people, chat, watch livestreams and book safe dates. For ages 18 and over.
+540|File too large (up to 100MB)
+541|File upload failed
+542|Server error
+543|Video
+544|Live
+545|Chat
+546|Mic
+547|Camera
+548|{0} videos and {1} members near you
+549|{0} tracks
+550|Skip navigation
+551|Content for ages 18 and over
+552|xgaigu is a connection platform for adults. By continuing, you confirm that you are 18 or older and agree to the
+553|Terms of Use
+554|I'm 18 or older – Enter
+555|Leave
+556|Livestream
