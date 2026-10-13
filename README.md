@@ -53,3 +53,9 @@ git push -u origin main
 - Nút "Gọi video" có ở trang hồ sơ, đầu khung chat và bảng "Xem thông tin" của video. Người nhận cần đang mở website (chưa có thông báo đẩy khi đóng trình duyệt).
 - Mỗi thành viên có thể tắt nhận cuộc gọi trong `#/me`. Có giới hạn 3 lần gọi/phút cho mỗi cặp người.
 - Mặc định chỉ dùng STUN công cộng của Google; khoảng 10–20% cuộc gọi (mạng di động/NAT chặt) cần máy chủ TURN. Khi có TURN, đặt biến môi trường `TURN_URL` (vd `turn:turn.example.com:3478`), `TURN_USER`, `TURN_PASS`.
+
+## Ngôn ngữ (đa quốc gia)
+- Giao diện viết bằng tiếng Việt và được **tự dịch** sang 100+ ngôn ngữ bằng Google Website Translator (miễn phí, không cần khóa API) – `public/js/i18n.js`.
+- Ngôn ngữ chọn tự động theo **quốc gia** của khách: ưu tiên header của lớp hosting/CDN (`CF-IPCountry`, `CloudFront-Viewer-Country`…) qua `/api/geo`, nếu không có thì dựa vào **múi giờ** thiết bị. Khách vào từ Việt Nam giữ tiếng Việt và không tải công cụ dịch.
+- Nút 🌐 trên thanh đầu trang (và ở chân trang) để đổi ngôn ngữ thủ công hoặc quay về "Tự động"; lựa chọn được nhớ.
+- Bản dịch là dịch máy; nội dung do thành viên đăng cũng bị dịch theo. Ở các nước chặn Google (vd Trung Quốc đại lục) công cụ dịch không hoạt động.

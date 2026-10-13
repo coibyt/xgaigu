@@ -23,13 +23,13 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      scriptSrc: ["'self'", 'https://cdn.jsdelivr.net', 'https://translate.google.com', 'https://translate.googleapis.com', 'https://www.gstatic.com'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://www.gstatic.com', 'https://translate.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
       mediaSrc: ["'self'", 'blob:', 'https:'],
       connectSrc: ["'self'", 'https:'],
-      frameSrc: ['https://www.youtube.com', 'https://www.youtube-nocookie.com'],
+      frameSrc: ['https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://translate.google.com'],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
     },
@@ -761,6 +761,11 @@ app.post('/api/admin/users/:id/ban', needAdmin, (req, res) => {
 
 // ---------- static & errors ----------
 app.get('/healthz', (_req, res) => res.send('ok'));
+// Visitor's country when the hosting/CDN layer provides it (Cloudflare, CloudFront, Vercel…); otherwise the browser falls back to its time zone.
+app.get('/api/geo', (req, res) => {
+  const c = String(req.get('cf-ipcountry') || req.get('cloudfront-viewer-country') || req.get('x-vercel-ip-country') || req.get('x-country-code') || req.get('x-appengine-country') || '').toUpperCase();
+  res.set('Cache-Control', 'no-store').json({ country: /^[A-Z]{2}$/.test(c) && !['XX', 'T1'].includes(c) ? c : '' });
+});
 app.use('/api', (_req, res) => fail(res, 404, 'Không tìm thấy'));
 // ---------- link previews (Telegram, Facebook, Zalo, X…): crawlers don't run JavaScript, so the share page /v/:id is
 // rendered on the server with Open Graph tags for that video; real visitors are sent to the SPA player by app.js. ----------

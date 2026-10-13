@@ -10,6 +10,7 @@ const P = {
   mic: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8',
   micoff: 'M1 1l22 22M9 9v3a3 3 0 0 0 5.1 2.1M15 9.3V4a3 3 0 0 0-5.9-.8M17 16.9A7 7 0 0 1 5 12v-2M19 10v2c0 .8-.1 1.5-.4 2.2M12 19v4M8 23h8',
   videooff: 'M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.7 0H14a2 2 0 0 1 2 2v3.3l1 1L23 7v10M1 1l22 22',
+  globe: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20',
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
   msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
   phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
@@ -95,8 +96,9 @@ const timeAgo = (t) => {
   if (s < 60) return 'vừa xong'; if (s < 3600) return Math.floor(s / 60) + ' phút trước';
   if (s < 86400) return Math.floor(s / 3600) + ' giờ trước'; return Math.floor(s / 86400) + ' ngày trước';
 };
-const fmtDate = (t) => new Date(t).toLocaleString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-const fmtTime = (t) => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+const loc = () => (window.XGI18n ? XGI18n.locale() : 'vi-VN');
+const fmtDate = (t) => new Date(t).toLocaleString(loc(), { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const fmtTime = (t) => new Date(t).toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit' });
 
 function avatar(u, cls = '') {
   const a = h('span', { class: 'avatar ' + cls });
@@ -394,6 +396,21 @@ function connectEvents() {
   S.es = es;
 }
 
+// ---------- language picker ----------
+function openLanguage() {
+  const I = window.XGI18n; if (!I) return;
+  const search = h('input', { type: 'search', placeholder: 'Tìm ngôn ngữ… / Search…', 'aria-label': 'Tìm ngôn ngữ' });
+  const list = h('div', { class: 'lang-list notranslate', translate: 'no' });
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    list.replaceChildren(...I.LANGS.filter((l) => !q || l.name.toLowerCase().includes(q) || l.code.toLowerCase().includes(q))
+      .map((l) => h('button', { type: 'button', class: 'lang' + (!I.isAuto() && I.current() === l.code ? ' on' : ''), onclick: () => I.choose(l.code) }, h('b', {}, l.name), h('span', { class: 'muted' }, l.code))));
+  };
+  search.addEventListener('input', draw); draw();
+  const auto = h('button', { type: 'button', class: 'btn' + (I.isAuto() ? ' primary' : ''), style: 'width:100%;margin-bottom:12px', onclick: () => I.useAuto(), html: icon('pin') + '<span>Tự động theo quốc gia của bạn' + (I.country() ? ' (' + esc(I.country()) + ')' : '') + '</span>' });
+  modal(h('div', {}, h('h3', {}, 'Ngôn ngữ / Language'), h('p', { class: 'sub' }, 'Website tự dịch sang ngôn ngữ bạn chọn. Bản dịch tự động có thể chưa hoàn hảo.'), auto, search, list), { wide: true });
+}
+
 // ---------- nav ----------
 const NAV = [
   ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/regions', 'Khu vực', 'pin'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
@@ -402,14 +419,15 @@ function renderNav() {
   const cur = location.hash || '#/';
   const on = (href) => (href === '#/' ? cur === '#/' : cur.startsWith(href));
   const nav = $('#nav');
-  nav.innerHTML = '';
+  nav.innerHTML = ''; nav.classList.toggle('out', !S.user);
   nav.append(
-    h('a', { class: 'logo', href: '#/', 'aria-label': 'xgaigu – trang chủ' }, h('span', { class: 'logo-mark' }), h('span', {}, 'xgai', h('b', {}, 'gu'))),
+    h('a', { class: 'logo notranslate', translate: 'no', href: '#/', 'aria-label': 'xgaigu – trang chủ' }, h('span', { class: 'logo-mark' }), h('span', {}, 'xgai', h('b', {}, 'gu'))),
     h('div', { class: 'links' }, NAV.map(([href, label]) => h('a', { href, class: on(href) ? 'on' : '' }, label)),
       S.user && h('a', { href: '#/messages', class: on('#/messages') ? 'on' : '' }, 'Tin nhắn', S.unread > 0 && h('span', { class: 'badge' }, S.unread)),
       S.user && h('a', { href: '#/dates', class: on('#/dates') ? 'on' : '' }, 'Lịch hẹn')),
     h('div', { class: 'grow' }),
     h('div', { class: 'nav-actions' },
+      h('button', { type: 'button', class: 'iconbtn lang-btn', 'aria-label': 'Ngôn ngữ / Language', onclick: openLanguage, html: icon('globe') }),
       S.user ? [
         h('a', { class: 'btn primary sm', href: '#/upload', html: icon('plus') + '<span>Đăng video</span>' }),
         h('a', { class: 'btn sm hide-m', href: '#/golive', html: icon('live') + '<span>Phát trực tiếp</span>' }),
@@ -710,7 +728,7 @@ async function pageHome() {
 function footer() {
   return h('footer', { class: 'footer' }, h('div', { class: 'wrap cols' },
     h('div', {}, h('div', { class: 'logo' }, h('span', { class: 'logo-mark' }), h('span', {}, 'xgai', h('b', {}, 'gu'))), h('p', { style: 'margin-top:10px' }, '© ' + new Date().getFullYear() + ' xgaigu.com · Dành cho người từ 18 tuổi.')),
-    h('div', { class: 'row' }, h('a', { href: '#/welcome' }, 'Giới thiệu'), h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
+    h('div', { class: 'row' }, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openLanguage(); } }, '🌐 Ngôn ngữ / Language'), h('a', { href: '#/welcome' }, 'Giới thiệu'), h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
 }
 
 // ---------- people & profiles ----------
