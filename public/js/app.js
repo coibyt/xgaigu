@@ -691,7 +691,7 @@ async function pageHome() {
     h('section', { class: 'hero' },
       h('div', {},
         h('span', { class: 'eyebrow', html: icon('spark') + 'Nền tảng kết nối dành cho người từ 18+' }),
-        h('h1', {}, 'Gặp gỡ qua ', h('em', {}, 'video'), ', làm quen qua ', h('em', {}, 'livestream')),
+        h('h1', {}, 'Gặp gỡ qua video,', h('br'), h('em', {}, 'làm quen qua livestream')),
         h('p', { class: 'lead' }, 'Đăng video giới thiệu bản thân, trò chuyện trực tiếp, xem livestream và đặt lịch hẹn gặp mặt an toàn – tất cả trong một nơi.'),
         h('div', { class: 'row' },
           S.user ? h('a', { class: 'btn primary lg', href: '#/feed', html: icon('play') + 'Xem video' }) : h('button', { class: 'btn primary lg', onclick: () => openAuth('register') }, 'Tham gia miễn phí'),

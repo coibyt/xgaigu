@@ -56,8 +56,8 @@ git push -u origin main
 
 ## Ngôn ngữ (đa quốc gia)
 - Giao diện viết bằng tiếng Việt. Có **2 chế độ dịch**, tự chọn theo ngôn ngữ của khách:
-  1. **Từ điển viết sẵn (chất lượng cao)** – chỉ dịch chữ của website (danh sách ở `scripts/i18n/catalog.json`, ~560 câu), **không đụng đến nội dung thành viên tự nhập** (tên, mô tả video, tin nhắn, bình luận, giới thiệu…). Hiện có: `en`, `zh-CN`. File nguồn `scripts/i18n/<mã>.txt`, dạng mỗi dòng `số thứ tự|bản dịch`; chạy `node scripts/i18n-build.js` để tạo `public/i18n/*.json`.
-  2. **Dịch máy (dự phòng)** cho ngôn ngữ chưa có từ điển – qua `POST /api/translate`, có lưu bộ nhớ đệm; các phần tử đánh dấu `translate="no"` (nội dung thành viên) bị bỏ qua.
+  1. **Từ điển viết sẵn (chất lượng cao)** – chỉ dịch chữ của website (danh sách ở `scripts/i18n/catalog.json`, ~560 câu), **không đụng đến nội dung thành viên tự nhập** (tên, mô tả video, tin nhắn, bình luận, giới thiệu…). Hiện có 12 ngôn ngữ: `en`, `zh-CN`, `zh-TW`, `ja`, `ko`, `th`, `id`, `fr`, `de`, `es`, `ru`, `ar` (Ả Rập hiển thị phải sang trái). File nguồn `scripts/i18n/<mã>.txt`, dạng mỗi dòng `số thứ tự|bản dịch`; chạy `node scripts/i18n-build.js` để tạo `public/i18n/*.json`.
+  2. **Dịch máy (dự phòng)** cho các ngôn ngữ còn lại – qua `POST /api/translate`, có lưu bộ nhớ đệm. Ở chế độ này **cả nội dung thành viên tự nhập cũng được dịch** để trang đồng bộ (chỉ logo và danh sách ngôn ngữ, đánh dấu `.notranslate`, được giữ nguyên).
 - Thêm ngôn ngữ mới: tạo `scripts/i18n/<mã>.txt` (đủ các dòng như `en.txt`), chạy lệnh build, commit `public/i18n/`.
 - Thêm chữ mới vào giao diện: chạy `node scripts/i18n-catalog.js` (chỉ **nối thêm** vào cuối danh sách, không đổi thứ tự), rồi bổ sung bản dịch cho các dòng mới.
 - Ngôn ngữ chọn tự động theo **quốc gia** của khách (header của CDN qua `/api/geo`, nếu không có thì múi giờ thiết bị). Nút 🌐 để đổi tay hoặc về "Tự động".

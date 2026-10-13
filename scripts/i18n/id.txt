@@ -1,0 +1,581 @@
+0|Terjadi kesalahan
+1|File terlalu besar
+2|Koneksi jaringan terputus, silakan coba lagi
+3|Pengunggahan terlalu lama, silakan coba lagi
+4|Pengunggahan dibatalkan
+5|baru saja
+6|menit yang lalu
+7|jam yang lalu
+8|hari yang lalu
+9|Tutup
+10|Pilih salah satu saran untuk mengaktifkan fitur "Dekat saya".
+11|Masukkan alamat atau area, mis. Distrik 1, Kota Ho Chi Minh
+12|✓ Lokasi dipilih
+13|Tempat yang cocok tidak ditemukan
+14|Panggilan video
+15|Jangan kirim uang kepada orang yang tidak dikenal. Ketuk ikon bendera untuk melaporkan pelecehan.
+16|Tolak
+17|Laporkan
+18|Akhiri
+19|Batal
+20|Anda perlu mengizinkan akses kamera dan mikrofon untuk melakukan panggilan video
+21|Tidak dapat membuka kamera/mikrofon
+22|Koneksi panggilan terputus
+23|Panggilan terputus
+24|Itu Anda sendiri 😊
+25|menonaktifkan panggilan video
+26|Anda sedang dalam panggilan
+27|Browser ini belum mendukung panggilan video
+28|Memanggil…
+29|Tidak ada jawaban
+30|Menghubungkan…
+31|Tidak dapat menyambungkan panggilan
+32|Panggilan video masuk…
+33|menolak panggilan
+34|sedang sibuk di panggilan lain
+35|Panggilan tak terjawab dari
+36|Panggilan telah berakhir
+37|Beralih ke
+38|Sedang dipakai
+39|Beralih
+40|Ganti akun
+41|Akun yang masuk di browser ini.
+42|Tambah akun lain
+43|Akun yang masuk di perangkat ini
+44|Buat akun gratis
+45|Selamat datang kembali
+46|Hanya 30 detik. Untuk usia 18 tahun ke atas.
+47|Masuk untuk mengobrol, membuat janji kencan, dan menonton siaran langsung.
+48|Masuk
+49|Daftar
+50|Nama tampilan
+51|Kata sandi
+52|Minimal 8 karakter
+53|Tahun lahir
+54|Jenis kelamin
+55|Tidak disebutkan
+56|Perempuan
+57|Lainnya
+58|Alamat / area Anda
+59|Saya berusia 18 tahun ke atas dan menyetujui
+60|Ketentuan & Aturan Komunitas
+61|Buat akun
+62|Selamat datang di xgaigu 💖
+63|Berhasil masuk
+64|💬 Anda punya pesan baru
+65|📅 Jadwal kencan diperbarui
+66|Cari bahasa…
+67|Cari bahasa
+68|Otomatis sesuai negara Anda
+69|Bahasa
+70|Situs web diterjemahkan ke bahasa yang Anda pilih. Terjemahan otomatis mungkin tidak sempurna.
+71|Beranda
+72|Wilayah
+73|Dekat saya
+74|Kenalan
+75|xgaigu – beranda
+76|Pesan
+77|Kencan
+78|Posting video
+79|Siaran langsung
+80|Profil saya
+81|Telepon
+82|Orang ini setuju membagikan nomor teleponnya. Mohon bersikap sopan dan menghormati.
+83|Telepon
+84|Tips keamanan: jangan kirim uang kepada orang yang belum pernah ditemui, dan bertemulah di tempat umum.
+85|belum membuka nomor telepon
+86|Anda bisa mengirim permintaan telepon lewat pesan – dia yang memutuskan akan membalas atau tidak.
+87|📞 Aku ingin ngobrol lewat telepon, boleh bagikan nomormu?
+88|Permintaan telepon terkirim
+89|Kirim permintaan telepon
+90|Ini video Anda sendiri
+91|Bertemu
+92|Kirim undangan – kencan baru dikonfirmasi setelah dia menyetujui.
+93|Waktu
+94|Tempat
+95|mis. Highlands Coffee, Nguyễn Huệ
+96|Pilih tempat umum yang ramai, pertama kali sebaiknya pergi sendiri dan beri tahu teman.
+97|Pesan (opsional)
+98|Ceritakan sedikit tentang diri Anda…
+99|Dilarang bertransaksi uang atau layanan seksual. Akun yang melanggar akan diblokir permanen.
+100|Kirim undangan kencan
+101|Undangan kencan terkirim 💌
+102|Laporkan pelanggaran
+103|Beri tahu kami masalahnya. Tim moderasi akan segera meninjaunya.
+104|Alasan
+105|Konten sensitif / vulgar
+106|Penipuan, meminta uang
+107|Pelecehan, hinaan
+108|Akun palsu, memakai foto orang lain
+109|Di bawah 18 tahun
+110|Kirim laporan
+111|Terima kasih, kami akan meninjaunya
+112|Tulis komentar…
+113|Komentar
+114|Kirim
+115|Belum ada komentar. Jadilah yang pertama!
+116|Tonton video ini
+117|Tautan disalin
+118|Bisukan/aktifkan suara
+119|Ketuk untuk menyalakan suara
+120|Suka
+121|Kirim pesan
+122|Telepon
+123|Bertemu
+124|Bagikan
+125|Lihat info
+126|Jenis konten
+127|Untuk Anda
+128|Langsung
+129|Anda sudah menonton semua video 🎉
+130|Belum ada video
+131|Jadilah yang pertama memposting video perkenalan!
+132|Posting video pertama
+133|Gambar sampul video
+134|Tonton video dari
+135|Vietnam
+136|Platform koneksi untuk usia 18 tahun ke atas
+137|Bertemu lewat
+138|, berkenalan lewat
+139|Posting video perkenalan, mengobrol langsung, menonton siaran langsung, dan membuat janji kencan dengan aman – semua di satu tempat.
+140|Gabung gratis
+141|Cari di dekat saya
+142|Khusus dewasa
+143|Moderasi konten
+144|Rp0
+145|Daftar & chat
+146|Ruang teh sore
+147|Linh baru saja menyukai video Anda
+148|Kencan kopi · 19:30
+149|Sedang siaran langsung
+150|Lihat semua
+151|Video terbaru
+152|Jelajahi
+153|Belum ada video
+154|Jadilah yang pertama berbagi!
+155|Anggota baru
+156|Temukan
+157|Kencan modern yang sederhana
+158|Perkenalkan diri lewat video singkat – lebih jujur daripada deskripsi apa pun.
+159|Chat & telepon
+160|Mengobrol secara real time, atau telepon saat kalian merasa cocok.
+161|Siaran langsung atau gabung ke ruang live untuk mengobrol dengan semua orang.
+162|Buat janji kencan
+163|Kirim undangan kencan tepat di bawah setiap video, dikonfirmasi hanya jika kedua pihak setuju.
+164|Keamanan nomor satu
+165|Khusus 18+, ada tombol laporan di mana-mana, dan nomor telepon hanya tampil jika pemilik akun mengizinkan. Dilarang konten vulgar, jual beli layanan seksual, dan penipuan.
+166|Aturan komunitas
+167|Siap bertemu dengannya?
+168|Buat akun gratis dalam 30 detik.
+169|Mulai sekarang
+170|xgaigu.com · Untuk usia 18 tahun ke atas.
+171|🌐 Bahasa
+172|Tentang
+173|Kota…
+174|Kota
+175|Semua
+176|Tidak ada yang ditemukan
+177|Coba ubah filternya.
+178|Radius
+179|Belum ada siapa pun dalam radius ini
+180|Coba perluas radius pencarian.
+181|Video di dekat Anda (terdekat dulu)
+182|Anggota di dekat Anda
+183|Browser Anda tidak mendukung lokasi.
+184|Menentukan lokasi Anda…
+185|Anda menolak izin lokasi. Aktifkan izin lokasi untuk halaman ini di pengaturan browser, atau masukkan area Anda di bawah.
+186|Tidak dapat menentukan lokasi Anda. Silakan masukkan area Anda di bawah.
+187|Silakan pilih salah satu saran alamat
+188|Cari di sekitar area ini
+189|Gunakan lokasi saya saat ini
+190|atau masukkan area:
+191|Lokasi Anda hanya dipakai untuk pencarian dan tidak disimpan di server. Orang lain hanya melihat jarak yang dibulatkan.
+192|Nama panggilan:
+193|Pekerjaan
+194|Asal
+195|Tinggi badan
+196|Berat badan
+197|Waktu luang
+198|Hobi:
+199|Tipe yang dicari:
+200|Tidak diinginkan:
+201|Panggilan video
+202|Ubah profil
+203|Hapus video
+204|Hapus video ini?
+205|Belum ada video.
+206|Foto diperbarui
+207|Alamat / area
+208|Nama panggilan
+209|Nama yang biasa dipakai teman memanggil Anda
+210|Tidak dapat diubah setelah mendaftar.
+211|Asal / kampung halaman
+212|mis. Da Nang
+213|Tinggi badan (cm)
+214|Berat badan (kg)
+215|mis. Karyawan kantor, mahasiswa, desainer…
+216|Hobi
+217|mis. traveling, kopi, memasak, yoga
+218|Pisahkan dengan koma, maksimal 10 hobi.
+219|Tipe orang yang ingin ditemui
+220|mis. Tulus, lucu, suka traveling, di atas 25 tahun…
+221|mis. Malam hari kerja, akhir pekan
+222|Yang tidak saya inginkan / tidak akan ditemui
+223|mis. Tidak bertemu peminum berat, tidak kirim pesan larut malam…
+224|Nomor telepon
+225|Tampilkan tombol "Telepon" di video saya (hanya anggota yang sudah masuk yang bisa melihat nomor).
+226|Izinkan anggota lain menelepon video saya (hapus centang jika Anda tidak ingin ditelepon).
+227|Izinkan saya muncul di "Dekat saya" (hanya jarak yang dibulatkan, tidak pernah alamat persis Anda).
+228|Simpan perubahan
+229|Tersimpan
+230|Ubah kata sandi
+231|Setelah diubah, perangkat Anda yang lain akan keluar.
+232|Kata sandi saat ini
+233|Kata sandi baru
+234|Ketik ulang kata sandi baru
+235|Kedua kata sandi baru tidak sama
+236|Kata sandi diubah
+237|Keluar dari semua akun
+238|Berhasil keluar
+239|Ganti foto profil
+240|Lihat profil publik
+241|Akun
+242|Email untuk masuk
+243|Email Anda tidak ditampilkan secara publik di profil atau video.
+244|Keluar
+245|Keluar dari semua akun
+246|Admin
+247|Vietnam Utara
+248|Vietnam Tengah
+249|Vietnam Selatan
+250|Wilayah
+251|Pilih wilayah
+252|Provinsi / kota
+253|Pilih provinsi / kota
+254|Distrik
+255|Pilih distrik (opsional)
+256|Alamat
+257|Info perkenalan
+258|Pengunggah belum mengisi info tambahan.
+259|Pilih wilayah
+260|provinsi / kota
+261|Cari provinsi / kota…
+262|Cari provinsi
+263|distrik
+264|Wilayah tidak ditemukan
+265|Belum ada video di wilayah ini
+266|Jadilah yang pertama memposting video di sini.
+267|Browser ini belum mendukung penyuntingan video. Gunakan Chrome, Edge, atau Firefox versi terbaru.
+268|Video hasil suntingan siap (
+269|MB). Tambahkan deskripsi, lalu ketuk "Posting video".
+270|Sunting lagi
+271|Video hasil ekspor lebih dari 100MB, silakan dipotong lebih pendek.
+272|Video ini dari wilayah mana? *
+273|Nama panggilan yang tampil di video
+274|Penonton hanya melihat nama panggilan ini di video, bukan nama akun Anda.
+275|Info perkenalan (opsional – sudah terisi dari profil, bisa Anda ubah)
+276|traveling, kopi, yoga
+277|Pilih salah satu saran agar video Anda muncul di "Dekat saya" bagi orang di sekitar Anda.
+278|mis. Malam hari kerja
+279|Hanya anggota yang sudah masuk yang melihatnya saat mengetuk "Telepon" di video.
+280|Batalkan unggahan
+281|Mengunggah video…
+282|Mohon biarkan halaman ini terbuka sampai unggahan selesai.
+283|Pilih bingkai sebagai sampul
+284|Gambar sampul (thumbnail video)
+285|Geser untuk memilih bingkai dari video
+286|Unggah gambar dari perangkat
+287|Pakai bingkai saat ini
+288|Hanya gambar JPG/PNG/WebP yang diterima
+289|Gambar sampul maksimal 5MB
+290|Dipilih:
+291|MB). Anda bisa langsung memposting atau ketuk "Sunting video".
+292|Video vertikal (9:16) yang singkat dan apa adanya paling banyak ditonton. Anda bisa memotong, mengubah kecepatan, menambah musik, teks, ikon, dan efek, atau membuat video dari beberapa foto.
+293|Pilih video (MP4/WebM, maks. 100MB)
+294|Sunting video (opsional)
+295|Silakan pilih video terlebih dahulu
+296|Buat video dari beberapa foto
+297|— atau —
+298|Tempel tautan (YouTube, .mp4, .m3u8)
+299|Deskripsi
+300|Perkenalan singkat tentang Anda, hobi, tipe ideal…
+301|Jangan memposting konten vulgar, foto/video orang lain, atau iklan layanan seksual. Pelanggaran akan menyebabkan akun diblokir.
+302|Silakan pilih wilayah video (wilayah dan provinsi/kota).
+303|Mengunggah… 0%
+304|Memproses video di server…
+305|Memproses…
+306|Mengunggah…
+307|Video diposting 🎬
+308|Belum ada percakapan
+309|Kirim pesan ke seseorang dari video atau halaman Kenalan.
+310|📅 Undangan kencan
+311|Anda:
+312|Pilih percakapan
+313|Undangan kencan
+314|Memuat…
+315|Menunggu balasan
+316|Diterima
+317|Ditolak
+318|Dibatalkan
+319|Terima
+320|Ketik pesan…
+321|Kembali
+322|Kencan saya
+323|Belum ada kencan
+324|Ketuk "Bertemu" di bawah video seseorang untuk mengirim undangan.
+325|Anda mengundang
+326|Undangan dari
+327|Belum ada siaran langsung saat ini
+328|Mulai siaran langsung pertama dan ajak semua orang mengobrol!
+329|Mulai siaran
+330|Tautan siaran
+331|Tempel tautan YouTube Live atau aliran HLS (.m3u8) Anda.
+332|Siaran dengan kamera & mikrofon di browser
+333|Sematkan YouTube Live
+334|Aliran HLS (.m3u8) dari OBS / layanan streaming
+335|Mulai siaran langsung
+336|Semua orang bisa menonton dan mengobrol langsung bersama Anda.
+337|Judul
+338|mis. Ngobrol malam Jumat ✨
+339|Cara siaran
+340|Siaran langsung harus mematuhi aturan komunitas: tidak ada konten vulgar, tidak meminta uang.
+341|Siaran langsung sekarang
+342|Siaran langsung telah berakhir
+343|Tonton siaran langsung lain
+344|Menyalakan kamera…
+345|Menghubungkan ke penyiar…
+346|Kirim hati
+347|Pesan pribadi
+348|Siaran langsung berakhir
+349|Katakan sesuatu…
+350|Masuk untuk mengobrol
+351|Chat langsung
+352|🔇 Nyalakan suara
+353|🔊 Matikan suara
+354|Tidak dapat mengakses kamera/mikrofon. Izinkan di browser, lalu muat ulang halaman.
+355|Dengan menggunakan xgaigu.com, Anda menyetujui ketentuan berikut.
+356|1. Usia
+357|Hanya orang berusia 18 tahun ke atas yang boleh mendaftar dan menggunakan situs ini. Kami langsung memblokir akun yang diduga di bawah umur.
+358|2. Konten yang dilarang
+359|Konten vulgar, foto/video sensitif.
+360|Menjadi perantara, menawarkan, atau membeli layanan seksual; prostitusi.
+361|Penipuan, meminta uang, investasi, atau judi.
+362|Pelecehan, ancaman, diskriminasi, atau membocorkan informasi pribadi orang lain.
+363|Menyamar atau memakai foto/video yang bukan milik Anda.
+364|3. Bertemu dengan aman
+365|Pertama kali, bertemulah di tempat umum yang ramai.
+366|Beri tahu teman atau keluarga waktu dan tempatnya.
+367|Jangan kirim uang kepada orang yang belum pernah ditemui langsung.
+368|Percayai insting Anda – pergilah jika merasa tidak nyaman.
+369|4. Privasi
+370|Nomor telepon hanya ditampilkan kepada anggota yang sudah masuk jika Anda mengaktifkannya. Anda dapat menghapus video atau meminta penghapusan akun kapan saja.
+371|5. Moderasi
+372|Kami berhak menyembunyikan konten dan memblokir akun yang melanggar tanpa pemberitahuan. Konten mencurigakan dapat diserahkan kepada pihak berwenang.
+373|Disembunyikan
+374|Sembunyikan video
+375|Blokir pengguna ini?
+376|Diblokir
+377|Blokir pengguna
+378|Laporan menunggu ditinjau
+379|Objek
+380|Pelapor
+381|Tidak ada laporan 🎉
+382|Halaman tidak ditemukan
+383|Kembali ke beranda
+384|Maaf, terjadi kesalahan
+385|Pakai video ini
+386|Tidak ada
+387|Pudar
+388|Zoom
+389|Geser
+390|Sapuan warna
+391|Kilat
+392|🎆 Kembang api
+393|⚡ Berkedip
+394|✨ Berkilau
+395|Pratinjau video
+396|Tidak dapat membaca video ini
+397|Tidak dapat membaca gambar ini
+398|Putar / jeda
+399|Garis waktu
+400|Durasi video:
+401|Potong & kecepatan
+402|Musik
+403|Teks & ikon
+404|Efek
+405|Transisi
+406|Foto
+407|Klip ditambahkan
+408|Tambah foto / video
+409|Mulai potong
+410|Akhir potong
+411|Berapa lama foto ini ditampilkan
+412|Zoom halus saat ditampilkan:
+413|Aktif
+414|Nonaktif
+415|Kecepatan putar (
+416|0.25× = lambat, 3× = cepat
+417|Naik
+418|Turun
+419|Hapus klip
+420|Penuhi bingkai
+421|Sesuaikan bingkai + latar buram
+422|Cara menampilkan video
+423|Sedang dipakai
+424|Mulai dari detik ke
+425|Volume musik
+426|Hapus musik
+427|Volume suara asli video
+428|Cari musik…
+429|Cari musik
+430|Lihat lainnya
+431|Hentikan pratinjau
+432|Pratinjau
+433|Tidak dapat memutar pratinjau lagu ini
+434|Membuat musik…
+435|Musik ditambahkan:
+436|Tidak dapat membuat lagu:
+437|Pakai
+438|Lagu tidak ditemukan.
+439|lagu
+440|Pustaka musik situs
+441|Musik instrumental ciptaan situs ini, gratis dipakai untuk video Anda. Ketuk ▶ untuk pratinjau, ketuk "Pakai" untuk menambahkannya ke video.
+442|Atau pakai musik Anda sendiri
+443|Pilih file dari perangkat (MP3, M4A, WAV…). Hanya gunakan musik yang Anda berhak pakai.
+444|Ganti dengan musik dari perangkat
+445|Pilih musik dari perangkat
+446|Ketik teks yang ingin disisipkan…
+447|Isi teks
+448|Tambah teks
+449|Sisipkan
+450|Sisipkan ikon
+451|Item yang disisipkan (seret langsung di video untuk memindahkan)
+452|Isi
+453|Warna teks
+454|Ukuran
+455|Animasi
+456|Diam
+457|Berdenyut
+458|Memantul
+459|Berkedip
+460|Tampil dari detik
+461|Sembunyi di detik
+462|Hapus item ini
+463|Ketuk untuk menambah efek, lalu pilih kapan efek muncul.
+464|Hapus efek
+465|Dari detik
+466|Sampai detik
+467|Pratinjau dari awal
+468|Transisi berlaku di antara klip dan di awal/akhir video.
+469|Durasi transisi
+470|Pratinjau
+471|Mengekspor video… biarkan tab ini di depan dan jangan beralih ke aplikasi lain.
+472|Ekspor dihentikan.
+473|Ekspor video gagal:
+474|Ekspor video & pakai untuk diposting
+475|Hentikan
+476|Editor video
+477|Pop Ceria
+478|EDM Energik
+479|Balada Romantis
+480|Akustik Lembut
+481|Disko Lantai Dansa
+482|Piano Penuh Perasaan
+483|Ambient Santai
+484|Latin Meriah
+485|Jazz Kafe
+486|Musik tersedia
+487|xgaigu.com – posting video, berkenalan, mengobrol, menonton siaran langsung, dan membuat janji kencan dengan aman. Untuk usia 18 tahun ke atas.
+488|xgaigu – Video, siaran langsung & kencan
+489|Posting video, berkenalan, mengobrol, dan membuat janji kencan dengan aman.
+490|Navigasi utama
+491|Silakan masuk
+492|Tidak ada izin
+493|Email tidak valid
+494|Kata sandi minimal 8 karakter
+495|Silakan masukkan nama tampilan
+496|Anda harus berusia minimal 18 tahun untuk menggunakan situs ini
+497|Anda perlu menyetujui Ketentuan Penggunaan
+498|Email ini sudah terdaftar
+499|Email atau kata sandi salah
+500|Akun ini telah diblokir
+501|Akun ini belum masuk di perangkat ini. Silakan masuk lagi.
+502|Kata sandi baru minimal 8 karakter
+503|Kata sandi saat ini salah
+504|Kata sandi baru harus berbeda dari yang lama
+505|Gambar maksimal 5MB
+506|Lokasi tidak ada
+507|Pengguna tidak ditemukan
+508|Orang ini belum membuka nomor telepon
+509|Video tidak ditemukan
+510|Hanya video MP4/WebM/MOV yang diterima
+511|Pilih file video atau tempel tautan https
+512|Silakan pilih wilayah (wilayah dan provinsi/kota) video
+513|Komentar kosong
+514|Pesan kosong
+515|Tidak bisa mengirim pesan ke diri sendiri
+516|Tidak bisa mengajak diri sendiri berkencan
+517|Silakan pilih waktu di masa depan
+518|Silakan masukkan tempat (sebaiknya tempat umum)
+519|Kencan tidak ditemukan
+520|Tindakan tidak valid
+521|Silakan masukkan judul siaran langsung
+522|Tautan harus diawali dengan https://
+523|Tautan YouTube tidak valid
+524|Siaran langsung tidak ditemukan
+525|Tidak dapat terkirim
+526|Permintaan tidak valid
+527|Data terlalu besar
+528|Orang ini menonaktifkan panggilan video
+529|Orang ini sedang tidak online
+530|Anda terlalu sering menelepon, coba lagi beberapa menit lagi
+531|📞 Panggilan video tak terjawab
+532|Sinyal tidak valid
+533|Tidak valid
+534|Informasi laporan kurang
+535|Tidak bisa memblokir diri sendiri
+536|Tidak ditemukan
+537|Video dari
+538|xgaigu – Terhubung, video & siaran langsung untuk kencan
+539|Posting video, berkenalan, mengobrol, menonton siaran langsung, dan membuat janji kencan dengan aman. Untuk usia 18 tahun ke atas.
+540|File terlalu besar (maks. 100MB)
+541|Unggah file gagal
+542|Kesalahan server
+543|Video
+544|Live
+545|Chat
+546|Mik
+547|Kamera
+548|{0} video dan {1} anggota di dekat Anda
+549|{0} lagu
+550|Lewati navigasi
+551|Konten untuk usia 18 tahun ke atas
+552|xgaigu adalah platform koneksi untuk orang dewasa. Dengan melanjutkan, Anda mengonfirmasi bahwa Anda berusia 18 tahun ke atas dan menyetujui
+553|Ketentuan Penggunaan
+554|Saya 18+ – Masuk
+555|Keluar
+556|Siaran langsung
+557|{0} menit yang lalu
+558|{0} jam yang lalu
+559|{0} hari yang lalu
+560|Telepon {0}
+561|Bertemu {0}
+562|Panggilan tak terjawab dari {0}
+563|Beralih ke {0}
+564|Tonton video dari {0}
+565|Anda mengundang {0}
+566|Undangan dari {0}
+567|Nama panggilan: {0}
+568|Sisipkan {0}
+569|Foto {0}
+570|Klip {0}
+571|Pratinjau {0}
+572|Hentikan pratinjau {0}
+573|Musik ditambahkan: {0}
+574|Tidak dapat membuat lagu: {0}
+575|Ekspor video gagal: {0}
+576|Zoom halus saat ditampilkan: Aktif
+577|Zoom halus saat ditampilkan: Nonaktif
+578|Video dari {0}
+579|Bertemu lewat video,
+580|berkenalan lewat siaran langsung

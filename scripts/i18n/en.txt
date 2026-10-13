@@ -30,7 +30,7 @@
 29|No answer
 30|Connecting…
 31|Couldn't connect the call
-32|is video calling you…
+32|Incoming video call…
 33|declined the call
 34|is busy on another call
 35|Missed call from
@@ -555,3 +555,27 @@
 554|I'm 18 or older – Enter
 555|Leave
 556|Livestream
+557|{0} minutes ago
+558|{0} hours ago
+559|{0} days ago
+560|Call {0}
+561|Meet {0}
+562|Missed call from {0}
+563|Switched to {0}
+564|Watch the video by {0}
+565|You invited {0}
+566|Invitation from {0}
+567|Nickname: {0}
+568|Insert {0}
+569|Photo {0}
+570|Clip {0}
+571|Preview {0}
+572|Stop preview {0}
+573|Music added: {0}
+574|Couldn't create the track: {0}
+575|Video export failed: {0}
+576|Gentle zoom while showing: On
+577|Gentle zoom while showing: Off
+578|Video by {0}
+579|Meet through video,
+580|get to know each other through livestream

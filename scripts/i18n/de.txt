@@ -1,0 +1,581 @@
+0|Etwas ist schiefgelaufen
+1|Datei zu groß
+2|Netzwerkverbindung unterbrochen, bitte erneut versuchen
+3|Der Upload dauert zu lange, bitte erneut versuchen
+4|Upload abgebrochen
+5|gerade eben
+6|Minuten
+7|Stunden
+8|Tagen
+9|Schließen
+10|Wähle einen Vorschlag, um „In meiner Nähe“ zu aktivieren.
+11|Adresse oder Gebiet eingeben, z. B. Bezirk 1, Ho-Chi-Minh-Stadt
+12|✓ Standort ausgewählt
+13|Kein passender Ort gefunden
+14|Videoanruf
+15|Sende niemals Geld an Unbekannte. Tippe auf die Flagge, um Belästigung zu melden.
+16|Ablehnen
+17|Melden
+18|Beenden
+19|Abbrechen
+20|Für Videoanrufe musst du Kamera und Mikrofon erlauben
+21|Kamera/Mikrofon konnte nicht geöffnet werden
+22|Anrufverbindung unterbrochen
+23|Der Anruf wurde unterbrochen
+24|Das bist du 😊
+25|hat Videoanrufe deaktiviert
+26|Du bist bereits in einem Anruf
+27|Dieser Browser unterstützt noch keine Videoanrufe
+28|Anruf läuft…
+29|Keine Antwort
+30|Verbindung wird hergestellt…
+31|Anruf konnte nicht verbunden werden
+32|Eingehender Videoanruf…
+33|hat den Anruf abgelehnt
+34|ist in einem anderen Anruf
+35|Verpasster Anruf von
+36|Der Anruf wurde beendet
+37|Gewechselt zu
+38|Aktiv
+39|Wechseln
+40|Konto wechseln
+41|Auf diesem Browser angemeldete Konten.
+42|Weiteres Konto hinzufügen
+43|Auf diesem Gerät angemeldete Konten
+44|Kostenloses Konto erstellen
+45|Willkommen zurück
+46|Dauert nur 30 Sekunden. Ab 18 Jahren.
+47|Melde dich an, um zu chatten, Dates zu planen und Livestreams zu sehen.
+48|Anmelden
+49|Registrieren
+50|Anzeigename
+51|Passwort
+52|Mindestens 8 Zeichen
+53|Geburtsjahr
+54|Geschlecht
+55|Keine Angabe
+56|Weiblich
+57|Andere
+58|Deine Adresse / dein Gebiet
+59|Ich bin 18 oder älter und akzeptiere die
+60|Nutzungsbedingungen & Community-Regeln
+61|Konto erstellen
+62|Willkommen bei xgaigu 💖
+63|Angemeldet
+64|💬 Du hast eine neue Nachricht
+65|📅 Dein Date-Plan wurde aktualisiert
+66|Sprache suchen…
+67|Sprachen durchsuchen
+68|Automatisch nach deinem Land
+69|Sprache
+70|Die Website wird in die gewählte Sprache übersetzt. Die automatische Übersetzung ist möglicherweise nicht perfekt.
+71|Startseite
+72|Regionen
+73|In meiner Nähe
+74|Leute treffen
+75|xgaigu – Startseite
+76|Nachrichten
+77|Dates
+78|Video posten
+79|Live gehen
+80|Mein Profil
+81|Anrufen:
+82|Diese Person hat zugestimmt, ihre Telefonnummer zu teilen. Bitte sei höflich und respektvoll.
+83|Anrufen
+84|Sicherheitstipp: Sende kein Geld an Personen, die du noch nicht getroffen hast, und triff dich an einem öffentlichen Ort.
+85|hat keine Telefonnummer freigegeben
+86|Du kannst per Nachricht eine Anrufanfrage senden – die Person entscheidet, ob sie antwortet.
+87|📞 Ich würde gern telefonieren – würdest du deine Nummer teilen?
+88|Anrufanfrage gesendet
+89|Anrufanfrage senden
+90|Das ist dein eigenes Video
+91|Treffen mit
+92|Sende eine Einladung – das Date wird erst bestätigt, wenn die Person zusagt.
+93|Uhrzeit
+94|Ort
+95|z. B. Highlands Coffee, Nguyễn Huệ
+96|Wähle einen öffentlichen, belebten Ort, geh beim ersten Mal allein und sag einer Freundin oder einem Freund Bescheid.
+97|Nachricht (optional)
+98|Erzähl ein wenig über dich…
+99|Kein Austausch von Geld oder sexuellen Dienstleistungen. Konten, die dagegen verstoßen, werden dauerhaft gesperrt.
+100|Date-Einladung senden
+101|Date-Einladung gesendet 💌
+102|Verstoß melden
+103|Sag uns, was nicht stimmt. Unser Moderationsteam prüft es so schnell wie möglich.
+104|Grund
+105|Sensible / sexuelle Inhalte
+106|Betrug, Geldforderungen
+107|Belästigung, Beleidigung
+108|Fake-Profil, Fotos einer anderen Person
+109|Unter 18
+110|Meldung senden
+111|Danke, wir prüfen das
+112|Kommentar schreiben…
+113|Kommentare
+114|Senden
+115|Noch keine Kommentare. Sei der Erste!
+116|Dieses Video ansehen
+117|Link kopiert
+118|Ton ein/aus
+119|Tippen, um den Ton einzuschalten
+120|Gefällt mir
+121|Nachricht
+122|Anrufen
+123|Treffen
+124|Teilen
+125|Infos ansehen
+126|Inhaltstyp
+127|Für dich
+128|Live
+129|Du hast alle Videos gesehen 🎉
+130|Noch keine Videos
+131|Poste als Erste/r ein Vorstellungsvideo!
+132|Erstes Video posten
+133|Titelbild des Videos
+134|Video ansehen von
+135|Vietnam
+136|Eine Kontaktplattform für Menschen ab 18
+137|Triff dich per
+138|, lerne dich per
+139|Poste ein Vorstellungsvideo, chatte live, sieh dir Livestreams an und plane sichere Dates – alles an einem Ort.
+140|Kostenlos beitreten
+141|In meiner Nähe suchen
+142|Nur für Erwachsene
+143|Inhaltsmoderation
+144|0 €
+145|Anmeldung & Chat
+146|Nachmittagstee-Raum
+147|Linh hat gerade dein Video geliked
+148|Kaffee-Date · 19:30
+149|Jetzt live
+150|Alle ansehen
+151|Neueste Videos
+152|Stöbern
+153|Noch keine Videos
+154|Sei der Erste, der etwas teilt!
+155|Neue Mitglieder
+156|Entdecken
+157|Modernes Dating, ganz einfach
+158|Stell dich in einem kurzen Video vor – echter als jede Beschreibung.
+159|Chat & Anruf
+160|Chatte in Echtzeit oder ruf an, wenn es für euch beide passt.
+161|Geh live oder tritt einem Live-Raum bei, um mit allen zu plaudern.
+162|Date planen
+163|Sende direkt unter jedem Video eine Date-Einladung – bestätigt wird sie nur, wenn ihr beide zustimmt.
+164|Sicherheit geht vor
+165|Nur ab 18, überall Melde-Buttons, und Telefonnummern werden nur angezeigt, wenn die Kontoinhaber es erlauben. Keine sexuellen Inhalte, keine sexuellen Dienstleistungen, kein Betrug.
+166|Community-Regeln
+167|Bereit, ihn/sie zu treffen?
+168|Erstelle in 30 Sekunden ein kostenloses Konto.
+169|Jetzt starten
+170|xgaigu.com · Ab 18 Jahren.
+171|🌐 Sprache
+172|Über uns
+173|Stadt…
+174|Stadt
+175|Alle
+176|Niemand gefunden
+177|Versuche, die Filter zu ändern.
+178|Umkreis
+179|In diesem Umkreis ist noch niemand
+180|Versuche, den Suchradius zu erweitern.
+181|Videos in deiner Nähe (nächste zuerst)
+182|Mitglieder in deiner Nähe
+183|Dein Browser unterstützt keine Standortbestimmung.
+184|Dein Standort wird ermittelt…
+185|Du hast den Standortzugriff abgelehnt. Aktiviere ihn für diese Seite in den Browsereinstellungen oder gib unten dein Gebiet ein.
+186|Dein Standort konnte nicht ermittelt werden. Bitte gib unten dein Gebiet ein.
+187|Bitte wähle einen Adressvorschlag aus
+188|Rund um dieses Gebiet suchen
+189|Meinen aktuellen Standort verwenden
+190|oder Gebiet eingeben:
+191|Dein Standort wird nur für die Suche verwendet und nicht auf unseren Servern gespeichert. Andere sehen nur eine gerundete Entfernung.
+192|Spitzname:
+193|Beruf
+194|Herkunft
+195|Größe
+196|Gewicht
+197|Freizeit
+198|Interessen:
+199|Sucht:
+200|Möchte nicht:
+201|Videoanruf
+202|Profil bearbeiten
+203|Video löschen
+204|Dieses Video löschen?
+205|Noch keine Videos.
+206|Foto aktualisiert
+207|Adresse / Gebiet
+208|Spitzname
+209|Wie deine Freunde dich nennen
+210|Nach der Registrierung nicht mehr änderbar.
+211|Herkunft / Heimatort
+212|z. B. Da Nang
+213|Größe (cm)
+214|Gewicht (kg)
+215|z. B. Büroangestellte/r, Student/in, Designer/in…
+216|Interessen
+217|z. B. Reisen, Kaffee, Kochen, Yoga
+218|Mit Kommas trennen, maximal 10 Interessen.
+219|Die Art von Mensch, die ich gern treffen würde
+220|z. B. Aufrichtig, humorvoll, reiselustig, über 25…
+221|z. B. Abends unter der Woche, am Wochenende
+222|Was ich nicht möchte / wen ich nicht treffe
+223|z. B. Keine starken Trinker, keine Nachrichten spät in der Nacht…
+224|Telefonnummer
+225|Einen „Anrufen“-Button auf meinen Videos anzeigen (nur angemeldete Mitglieder sehen die Nummer).
+226|Anderen Mitgliedern erlauben, mich per Video anzurufen (Haken entfernen, wenn du nicht angerufen werden möchtest).
+227|Mich unter „In meiner Nähe“ anzeigen (nur eine gerundete Entfernung, nie deine genaue Adresse).
+228|Änderungen speichern
+229|Gespeichert
+230|Passwort ändern
+231|Nach der Änderung werden deine anderen Geräte abgemeldet.
+232|Aktuelles Passwort
+233|Neues Passwort
+234|Neues Passwort erneut eingeben
+235|Die beiden neuen Passwörter stimmen nicht überein
+236|Passwort geändert
+237|Von allen Konten abgemeldet
+238|Abgemeldet
+239|Profilfoto ändern
+240|Öffentliches Profil ansehen
+241|Konto
+242|E-Mail für die Anmeldung
+243|Deine E-Mail-Adresse wird in deinem Profil und deinen Videos nicht öffentlich angezeigt.
+244|Abmelden
+245|Von allen Konten abmelden
+246|Admin
+247|Nordvietnam
+248|Zentralvietnam
+249|Südvietnam
+250|Region
+251|Region wählen
+252|Provinz / Stadt
+253|Provinz / Stadt wählen
+254|Bezirk
+255|Bezirk wählen (optional)
+256|Adresse
+257|Vorstellungsinfos
+258|Die Person hat keine weiteren Infos angegeben.
+259|Region wählen
+260|Provinzen / Städte
+261|Provinz / Stadt suchen…
+262|Provinz suchen
+263|Bezirke
+264|Region nicht gefunden
+265|In dieser Region gibt es noch keine Videos
+266|Poste hier das erste Video.
+267|Dieser Browser unterstützt die Videobearbeitung noch nicht. Bitte nutze eine aktuelle Version von Chrome, Edge oder Firefox.
+268|Dein bearbeitetes Video ist fertig (
+269|MB). Füge eine Beschreibung hinzu und tippe auf „Video posten“.
+270|Erneut bearbeiten
+271|Das exportierte Video ist größer als 100 MB, bitte kürze es.
+272|Aus welcher Region stammt dieses Video? *
+273|Auf dem Video angezeigter Spitzname
+274|Zuschauer sehen auf dem Video nur diesen Spitznamen, nicht deinen Kontonamen.
+275|Vorstellungsinfos (optional – aus deinem Profil vorausgefüllt, du kannst sie ändern)
+276|Reisen, Kaffee, Yoga
+277|Wähle einen Vorschlag, damit dein Video unter „In meiner Nähe“ bei Leuten in deiner Umgebung erscheint.
+278|z. B. Abends unter der Woche
+279|Nur angemeldete Mitglieder sehen sie, wenn sie beim Video auf „Anrufen“ tippen.
+280|Upload abbrechen
+281|Video wird hochgeladen…
+282|Bitte lass diese Seite geöffnet, bis der Upload abgeschlossen ist.
+283|Bild als Titelbild wählen
+284|Titelbild (Vorschaubild des Videos)
+285|Ziehen, um ein Bild aus dem Video zu wählen
+286|Bild hochladen
+287|Aktuelles Bild verwenden
+288|Es werden nur JPG/PNG/WebP-Bilder akzeptiert
+289|Das Titelbild darf höchstens 5 MB groß sein
+290|Ausgewählt:
+291|MB). Du kannst sofort posten oder auf „Video bearbeiten“ tippen.
+292|Kurze, ehrliche Hochkantvideos (9:16) werden am häufigsten angesehen. Du kannst schneiden, das Tempo ändern, Musik, Text, Symbole und Effekte hinzufügen oder aus mehreren Fotos ein Video machen.
+293|Video wählen (MP4/WebM, bis 100 MB)
+294|Video bearbeiten (optional)
+295|Bitte wähle zuerst ein Video
+296|Video aus mehreren Fotos erstellen
+297|— oder —
+298|Link einfügen (YouTube, .mp4, .m3u8)
+299|Beschreibung
+300|Eine kurze Vorstellung von dir, deinen Interessen, deinem Traumtyp…
+301|Poste keine sexuellen Inhalte, keine Fotos/Videos anderer Personen und keine Werbung für sexuelle Dienstleistungen. Verstöße führen zur Kontosperrung.
+302|Bitte wähle die Region des Videos (Region und Provinz/Stadt).
+303|Wird hochgeladen… 0 %
+304|Video wird auf dem Server verarbeitet…
+305|Wird verarbeitet…
+306|Wird hochgeladen…
+307|Video gepostet 🎬
+308|Noch keine Unterhaltungen
+309|Schreibe jemandem über ein Video oder die Seite „Leute treffen“.
+310|📅 Date-Einladung
+311|Du:
+312|Wähle eine Unterhaltung
+313|Date-Einladung
+314|Wird geladen…
+315|Warten auf Antwort
+316|Angenommen
+317|Abgelehnt
+318|Abgesagt
+319|Annehmen
+320|Nachricht eingeben…
+321|Zurück
+322|Meine Dates
+323|Noch keine Dates
+324|Tippe unter dem Video einer Person auf „Treffen“, um eine Einladung zu senden.
+325|Du hast eingeladen:
+326|Einladung von
+327|Gerade läuft kein Livestream
+328|Starte den ersten Livestream und lade alle zum Chat ein!
+329|Stream starten
+330|Stream-Link
+331|Füge deinen YouTube-Live-Link oder HLS-Stream (.m3u8) ein.
+332|Mit Kamera & Mikrofon im Browser streamen
+333|YouTube Live einbetten
+334|HLS-Stream (.m3u8) von OBS / einem Streaming-Dienst
+335|Livestream starten
+336|Alle können live zuschauen und mit dir chatten.
+337|Titel
+338|z. B. Freitagabend-Plausch ✨
+339|Art des Streams
+340|Livestreams müssen die Community-Regeln beachten: keine sexuellen Inhalte, keine Geldforderungen.
+341|Jetzt live gehen
+342|Der Livestream ist beendet
+343|Anderen Livestream ansehen
+344|Kamera wird eingeschaltet…
+345|Verbindung zum Streamer wird hergestellt…
+346|Herz senden
+347|Privat schreiben
+348|Livestream beendet
+349|Sag etwas…
+350|Zum Chatten anmelden
+351|Live-Chat
+352|🔇 Ton einschalten
+353|🔊 Ton ausschalten
+354|Kein Zugriff auf Kamera/Mikrofon. Erlaube den Zugriff im Browser und lade die Seite neu.
+355|Mit der Nutzung von xgaigu.com stimmst du Folgendem zu.
+356|1. Alter
+357|Nur Personen ab 18 Jahren dürfen sich registrieren und die Seite nutzen. Konten, bei denen der Verdacht auf Minderjährigkeit besteht, sperren wir sofort.
+358|2. Verbotene Inhalte
+359|Sexuelle Inhalte, sensible Fotos/Videos.
+360|Vermittlung, Bewerbung oder Kauf sexueller Dienstleistungen; Prostitution.
+361|Betrug, Geldforderungen, Anlage- oder Glücksspielangebote.
+362|Belästigung, Drohungen, Diskriminierung oder die Preisgabe privater Informationen anderer.
+363|Identitätsvortäuschung oder die Verwendung von Fotos/Videos, die nicht dir gehören.
+364|3. Sicher treffen
+365|Triff dich beim ersten Mal an einem öffentlichen, belebten Ort.
+366|Sag einer Freundin, einem Freund oder der Familie Zeit und Ort.
+367|Sende niemals Geld an Personen, die du nicht persönlich getroffen hast.
+368|Vertraue deinem Bauchgefühl – geh, wenn du dich unwohl fühlst.
+369|4. Datenschutz
+370|Deine Telefonnummer wird nur angemeldeten Mitgliedern angezeigt, wenn du sie freigibst. Du kannst jederzeit Videos löschen oder die Löschung deines Kontos beantragen.
+371|5. Moderation
+372|Wir dürfen Inhalte ausblenden und Konten sperren, die gegen die Regeln verstoßen – ohne Vorankündigung. Verdächtige Inhalte können an Behörden weitergegeben werden.
+373|Ausgeblendet
+374|Video ausblenden
+375|Diesen Nutzer sperren?
+376|Gesperrt
+377|Nutzer sperren
+378|Meldungen in Bearbeitung
+379|Ziel
+380|Gemeldet von
+381|Keine Meldungen 🎉
+382|Seite nicht gefunden
+383|Zurück zur Startseite
+384|Entschuldigung, es ist etwas schiefgelaufen
+385|Dieses Video verwenden
+386|Keine
+387|Überblenden
+388|Zoom
+389|Schieben
+390|Farbwisch
+391|Blitz
+392|🎆 Feuerwerk
+393|⚡ Blinken
+394|✨ Funkeln
+395|Videovorschau
+396|Dieses Video konnte nicht gelesen werden
+397|Dieses Bild konnte nicht gelesen werden
+398|Wiedergabe / Pause
+399|Zeitleiste
+400|Videolänge:
+401|Schneiden & Tempo
+402|Musik
+403|Text & Symbole
+404|Effekte
+405|Übergänge
+406|Foto
+407|Clip hinzugefügt
+408|Foto / Video hinzufügen
+409|Schnittanfang
+410|Schnittende
+411|Wie lange dieses Foto gezeigt wird
+412|Sanfter Zoom während der Anzeige:
+413|An
+414|Aus
+415|Wiedergabetempo (
+416|0.25× = langsam, 3× = schnell
+417|Nach oben
+418|Nach unten
+419|Clip löschen
+420|Bild ausfüllen
+421|An Bild anpassen + unscharfer Hintergrund
+422|Darstellung des Videos
+423|Aktiv
+424|Ab Sekunde
+425|Musiklautstärke
+426|Musik entfernen
+427|Lautstärke des Originaltons
+428|Musik suchen…
+429|Musik suchen
+430|Mehr anzeigen
+431|Vorschau stoppen
+432|Vorschau
+433|Dieser Titel lässt sich nicht vorhören
+434|Musik wird erstellt…
+435|Musik hinzugefügt:
+436|Titel konnte nicht erstellt werden:
+437|Verwenden
+438|Keine Titel gefunden.
+439|Titel
+440|Musikbibliothek der Website
+441|Instrumentalmusik, von der Website komponiert und kostenlos in deinen Videos nutzbar. Tippe auf ▶ zum Vorhören und auf „Verwenden“, um sie dem Video hinzuzufügen.
+442|Oder eigene Musik verwenden
+443|Wähle eine Datei von deinem Gerät (MP3, M4A, WAV…). Verwende nur Musik, für die du die Rechte hast.
+444|Durch Musik vom Gerät ersetzen
+445|Musik vom Gerät wählen
+446|Text zum Einfügen eingeben…
+447|Textinhalt
+448|Text hinzufügen
+449|Einfügen:
+450|Symbol einfügen
+451|Eingefügte Elemente (zum Verschieben direkt im Video ziehen)
+452|Inhalt
+453|Textfarbe
+454|Größe
+455|Animation
+456|Statisch
+457|Pulsieren
+458|Hüpfen
+459|Blinken
+460|Einblenden ab Sekunde
+461|Ausblenden bei Sekunde
+462|Dieses Element löschen
+463|Tippe, um einen Effekt hinzuzufügen, und wähle dann, wann er erscheint.
+464|Effekt löschen
+465|Ab Sekunde
+466|Bis Sekunde
+467|Vorschau von Anfang an
+468|Übergänge gelten zwischen Clips sowie am Anfang/Ende des Videos.
+469|Dauer des Übergangs
+470|Vorschau
+471|Video wird exportiert… Lass diesen Tab im Vordergrund und wechsle nicht zu einer anderen App.
+472|Export gestoppt.
+473|Videoexport fehlgeschlagen:
+474|Video exportieren & zum Posten verwenden
+475|Stopp
+476|Video-Editor
+477|Fröhlicher Pop
+478|Energiegeladener EDM
+479|Romantische Ballade
+480|Sanftes Akustik
+481|Disco auf der Tanzfläche
+482|Gefühlvolles Klavier
+483|Entspannendes Ambient
+484|Lebhaftes Latin
+485|Café-Jazz
+486|Fertige Musik
+487|xgaigu.com – Videos posten, Leute treffen, chatten, Livestreams ansehen und sichere Dates planen. Ab 18 Jahren.
+488|xgaigu – Video, Livestream & Dating
+489|Videos posten, Leute treffen, chatten und sichere Dates planen.
+490|Hauptnavigation
+491|Bitte melde dich an
+492|Keine Berechtigung
+493|Ungültige E-Mail-Adresse
+494|Das Passwort muss mindestens 8 Zeichen lang sein
+495|Bitte gib einen Anzeigenamen ein
+496|Du musst mindestens 18 Jahre alt sein, um diese Website zu nutzen
+497|Du musst den Nutzungsbedingungen zustimmen
+498|Diese E-Mail-Adresse ist bereits registriert
+499|Falsche E-Mail-Adresse oder falsches Passwort
+500|Dieses Konto wurde gesperrt
+501|Dieses Konto ist auf diesem Gerät nicht angemeldet. Bitte melde dich erneut an.
+502|Das neue Passwort muss mindestens 8 Zeichen lang sein
+503|Das aktuelle Passwort ist falsch
+504|Das neue Passwort muss sich vom alten unterscheiden
+505|Das Bild darf höchstens 5 MB groß sein
+506|Standort fehlt
+507|Nutzer nicht gefunden
+508|Diese Person hat keine Telefonnummer freigegeben
+509|Video nicht gefunden
+510|Es werden nur MP4/WebM/MOV-Videos akzeptiert
+511|Wähle eine Videodatei oder füge einen https-Link ein
+512|Bitte wähle die Region (Region und Provinz/Stadt) des Videos
+513|Der Kommentar ist leer
+514|Die Nachricht ist leer
+515|Du kannst dir nicht selbst schreiben
+516|Du kannst dich nicht selbst zu einem Date einladen
+517|Bitte wähle einen Zeitpunkt in der Zukunft
+518|Bitte gib einen Ort ein (am besten einen öffentlichen)
+519|Date nicht gefunden
+520|Ungültige Aktion
+521|Bitte gib einen Titel für den Livestream ein
+522|Der Link muss mit https:// beginnen
+523|Ungültiger YouTube-Link
+524|Livestream nicht gefunden
+525|Senden nicht möglich
+526|Ungültige Anfrage
+527|Daten zu groß
+528|Diese Person hat Videoanrufe deaktiviert
+529|Diese Person ist gerade nicht online
+530|Du hast zu oft angerufen, bitte versuche es in ein paar Minuten erneut
+531|📞 Verpasster Videoanruf
+532|Ungültiges Signal
+533|Ungültig
+534|Angaben zur Meldung fehlen
+535|Du kannst dich nicht selbst sperren
+536|Nicht gefunden
+537|Video von
+538|xgaigu – Kontakte, Video & Livestream-Dating
+539|Videos posten, Leute treffen, chatten, Livestreams ansehen und sichere Dates planen. Ab 18 Jahren.
+540|Datei zu groß (bis 100 MB)
+541|Datei-Upload fehlgeschlagen
+542|Serverfehler
+543|Video
+544|Live
+545|Chat
+546|Mikro
+547|Kamera
+548|{0} Videos und {1} Mitglieder in deiner Nähe
+549|{0} Titel
+550|Navigation überspringen
+551|Inhalte für Personen ab 18 Jahren
+552|xgaigu ist eine Kontaktplattform für Erwachsene. Wenn du fortfährst, bestätigst du, dass du mindestens 18 Jahre alt bist und stimmst den folgenden zu:
+553|Nutzungsbedingungen
+554|Ich bin 18 oder älter – Eintreten
+555|Verlassen
+556|Livestream
+557|vor {0} Minuten
+558|vor {0} Stunden
+559|vor {0} Tagen
+560|{0} anrufen
+561|{0} treffen
+562|Verpasster Anruf von {0}
+563|Gewechselt zu {0}
+564|Video von {0} ansehen
+565|Du hast {0} eingeladen
+566|Einladung von {0}
+567|Spitzname: {0}
+568|{0} einfügen
+569|Foto {0}
+570|Clip {0}
+571|{0} vorhören
+572|Vorschau von {0} stoppen
+573|Musik hinzugefügt: {0}
+574|Titel konnte nicht erstellt werden: {0}
+575|Videoexport fehlgeschlagen: {0}
+576|Sanfter Zoom während der Anzeige: An
+577|Sanfter Zoom während der Anzeige: Aus
+578|Video von {0}
+579|Triff dich per Video,
+580|lerne dich per Livestream kennen

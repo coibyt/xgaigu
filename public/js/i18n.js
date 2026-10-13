@@ -85,9 +85,12 @@ const trail = (k) => (k.match(/\s*$/) || [''])[0];
 const worth = (t) => t.length >= 3 && /\p{L}{3,}/u.test(t);
 const unveil = () => document.documentElement.classList.remove('xg-tr-pending');
 
+// translate="no" marks member-written content. Dictionary mode never touches it anyway; machine mode (languages without a
+// hand-made dictionary) translates it too, so the whole page reads consistently. .notranslate (logo, language list) is always skipped.
 function skipped(node, attrOnly) {
   for (let el = node.nodeType === 1 ? node : node.parentElement; el; el = el.parentElement) {
-    if ((!attrOnly && SKIP.has(el.tagName)) || el.classList.contains('notranslate') || el.getAttribute('translate') === 'no') return true;
+    if ((!attrOnly && SKIP.has(el.tagName)) || el.classList.contains('notranslate')) return true;
+    if (E.mode === 'dict' && el.getAttribute('translate') === 'no') return true;
   }
   return false;
 }
