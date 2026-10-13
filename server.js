@@ -23,13 +23,13 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", 'https://cdn.jsdelivr.net', 'https://translate.google.com', 'https://translate.googleapis.com', 'https://www.gstatic.com'],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://www.gstatic.com', 'https://translate.googleapis.com'],
+      scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
       mediaSrc: ["'self'", 'blob:', 'https:'],
       connectSrc: ["'self'", 'https:'],
-      frameSrc: ['https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://translate.google.com'],
+      frameSrc: ['https://www.youtube.com', 'https://www.youtube-nocookie.com'],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
     },
@@ -761,6 +761,67 @@ app.post('/api/admin/users/:id/ban', needAdmin, (req, res) => {
 
 // ---------- static & errors ----------
 app.get('/healthz', (_req, res) => res.send('ok'));
+
+// ---------- machine translation of the interface (cached in SQLite so each text is translated once per language) ----------
+const translateLimiter = rateLimit({ windowMs: 60_000, limit: 90, standardHeaders: true, legacyHeaders: false });
+let translateBlockedUntil = 0;
+const blocked = {}; // provider -> timestamp until which it is skipped after a rate-limit response
+async function machineTranslate(lang, texts) {
+  const key = process.env.GOOGLE_TRANSLATE_KEY;
+  if (key) { // official Cloud Translation API (recommended for production: reliable, 500k chars/month free)
+    const r = await fetch('https://translation.googleapis.com/language/translate/v2?key=' + encodeURIComponent(key), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({ q: texts, source: 'vi', target: lang, format: 'text' }),
+    });
+    if (!r.ok) throw new Error('translate api ' + r.status);
+    const d = await r.json();
+    return d.data.translations.map((t) => t.translatedText);
+  }
+  // Keyless fallbacks, tried in order for every text: Google's public endpoint, then MyMemory (free tier; ADMIN_EMAIL raises its daily quota).
+  const gtx = async (t) => {
+    const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&dt=t&tl=' + encodeURIComponent(lang) + '&q=' + encodeURIComponent(t), { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error('gtx ' + r.status);
+    const d = await r.json();
+    return d[0].map((x) => x[0]).join('');
+  };
+  const mymemory = async (t) => {
+    const r = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(t) + '&langpair=' + encodeURIComponent('vi|' + lang) + (ADMIN_EMAIL ? '&de=' + encodeURIComponent(ADMIN_EMAIL) : ''), { signal: AbortSignal.timeout(8000) });
+    const d = await r.json().catch(() => ({}));
+    const tr = d && d.responseData && d.responseData.translatedText;
+    if (!r.ok || Number(d.responseStatus) !== 200 || !tr || /MYMEMORY WARNING|INVALID/i.test(tr)) throw new Error('mymemory ' + (d.responseStatus || r.status));
+    if (Number(d.responseData.match) < 0.7) throw new Error('mymemory low-confidence'); // better to leave Vietnamese than show a wrong translation
+    return tr;
+  };
+  const out = new Array(texts.length).fill(null);
+  let next = 0;
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (next < texts.length) {
+      const i = next++;
+      for (const [name, fn] of [['gtx', gtx], ['mm', mymemory]]) {
+        if (Date.now() < (blocked[name] || 0)) continue;
+        try { out[i] = await fn(texts[i]); break; } catch (e) { if (/ 4(29|03)|quota|WARNING/i.test(e.message)) blocked[name] = Date.now() + 120_000; }
+      }
+    }
+  }));
+  return out;
+}
+
+app.post('/api/translate', translateLimiter, wrap(async (req, res) => {
+  const lang = String(req.body.lang || '');
+  if (!/^[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(lang) || lang === 'vi') return fail(res, 400, 'Ngôn ngữ không hợp lệ');
+  const texts = (Array.isArray(req.body.texts) ? req.body.texts : []).slice(0, 60).map((t) => String(t).slice(0, 400));
+  const out = new Array(texts.length).fill(null), miss = [];
+  const get = db.prepare('SELECT out FROM translations WHERE lang = ? AND src = ?');
+  texts.forEach((t, i) => { const row = get.get(lang, t); if (row) out[i] = row.out; else if (t.trim()) miss.push(i); });
+  if (miss.length && Date.now() > translateBlockedUntil) {
+    try {
+      const got = await machineTranslate(lang, miss.map((i) => texts[i]));
+      const put = db.prepare('INSERT OR REPLACE INTO translations (lang, src, out) VALUES (?,?,?)');
+      got.forEach((tr, k) => { if (tr) { out[miss[k]] = tr; put.run(lang, texts[miss[k]], tr); } });
+    } catch (e) { console.error('translate failed:', e.message); translateBlockedUntil = Date.now() + 30_000; }
+  }
+  res.json({ out });
+}));
 // Visitor's country when the hosting/CDN layer provides it (Cloudflare, CloudFront, Vercel…); otherwise the browser falls back to its time zone.
 app.get('/api/geo', (req, res) => {
   const c = String(req.get('cf-ipcountry') || req.get('cloudfront-viewer-country') || req.get('x-vercel-ip-country') || req.get('x-country-code') || req.get('x-appengine-country') || '').toUpperCase();

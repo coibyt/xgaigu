@@ -1,6 +1,6 @@
 /* xgaigu – language selection.
- * The interface is written in Vietnamese and translated into the visitor's language with Google's free
- * "Website Translator" widget (100+ languages, no API key). The language is chosen automatically from the
+ * The interface is written in Vietnamese and translated into the visitor's language by our own engine
+ * (server-side translation with a database cache, 100+ languages). The language is chosen automatically from the
  * visitor's COUNTRY (server header if present, otherwise the device time zone), can be changed by the visitor
  * (globe button), and the choice is remembered. Vietnamese visitors never load the widget. */
 (() => {
@@ -67,25 +67,99 @@ function setCookie(v) {
   if (dom) document.cookie = `googtrans=${v}; path=/; domain=${dom}${exp}`;
 }
 
-let loaded = false;
-function loadWidget() {
-  if (loaded) return; loaded = true;
-  const holder = document.createElement('div'); holder.id = 'google_translate_element'; holder.className = 'notranslate'; holder.style.display = 'none'; document.body.append(holder);
-  window.googleTranslateElementInit = () => {
-    try { new window.google.translate.TranslateElement({ pageLanguage: 'vi', autoDisplay: false, layout: 0 }, 'google_translate_element'); } catch {}
+// ---------- translation engine ----------
+// Every visible Vietnamese text node / placeholder / title is sent (in batches) to /api/translate, which translates it
+// once, stores it in the database and serves it from cache afterwards. Results are also cached in the browser.
+const T = { lang: 'vi', cache: new Map(), waiting: new Map(), timer: null, blockedUntil: 0, saveTimer: null, started: false, bound: new WeakMap() };
+const LS = 'xg_tr_';
+const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'CODE', 'PRE', 'SVG', 'CANVAS', 'VIDEO', 'AUDIO', 'IFRAME']);
+const ATTRS = ['placeholder', 'aria-label', 'title', 'alt'];
+const worth = (t) => t.length >= 3 && /\p{L}{3,}/u.test(t);
+
+function skipped(node) {
+  for (let el = node.nodeType === 1 ? node : node.parentElement; el; el = el.parentElement) {
+    if (SKIP.has(el.tagName) || el.classList.contains('notranslate') || el.getAttribute('translate') === 'no') return true;
+  }
+  return false;
+}
+function loadCache(lang) { try { const o = JSON.parse(localStorage.getItem(LS + lang) || '{}'); for (const k in o) T.cache.set(k, o[k]); } catch {} }
+function saveCache() {
+  clearTimeout(T.saveTimer);
+  T.saveTimer = setTimeout(() => { try { localStorage.setItem(LS + T.lang, JSON.stringify(Object.fromEntries([...T.cache].slice(-1500)))); } catch {} }, 800);
+}
+function want(core, setter) {
+  const hit = T.cache.get(core);
+  if (hit) { setter(hit); return; }
+  if (Date.now() < T.blockedUntil) return;
+  (T.waiting.get(core) || T.waiting.set(core, []).get(core)).push(setter);
+  clearTimeout(T.timer); T.timer = setTimeout(flush, 60);
+}
+async function flush() {
+  if (!T.waiting.size) return;
+  const batch = []; let chars = 0;
+  for (const k of T.waiting.keys()) { if (batch.length >= 50 || chars + k.length > 4000) break; batch.push(k); chars += k.length; }
+  const jobs = batch.map((k) => [k, T.waiting.get(k)]); batch.forEach((k) => T.waiting.delete(k));
+  try {
+    const r = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: T.lang, texts: batch }) });
+    if (!r.ok) throw new Error(String(r.status));
+    const { out } = await r.json();
+    jobs.forEach(([k, setters], i) => { const tr = out[i]; if (tr) { T.cache.set(k, tr); setters.forEach((fn) => fn(tr)); } });
+    saveCache();
+  } catch { T.blockedUntil = Date.now() + 30000; }
+  if (T.waiting.size) T.timer = setTimeout(flush, 30);
+  unveil();
+}
+
+function doText(node) {
+  const st = T.bound.get(node), raw = node.nodeValue;
+  if (st && raw === st) return; // already our translation
+  const m = raw.match(/^(\s*)([\s\S]*?)(\s*)$/), core = m[2];
+  if (!worth(core) || skipped(node)) return;
+  want(core, (tr) => { if (node.nodeValue === raw) { node.nodeValue = m[1] + tr + m[3]; T.bound.set(node, node.nodeValue); } });
+}
+function doAttr(el, name) {
+  const v = el.getAttribute(name); if (!v) return;
+  const done = T.bound.get(el) || {}; if (done[name] === v) return;
+  if (!worth(v.trim()) || skipped(el)) return;
+  want(v.trim(), (tr) => { if (el.getAttribute(name) === v) { el.setAttribute(name, tr); done[name] = tr; T.bound.set(el, done); } });
+}
+function scan(root) {
+  if (root.nodeType === 3) return doText(root);
+  if (root.nodeType !== 1 || skipped(root)) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) doText(n);
+  const els = [root, ...root.querySelectorAll('[placeholder],[aria-label],[title],[alt]')];
+  els.forEach((el) => ATTRS.forEach((a) => el.hasAttribute && el.hasAttribute(a) && doAttr(el, a)));
+}
+function unveil() { document.documentElement.classList.remove('xg-tr-pending'); }
+
+function startEngine(l) {
+  if (T.started) return; T.started = true; T.lang = l.code;
+  loadCache(l.code);
+  document.documentElement.classList.add('xg-tr-pending'); setTimeout(unveil, 1200); // avoid a flash of Vietnamese
+  const go = () => {
+    scan(document.body);
+    const ti = document.querySelector('title');
+    if (ti && ti.firstChild) want(ti.textContent.trim(), (tr) => { ti.textContent = tr; });
+    new MutationObserver((muts) => {
+      for (const m of muts) {
+        if (m.type === 'childList') m.addedNodes.forEach(scan);
+        else if (m.type === 'characterData') doText(m.target);
+        else if (m.type === 'attributes') doAttr(m.target, m.attributeName);
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+    if (!T.waiting.size) unveil();
   };
-  const s = document.createElement('script'); s.src = 'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit'; s.async = true; document.head.append(s);
+  if (document.body) go(); else document.addEventListener('DOMContentLoaded', go);
 }
 
 function apply(code) {
   const l = byCode.get(code) || byCode.get('vi');
-  document.documentElement.lang = l.code === 'zh-CN' || l.code === 'zh-TW' ? l.code : l.code;
+  document.documentElement.lang = l.code;
   document.documentElement.dir = RTL.has(l.code) ? 'rtl' : 'ltr';
   state.code = l.code;
-  if (l.code === 'vi') { setCookie(''); return; }
-  setCookie('/vi/' + l.g);
-  const go = () => loadWidget();
-  if (document.body) go(); else document.addEventListener('DOMContentLoaded', go);
+  setCookie(''); // remove the cookie left by the earlier Google-widget version
+  if (l.code !== 'vi') startEngine(l);
 }
 
 const state = { code: 'vi', auto: true, country: '' };
@@ -109,7 +183,7 @@ window.XGI18n = {
   locale: () => (state.code === 'vi' ? 'vi-VN' : state.code),
   isAuto: () => state.auto,
   country: () => state.country,
-  choose(code) { try { localStorage.setItem(KEY, code); } catch {} setCookie(code === 'vi' ? '' : '/vi/' + byCode.get(code).g); location.reload(); },
+  choose(code) { try { localStorage.setItem(KEY, code); } catch {} location.reload(); },
   useAuto() { try { localStorage.removeItem(KEY); } catch {} setCookie(''); location.reload(); },
 };
 })();

@@ -81,6 +81,12 @@ CREATE TABLE IF NOT EXISTS streams (
   started_at INTEGER NOT NULL,
   ended_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS translations (
+  lang TEXT NOT NULL,
+  src TEXT NOT NULL,
+  out TEXT NOT NULL,
+  PRIMARY KEY (lang, src)
+);
 CREATE TABLE IF NOT EXISTS reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reporter_id INTEGER NOT NULL,

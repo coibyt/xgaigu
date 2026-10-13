@@ -55,7 +55,14 @@ git push -u origin main
 - Mặc định chỉ dùng STUN công cộng của Google; khoảng 10–20% cuộc gọi (mạng di động/NAT chặt) cần máy chủ TURN. Khi có TURN, đặt biến môi trường `TURN_URL` (vd `turn:turn.example.com:3478`), `TURN_USER`, `TURN_PASS`.
 
 ## Ngôn ngữ (đa quốc gia)
-- Giao diện viết bằng tiếng Việt và được **tự dịch** sang 100+ ngôn ngữ bằng Google Website Translator (miễn phí, không cần khóa API) – `public/js/i18n.js`.
-- Ngôn ngữ chọn tự động theo **quốc gia** của khách: ưu tiên header của lớp hosting/CDN (`CF-IPCountry`, `CloudFront-Viewer-Country`…) qua `/api/geo`, nếu không có thì dựa vào **múi giờ** thiết bị. Khách vào từ Việt Nam giữ tiếng Việt và không tải công cụ dịch.
+- Giao diện viết bằng tiếng Việt và được **tự dịch** sang 100+ ngôn ngữ bằng bộ dịch riêng của website (`public/js/i18n.js` + `POST /api/translate`). Mỗi câu chỉ dịch **một lần cho mỗi ngôn ngữ** rồi lưu vào bảng `translations` trong database, những khách sau dùng lại bản đã lưu (nhanh, không tốn thêm).
+- Ngôn ngữ chọn tự động theo **quốc gia** của khách: ưu tiên header của lớp hosting/CDN (`CF-IPCountry`, `CloudFront-Viewer-Country`…) qua `/api/geo`, nếu không có thì dựa vào **múi giờ** thiết bị. Khách vào từ Việt Nam giữ tiếng Việt, không phát sinh yêu cầu dịch.
 - Nút 🌐 trên thanh đầu trang (và ở chân trang) để đổi ngôn ngữ thủ công hoặc quay về "Tự động"; lựa chọn được nhớ.
-- Bản dịch là dịch máy; nội dung do thành viên đăng cũng bị dịch theo. Ở các nước chặn Google (vd Trung Quốc đại lục) công cụ dịch không hoạt động.
+- Nguồn dịch: nếu có biến môi trường `GOOGLE_TRANSLATE_KEY` (Google Cloud Translation API, 500.000 ký tự/tháng miễn phí) thì dùng API chính thức – **khuyến nghị cho production**. Nếu không có khóa, server dùng điểm cuối công khai của Google (không khóa, có thể bị giới hạn tốc độ).
+- Bản dịch là dịch máy; nội dung do thành viên đăng cũng được dịch. Có thể xem/sửa bản dịch trong bảng `translations` để chỉnh tay những câu quan trọng.
+
+### Bật dịch chất lượng cao (khuyến nghị)
+Không có khóa API thì server chỉ dùng các điểm cuối miễn phí/không khóa (đôi khi bị Google giới hạn, chất lượng câu ngắn không đều). Để dịch chuẩn và ổn định:
+1. Vào Google Cloud Console → tạo project → bật **Cloud Translation API** (cần gắn thẻ thanh toán, nhưng 500.000 ký tự đầu mỗi tháng miễn phí; nhờ bộ nhớ đệm, mỗi ngôn ngữ chỉ tốn vài chục nghìn ký tự).
+2. Tạo **API key** (giới hạn chỉ cho Cloud Translation API).
+3. Trên Hostinger thêm biến môi trường `GOOGLE_TRANSLATE_KEY=<khóa>` rồi Redeploy.
