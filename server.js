@@ -10,6 +10,8 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
+const { spawn } = require('child_process');
+let FFMPEG = null; try { FFMPEG = require('ffmpeg-static'); } catch {} // optional: used to burn the logo into downloads
 const { UPLOAD_DIR } = require('./src/paths');
 const db = require('./src/db');
 
@@ -38,7 +40,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'same-site' },
 }));
 app.use(cookieParser());
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '400kb' }));
 
 const apiLimiter = rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false });
 const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeaders: true, legacyHeaders: false });
@@ -460,6 +462,7 @@ app.delete('/api/videos/:id', needUser, (req, res) => {
   db.prepare('DELETE FROM videos WHERE id = ?').run(v.id);
   rmUpload(v.file && v.file.replace('/uploads/', ''));
   rmUpload(v.thumb && v.thumb.replace('/uploads/', ''));
+  try { for (const f of fs.readdirSync(path.join(UPLOAD_DIR, 'wm'))) if (f.startsWith(v.id + '-')) fs.rmSync(path.join(UPLOAD_DIR, 'wm', f), { force: true }); } catch {}
   res.json({ ok: true });
 });
 
@@ -489,6 +492,64 @@ app.post('/api/videos/:id/comments', needUser, postLimiter, (req, res) => {
     .run(req.params.id, req.user.id, body, now());
   res.json({ ok: true });
 });
+
+// ---------- download with logo + nickname burned in (like TikTok) ----------
+// The browser draws the watermark (any language/emoji) as a small PNG and posts it; ffmpeg overlays it bottom-left and
+// returns an MP4. Results are cached per video+watermark. Needs the ffmpeg-static package; otherwise 501 and the browser
+// falls back to recording the watermarked video itself.
+const dlLimiter = rateLimit({ windowMs: 60_000, limit: 8, standardHeaders: true, legacyHeaders: false });
+let dlRunning = 0;
+const PNG_OK_CHUNKS = new Set(['IHDR', 'PLTE', 'IDAT', 'IEND', 'tRNS', 'gAMA', 'sRGB', 'pHYs', 'cHRM', 'sBIT']);
+function validPng(b) { // returns { w, h } when it is a plain PNG within the size limits, else null (only image chunks allowed: no text/ICC payloads)
+  if (b.length < 60 || b.length > 300_000 || !b.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return null;
+  let o = 8, first = true, dim = null;
+  while (o + 12 <= b.length) {
+    const len = b.readUInt32BE(o), type = b.toString('latin1', o + 4, o + 8);
+    if (!PNG_OK_CHUNKS.has(type) || o + 12 + len > b.length) return null;
+    if (first) { if (type !== 'IHDR' || len !== 13 || b.readUInt32BE(o + 8) > 1400 || b.readUInt32BE(o + 12) > 700) return null; dim = { w: b.readUInt32BE(o + 8), h: b.readUInt32BE(o + 12) }; first = false; }
+    o += 12 + len;
+    if (type === 'IEND') return o === b.length && dim && dim.w > 0 && dim.h > 0 ? dim : null;
+  }
+  return null;
+}
+const slug = (t) => String(t || 'video').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'video';
+
+app.post('/api/videos/:id(\\d+)/download', dlLimiter, wrap(async (req, res) => {
+  const v = db.prepare('SELECT v.id, v.file, v.nickname, u.name FROM videos v JOIN users u ON u.id = v.user_id WHERE v.id = ? AND v.hidden = 0 AND u.banned = 0').get(req.params.id);
+  if (!v || !v.file) return fail(res, 404, 'Video này không thể tải xuống');
+  if (!FFMPEG || !fs.existsSync(FFMPEG)) return fail(res, 501, 'Máy chủ chưa hỗ trợ ghép logo');
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body.wm || ''));
+  const png = m && Buffer.from(m[1], 'base64');
+  const dim = png && validPng(png);
+  if (!dim) return fail(res, 400, 'Ảnh logo không hợp lệ');
+  const key = crypto.createHash('sha1').update(png).digest('hex').slice(0, 16);
+  const dir = path.join(UPLOAD_DIR, 'wm'); fs.mkdirSync(dir, { recursive: true });
+  const out = path.join(dir, v.id + '-' + key + '.mp4');
+  if (!fs.existsSync(out)) {
+    if (dlRunning >= 2) return fail(res, 503, 'Máy chủ đang bận, vui lòng thử lại sau ít phút');
+    dlRunning++;
+    const tmpPng = path.join(dir, 'tmp-' + crypto.randomBytes(6).toString('hex') + '.png'), tmpOut = out + '.part.mp4';
+    try {
+      fs.writeFileSync(tmpPng, png);
+      const args = ['-y', '-nostdin', '-hide_banner', '-loglevel', 'error', '-i', path.join(UPLOAD_DIR, path.basename(v.file)), '-i', tmpPng,
+        '-filter_complex', `[1:v][0:v]scale2ref=w='main_w*0.42':h='main_w*0.42*${dim.h}/${dim.w}'[wm][bg];[bg][wm]overlay=x='main_w*0.04':y='main_h*0.86-overlay_h',scale='trunc(iw/2)*2':'trunc(ih/2)*2'[v]`,
+        '-map', '[v]', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', tmpOut];
+      await new Promise((resolve, reject) => {
+        const p = spawn(FFMPEG, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+        let err = ''; p.stderr.on('data', (d) => { err = (err + d).slice(-500); });
+        const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error('ffmpeg timeout')); }, 180_000);
+        p.on('error', (e) => { clearTimeout(timer); reject(e); });
+        p.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('ffmpeg ' + code + ' ' + err)); });
+      });
+      fs.renameSync(tmpOut, out);
+    } catch (e) {
+      console.error('download watermark failed:', e.message);
+      fs.rm(tmpOut, { force: true }, () => {});
+      return fail(res, 500, 'Không ghép được logo vào video');
+    } finally { dlRunning--; fs.rm(tmpPng, { force: true }, () => {}); }
+  }
+  res.download(out, 'xgaigu-' + slug(v.nickname || v.name) + '-' + v.id + '.mp4');
+}));
 
 // ---------- chat ----------
 function mapMsg(m) {

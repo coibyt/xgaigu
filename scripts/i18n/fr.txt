@@ -579,3 +579,14 @@
 578|Vidéo de {0}
 579|Rencontrez-vous en vidéo,
 580|faites connaissance en direct
+581|Cette vidéo utilise un lien externe, elle ne peut donc pas être téléchargée
+582|Préparation de la vidéo pour le téléchargement…
+583|Impossible de télécharger la vidéo
+584|Création de la vidéo avec le logo… 
+585|Vidéo téléchargée
+586|Télécharger
+587|Cette vidéo ne peut pas être téléchargée
+588|Le serveur ne prend pas encore en charge l'ajout du logo
+589|Image du logo invalide
+590|Le serveur est occupé, veuillez réessayer dans quelques minutes
+591|Impossible d'ajouter le logo à la vidéo

@@ -579,3 +579,14 @@
 578|Video von {0}
 579|Triff dich per Video,
 580|lerne dich per Livestream kennen
+581|Dieses Video nutzt einen externen Link und kann daher nicht heruntergeladen werden
+582|Video wird für den Download vorbereitet…
+583|Video konnte nicht heruntergeladen werden
+584|Video mit Logo wird erstellt… 
+585|Video heruntergeladen
+586|Herunterladen
+587|Dieses Video kann nicht heruntergeladen werden
+588|Der Server unterstützt das Einfügen des Logos noch nicht
+589|Ungültiges Logo-Bild
+590|Der Server ist ausgelastet, bitte versuche es in ein paar Minuten erneut
+591|Das Logo konnte nicht ins Video eingefügt werden

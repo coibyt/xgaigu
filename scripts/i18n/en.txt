@@ -579,3 +579,14 @@
 578|Video by {0}
 579|Meet through video,
 580|get to know each other through livestream
+581|This video uses an external link, so it can't be downloaded
+582|Preparing the video for download…
+583|Couldn't download the video
+584|Creating the video with the logo… 
+585|Video downloaded
+586|Download
+587|This video can't be downloaded
+588|The server doesn't support adding the logo yet
+589|Invalid logo image
+590|The server is busy, please try again in a few minutes
+591|Couldn't add the logo to the video

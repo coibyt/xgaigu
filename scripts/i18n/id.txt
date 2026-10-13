@@ -579,3 +579,14 @@
 578|Video dari {0}
 579|Bertemu lewat video,
 580|berkenalan lewat siaran langsung
+581|Video ini memakai tautan eksternal sehingga tidak dapat diunduh
+582|Menyiapkan video untuk diunduh…
+583|Tidak dapat mengunduh video
+584|Membuat video dengan logo… 
+585|Video diunduh
+586|Unduh
+587|Video ini tidak dapat diunduh
+588|Server belum mendukung penambahan logo
+589|Gambar logo tidak valid
+590|Server sedang sibuk, silakan coba lagi beberapa menit lagi
+591|Tidak dapat menambahkan logo ke video

@@ -11,6 +11,7 @@ const P = {
   micoff: 'M1 1l22 22M9 9v3a3 3 0 0 0 5.1 2.1M15 9.3V4a3 3 0 0 0-5.9-.8M17 16.9A7 7 0 0 1 5 12v-2M19 10v2c0 .8-.1 1.5-.4 2.2M12 19v4M8 23h8',
   videooff: 'M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.7 0H14a2 2 0 0 1 2 2v3.3l1 1L23 7v10M1 1l22 22',
   globe: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20',
+  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
   msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
   phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
@@ -592,6 +593,87 @@ async function share(v) {
   try { await navigator.clipboard.writeText(url); toast('Đã sao chép liên kết'); } catch { toast(url); }
 }
 
+// ---------- download with the xgaigu logo + nickname burned in (the website itself shows no logo) ----------
+function slugName(t) { return String(t || 'video').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'video'; }
+function saveBlob(blob, filename) {
+  const a = h('a', { href: URL.createObjectURL(blob), download: filename, style: 'display:none' });
+  document.body.append(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+
+// Small PNG with the logo and the nickname (drawn here so any language/emoji renders correctly).
+async function makeWatermark(name) {
+  try { await document.fonts.load("800 44px 'Be Vietnam Pro'"); await document.fonts.load("600 34px 'Be Vietnam Pro'"); } catch {}
+  const W = 640, H = 150, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(0,0,0,.38)'; g.beginPath(); g.roundRect(0, 0, W, H, 40); g.fill();
+  const grad = g.createLinearGradient(24, 30, 114, 120); grad.addColorStop(0, '#ff2e7e'); grad.addColorStop(1, '#ff6b4a');
+  g.fillStyle = grad; g.beginPath(); g.roundRect(24, 30, 90, 90, 26); g.fill();
+  g.save(); g.translate(24 + 45 - 30, 30 + 45 - 30); g.scale(2.5, 2.5); g.fillStyle = '#fff'; g.fill(new Path2D(P.heart)); g.restore();
+  g.textBaseline = 'alphabetic'; g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 6;
+  g.font = "800 46px 'Be Vietnam Pro', system-ui, sans-serif"; g.fillStyle = '#fff'; g.fillText('xgai', 134, 76);
+  const w1 = g.measureText('xgai').width; g.fillStyle = '#ff6b9a'; g.fillText('gu', 134 + w1, 76);
+  g.font = "600 34px 'Be Vietnam Pro', system-ui, sans-serif"; g.fillStyle = '#fff';
+  let label = '@' + name; const maxW = W - 134 - 28;
+  while (g.measureText(label).width > maxW && label.length > 4) label = label.slice(0, -2) + '…';
+  g.fillText(label, 134, 118);
+  return c;
+}
+
+// Fallback when the server cannot burn the logo in: play the video onto a canvas with the logo and record it (real time).
+function recordWatermarked(url, wm, onPct) {
+  return new Promise((resolve, reject) => {
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return reject(new Error('unsupported'));
+    const v = document.createElement('video'); v.playsInline = true; v.preload = 'auto'; v.src = url;
+    v.onerror = () => reject(new Error('load'));
+    v.onloadedmetadata = async () => {
+      try {
+        const k = Math.min(1, 1080 / Math.max(v.videoWidth, v.videoHeight)), W = Math.round(v.videoWidth * k / 2) * 2, H = Math.round(v.videoHeight * k / 2) * 2;
+        const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+        const ac = new (window.AudioContext || window.webkitAudioContext)(), src = ac.createMediaElementSource(v), dest = ac.createMediaStreamDestination(); src.connect(dest);
+        const stream = cv.captureStream(30); dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        const mime = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) || '';
+        const rec = new MediaRecorder(stream, { mimeType: mime || undefined, videoBitsPerSecond: 4_000_000, audioBitsPerSecond: 128_000 });
+        const chunks = []; rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+        rec.onstop = () => { ac.close().catch(() => {}); resolve({ blob: new Blob(chunks, { type: mime.startsWith('video/mp4') ? 'video/mp4' : 'video/webm' }), ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm' }); };
+        const frame = () => {
+          g.drawImage(v, 0, 0, W, H);
+          const ww = W * 0.42, wh = (ww * wm.height) / wm.width; g.drawImage(wm, W * 0.04, H * 0.86 - wh, ww, wh);
+          onPct(v.duration ? v.currentTime / v.duration : 0);
+          if (!v.ended) requestAnimationFrame(frame);
+        };
+        v.onended = () => setTimeout(() => rec.stop(), 150);
+        rec.start(500); await ac.resume(); await v.play(); frame();
+      } catch (e) { reject(e); }
+    };
+  });
+}
+
+let downloading = false;
+async function downloadVideo(v) {
+  if (!v.file) return toast('Video này dùng liên kết ngoài nên không thể tải xuống', true);
+  if (downloading) return;
+  downloading = true;
+  const note = h('div', { class: 'toast' }, 'Đang chuẩn bị video để tải xuống…');
+  $('#toast-root').append(note);
+  const name = v.user.name || 'xgaigu', base = 'xgaigu-' + slugName(name) + '-' + v.id;
+  try {
+    const wm = await makeWatermark(name);
+    let saved = false;
+    try {
+      const r = await fetch('/api/videos/' + v.id + '/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wm: wm.toDataURL('image/png') }) });
+      if (r.ok) { saveBlob(await r.blob(), base + '.mp4'); saved = true; }
+      else if (r.status === 503 || r.status === 404 || r.status === 429) { const d = await r.json().catch(() => ({})); throw Object.assign(new Error(d.error || 'Không tải được video'), { final: true }); }
+    } catch (e) { if (e.final) throw e; }
+    if (!saved) { // server can't burn the logo in → record it in the browser instead
+      const { blob, ext } = await recordWatermarked(v.file, wm, (p) => { note.textContent = 'Đang tạo video có logo… ' + Math.round(p * 100) + '%'; });
+      saveBlob(blob, base + '.' + ext);
+    }
+    toast('Đã tải video xuống');
+  } catch (e) { toast(e.final ? e.message : 'Không tải được video', true); }
+  note.remove(); downloading = false;
+}
+
 // ---------- feed ----------
 function actBtn(cls, label, ic, count, onclick) {
   const b = h('button', { class: 'act ' + cls, onclick, 'aria-label': label }, h('span', { class: 'iconbtn', html: icon(ic) }), h('span', { class: 'n' }, count == null ? label : count));
@@ -614,6 +696,7 @@ function slide(v) {
     actBtn('call', 'Gọi', 'phone', null, () => openCall({ ...v.user, canCall: v.hasPhone }, v.id)),
     actBtn('book', 'Hẹn gặp', 'cal', null, () => openBook(v.user, v.id)),
     actBtn('', 'Chia sẻ', 'share', null, () => share(v)),
+    v.file && actBtn('', 'Tải xuống', 'download', null, () => downloadVideo(v)),
     actBtn('', 'Báo cáo', 'flag', null, () => openReport('video', v.id)));
   const el = h('article', { class: 'slide', 'data-id': v.id },
     h('div', { class: 'player' }, media, mute,

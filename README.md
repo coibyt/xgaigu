@@ -62,3 +62,8 @@ git push -u origin main
 - Thêm chữ mới vào giao diện: chạy `node scripts/i18n-catalog.js` (chỉ **nối thêm** vào cuối danh sách, không đổi thứ tự), rồi bổ sung bản dịch cho các dòng mới.
 - Ngôn ngữ chọn tự động theo **quốc gia** của khách (header của CDN qua `/api/geo`, nếu không có thì múi giờ thiết bị). Nút 🌐 để đổi tay hoặc về "Tự động".
 - Chế độ dịch máy: nếu có `GOOGLE_TRANSLATE_KEY` (Google Cloud Translation) thì dùng API chính thức, nếu không dùng điểm cuối miễn phí (chất lượng không đều).
+
+## Tải video có logo
+- Nút **Tải xuống** (chỉ với video tải lên từ máy; video dùng liên kết YouTube/ngoài thì không có) lưu video về máy khách **kèm logo xgaigu và biệt danh** ở góc dưới bên trái. Trên website, video vẫn hiển thị sạch, không logo.
+- Trình duyệt vẽ logo + biệt danh thành ảnh PNG nhỏ (hiển thị đúng mọi ngôn ngữ/emoji) và gửi lên `POST /api/videos/:id/download`; máy chủ dùng **ffmpeg** (gói `ffmpeg-static`, tự tải khi `npm install`) ghép vào video rồi trả về file MP4. Kết quả được lưu đệm trong `uploads/wm/`.
+- Nếu máy chủ không chạy được ffmpeg, trình duyệt tự chuyển sang cách dự phòng: phát video lên canvas kèm logo rồi ghi lại (mất đúng bằng thời lượng video, định dạng MP4/WebM tùy trình duyệt).
