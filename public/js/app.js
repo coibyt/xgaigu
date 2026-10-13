@@ -569,7 +569,7 @@ async function toggleLike(v, btn) {
 }
 
 async function share(v) {
-  const url = location.origin + '/#/feed/' + v.id;
+  const url = location.origin + '/v/' + v.id; // server-rendered page with a rich link preview, then opens the player
   if (navigator.share) { try { await navigator.share({ title: 'xgaigu', text: v.caption || 'Xem video này', url }); return; } catch {} }
   try { await navigator.clipboard.writeText(url); toast('Đã sao chép liên kết'); } catch { toast(url); }
 }
@@ -633,7 +633,7 @@ async function pageFeed(startId, home) {
   if (startId && !box.querySelector(`[data-id="${startId}"]`)) {
     try { const { video } = await api('/videos/' + startId); if (box.querySelector('.empty')) box.innerHTML = ''; box.prepend(slide(video)); } catch {}
   }
-  if (startId) { const t = box.querySelector(`[data-id="${startId}"]`); t && t.scrollIntoView(); }
+  if (startId) { const t = box.querySelector(`[data-id="${startId}"]`); if (t) { t.scrollIntoView(); setTimeout(() => t.scrollIntoView(), 250); } }
   box.addEventListener('scroll', () => { if (box.scrollTop + box.clientHeight * 2 > box.scrollHeight) more(); }, { passive: true });
   box.addEventListener('keydown', () => {});
 }
@@ -1388,6 +1388,7 @@ window.XG = { h, toast, icon };
     $('#age-yes').addEventListener('click', () => { try { localStorage.setItem('age18', '1'); } catch {} gate.hidden = true; document.body.style.overflow = ''; });
     $('#age-yes').focus();
   }
+  { const m = location.pathname.match(/^\/v\/(\d+)\/?$/); if (m) history.replaceState(null, '', '/#/feed/' + m[1]); } // opened from a shared link
   try { S.user = (await api('/me')).user; } catch {}
   connectEvents();
   window.addEventListener('hashchange', route);

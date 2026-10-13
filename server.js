@@ -762,8 +762,49 @@ app.post('/api/admin/users/:id/ban', needAdmin, (req, res) => {
 // ---------- static & errors ----------
 app.get('/healthz', (_req, res) => res.send('ok'));
 app.use('/api', (_req, res) => fail(res, 404, 'Không tìm thấy'));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: PROD ? '1h' : 0, extensions: ['html'] }));
-app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// ---------- link previews (Telegram, Facebook, Zalo, X…): crawlers don't run JavaScript, so the share page /v/:id is
+// rendered on the server with Open Graph tags for that video; real visitors are sent to the SPA player by app.js. ----------
+const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const cut = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s; };
+
+function renderPage(req, res, v) {
+  const base = (process.env.SITE_URL || req.protocol + '://' + req.get('host')).replace(/\/$/, '');
+  const abs = (u) => (!u ? '' : /^https?:\/\//.test(u) ? u : base + u);
+  const yt = v && !v.file && v.url && v.url.match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/);
+  const place = v && [v.district, v.province].filter(Boolean).join(', ');
+  const title = v ? cut(v.caption || 'Video của ' + v.user.name, 70) + ' – xgaigu' : 'xgaigu – Kết nối, video & livestream hẹn hò';
+  const desc = v ? cut([v.caption, place && '📍 ' + place, v.user.name + (v.user.age ? ', ' + v.user.age : '')].filter(Boolean).join(' · '), 200)
+    : 'Đăng video, làm quen, trò chuyện, xem livestream và đặt lịch hẹn gặp mặt an toàn. Dành cho người từ 18 tuổi.';
+  const image = v ? (abs(v.thumb) || (yt ? `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg` : '')) : '';
+  const url = v ? `${base}/v/${v.id}` : base + (req.path === '/' ? '/' : req.path);
+  const tags = [
+    `<title>${escHtml(title)}</title>`,
+    `<meta name="description" content="${escHtml(desc)}">`,
+    `<link rel="canonical" href="${escHtml(url)}">`,
+    '<meta property="og:site_name" content="xgaigu">', '<meta property="og:locale" content="vi_VN">',
+    `<meta property="og:type" content="${v ? 'video.other' : 'website'}">`,
+    `<meta property="og:url" content="${escHtml(url)}">`,
+    `<meta property="og:title" content="${escHtml(title)}">`,
+    `<meta property="og:description" content="${escHtml(desc)}">`,
+    `<meta property="og:image" content="${escHtml(image || base + '/img/og-default.png')}">`,
+    ...(image ? [] : ['<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">']),
+    ...(v && v.file ? [`<meta property="og:video" content="${escHtml(abs(v.file))}">`, `<meta property="og:video:secure_url" content="${escHtml(abs(v.file).replace(/^http:/, 'https:'))}">`,
+      `<meta property="og:video:type" content="${v.file.endsWith('.webm') ? 'video/webm' : 'video/mp4'}">`] : []),
+    '<meta name="twitter:card" content="summary_large_image">',
+    `<meta name="twitter:title" content="${escHtml(title)}">`,
+    `<meta name="twitter:description" content="${escHtml(desc)}">`,
+    `<meta name="twitter:image" content="${escHtml(image || base + '/img/og-default.png')}">`,
+  ].join('\n');
+  let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+  html = html.replace(/<title>[\s\S]*?<\/title>\s*/, '').replace(/<meta name="description"[^>]*>\s*/, '').replace(/<meta property="og:[^>]*>\s*/g, '');
+  html = html.replace('</head>', tags + '\n</head>');
+  res.set('Cache-Control', 'public, max-age=300').type('html').send(html);
+}
+
+app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));
+app.get('/', (req, res) => renderPage(req, res, null));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: PROD ? '1h' : 0, extensions: ['html'], index: false }));
+app.get('*', (req, res) => renderPage(req, res, null));
 
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError) return fail(res, 400, err.code === 'LIMIT_FILE_SIZE' ? 'File quá lớn (tối đa 100MB)' : 'Tải file thất bại');
