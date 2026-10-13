@@ -60,7 +60,7 @@ git push -u origin main
   2. **Dịch máy (dự phòng)** cho các ngôn ngữ còn lại – qua `POST /api/translate`, có lưu bộ nhớ đệm. Ở chế độ này **cả nội dung thành viên tự nhập cũng được dịch** để trang đồng bộ (chỉ logo và danh sách ngôn ngữ, đánh dấu `.notranslate`, được giữ nguyên).
 - Thêm ngôn ngữ mới: tạo `scripts/i18n/<mã>.txt` (đủ các dòng như `en.txt`), chạy lệnh build, commit `public/i18n/`.
 - Thêm chữ mới vào giao diện: chạy `node scripts/i18n-catalog.js` (chỉ **nối thêm** vào cuối danh sách, không đổi thứ tự), rồi bổ sung bản dịch cho các dòng mới.
-- Ngôn ngữ chọn tự động theo **quốc gia** của khách (header của CDN qua `/api/geo`, nếu không có thì múi giờ thiết bị). Nút 🌐 để đổi tay hoặc về "Tự động".
+- **Mặc định là tiếng Việt** cho mọi khách. Nút 🌐 để đổi sang ngôn ngữ khác (lựa chọn được nhớ); khách cũng có thể bấm "Tự động theo quốc gia của bạn" (header của CDN qua `/api/geo`, nếu không có thì múi giờ thiết bị).
 - Chế độ dịch máy: nếu có `GOOGLE_TRANSLATE_KEY` (Google Cloud Translation) thì dùng API chính thức, nếu không dùng điểm cuối miễn phí (chất lượng không đều).
 
 ## Tải video có logo

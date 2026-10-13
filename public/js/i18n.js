@@ -58,7 +58,8 @@ function countryFromTimeZone() {
 }
 
 const KEY = 'xg_lang';
-const getSaved = () => { try { const v = localStorage.getItem(KEY); return v && byCode.has(v) ? v : ''; } catch { return ''; } };
+// Saved value: a language code, or 'auto' (choose by the visitor's country). Nothing saved → Vietnamese, the site's default.
+const getSaved = () => { try { const v = localStorage.getItem(KEY); return v && (v === 'auto' || byCode.has(v)) ? v : ''; } catch { return ''; } };
 function setCookie(v) {
   const host = location.hostname, parts = host.split('.');
   const dom = parts.length > 1 && !/^\d+(\.\d+){3}$/.test(host) ? '.' + parts.slice(-2).join('.') : '';
@@ -234,9 +235,11 @@ async function serverCountry() {
 // Decide the language: the visitor's saved choice, otherwise the main language of the country they are in.
 const ready = (async () => {
   const saved = getSaved();
-  if (saved) { state.auto = false; apply(saved); return state.code; }
-  state.country = (await serverCountry()) || countryFromTimeZone();
-  apply(COUNTRY_LANG[state.country] || (state.country ? 'en' : 'vi'));
+  if (saved === 'auto') {
+    state.auto = true;
+    state.country = (await serverCountry()) || countryFromTimeZone();
+    apply(COUNTRY_LANG[state.country] || (state.country ? 'en' : 'vi'));
+  } else { state.auto = false; apply(saved || 'vi'); }
   return state.code;
 })();
 
@@ -247,6 +250,6 @@ window.XGI18n = {
   isAuto: () => state.auto,
   country: () => state.country,
   choose(code) { try { localStorage.setItem(KEY, code); } catch {} location.reload(); },
-  useAuto() { try { localStorage.removeItem(KEY); } catch {} setCookie(''); location.reload(); },
+  useAuto() { try { localStorage.setItem(KEY, 'auto'); } catch {} setCookie(''); location.reload(); },
 };
 })();
