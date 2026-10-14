@@ -420,6 +420,9 @@ const Install = (() => {
   const FLAG = 'xg_installed';
   const lsGet = () => { try { return localStorage.getItem(FLAG) === '1'; } catch { return false; } };
   const lsSet = () => { try { localStorage.setItem(FLAG, '1'); } catch {} };
+  const lsClear = () => { try { localStorage.removeItem(FLAG); } catch {} };
+  // Facebook / Zalo / Instagram in-app browsers cannot install apps
+  const inAppBrowser = () => /FBAN|FBAV|FB_IAB|Zalo|Instagram|Line\/|Messenger|TikTok|; wv\)/i.test(navigator.userAgent);
   const running = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   let known = lsGet(); // installed before (remembered), or detected below
   const standalone = () => { if (running()) { known = true; lsSet(); } return known; };
@@ -428,8 +431,10 @@ const Install = (() => {
   const refresh = () => { const inst = standalone(); document.querySelectorAll('.xg-install').forEach((el) => { el.hidden = inst; }); if (fab) fab.hidden = inst || fabDismissed; };
   let fab = null;
   // Chrome can tell us whether this site's app is already installed on the device
-  if (navigator.getInstalledRelatedApps) navigator.getInstalledRelatedApps().then((a) => { if (a && a.length) { known = true; lsSet(); refresh(); } }).catch(() => {});
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); evt = e; refresh(); });
+  // and it is the authority: an uninstalled app must bring the button back
+  if (navigator.getInstalledRelatedApps) navigator.getInstalledRelatedApps().then((a) => { known = !!(a && a.length) || running(); if (known) lsSet(); else lsClear(); refresh(); }).catch(() => {});
+  // the browser only offers installation when the app is NOT installed
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); evt = e; known = false; lsClear(); refresh(); });
   window.addEventListener('appinstalled', () => { evt = null; known = true; lsSet(); refresh(); toast('Đã cài ứng dụng xgaigu!'); });
   // if the website moved to a new domain, an app installed from the old one jumps to the new domain
   fetch('/api/site', { cache: 'no-store' }).then((r) => r.json()).then((j) => { if (j && j.moved && j.url) location.replace(j.url + location.pathname + location.search + location.hash); }).catch(() => {});
@@ -437,7 +442,9 @@ const Install = (() => {
   const steps = (items) => h('ol', { style: 'margin:12px 0 0 20px;display:grid;gap:8px;line-height:1.5' }, items.map((t) => h('li', {}, t)));
   async function run() {
     if (evt) { const e = evt; evt = null; e.prompt(); await e.userChoice.catch(() => {}); refresh(); return; }
-    if (ios()) modal(h('div', {}, h('h3', {}, 'Cài ứng dụng xgaigu'), h('p', { class: 'sub' }, 'Trên iPhone/iPad, hãy mở trang này bằng Safari rồi làm theo 3 bước:'),
+    if (inAppBrowser()) modal(h('div', {}, h('h3', {}, 'Cài ứng dụng xgaigu'), h('p', { class: 'sub' }, 'Bạn đang mở bằng trình duyệt trong Facebook/Zalo nên không cài được. Hãy mở trang này bằng Chrome (Android) hoặc Safari (iPhone):'),
+      steps(['Bấm menu ⋮ hoặc biểu tượng “…” ở góc trên.', 'Chọn “Mở bằng trình duyệt” (Open in browser).', 'Bấm lại nút “Tải ứng dụng” trong trình duyệt đó.'])));
+    else if (ios()) modal(h('div', {}, h('h3', {}, 'Cài ứng dụng xgaigu'), h('p', { class: 'sub' }, 'Trên iPhone/iPad, hãy mở trang này bằng Safari rồi làm theo 3 bước:'),
       steps(['Bấm nút Chia sẻ ⬆️ ở thanh dưới của Safari.', 'Chọn “Thêm vào Màn hình chính”.', 'Bấm “Thêm” – biểu tượng xgaigu sẽ xuất hiện ngay trên màn hình.'])));
     else modal(h('div', {}, h('h3', {}, 'Cài ứng dụng xgaigu'), h('p', { class: 'sub' }, 'Trình duyệt của bạn chưa hiện cửa sổ cài đặt tự động. Bạn làm theo cách sau:'),
       steps(['Mở menu ⋮ của trình duyệt (góc trên bên phải).', 'Chọn “Cài đặt ứng dụng” hoặc “Thêm vào màn hình chính”.', 'Xác nhận – ứng dụng sẽ được cài vào máy ngay, không cần qua cửa hàng ứng dụng.'])));

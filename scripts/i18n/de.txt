@@ -614,3 +614,7 @@
 613|Ein Fingertipp legt das Symbol auf deinen Bildschirm – ohne Google Play oder App Store. Die App bleibt immer mit der Website synchron.
 614|📲 App installieren
 615|App herunterladen
+616|Du nutzt den In-App-Browser von Facebook/Zalo, in dem sich keine Apps installieren lassen. Öffne diese Seite in Chrome (Android) oder Safari (iPhone):
+617|Tippe oben auf das ⋮-Menü oder das „…“-Symbol.
+618|Wähle „Im Browser öffnen“.
+619|Tippe in diesem Browser erneut auf „App herunterladen“.

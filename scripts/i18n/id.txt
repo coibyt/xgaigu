@@ -614,3 +614,7 @@
 613|Sekali ketuk, ikon langsung ada di layar, tanpa Google Play atau App Store. Aplikasi selalu sinkron dengan situs web.
 614|📲 Pasang aplikasi
 615|Unduh aplikasi
+616|Anda memakai browser dalam aplikasi Facebook/Zalo yang tidak bisa memasang aplikasi. Buka halaman ini di Chrome (Android) atau Safari (iPhone):
+617|Ketuk menu ⋮ atau ikon “…” di bagian atas.
+618|Pilih “Buka di browser”.
+619|Ketuk lagi tombol “Unduh aplikasi” di browser tersebut.

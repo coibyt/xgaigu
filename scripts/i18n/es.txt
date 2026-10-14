@@ -614,3 +614,7 @@
 613|Con un solo toque el icono queda en tu pantalla, sin Google Play ni App Store. La aplicación siempre está sincronizada con el sitio web.
 614|📲 Instalar aplicación
 615|Descargar la app
+616|Estás en el navegador integrado de Facebook/Zalo, que no permite instalar aplicaciones. Abre esta página en Chrome (Android) o Safari (iPhone):
+617|Toca el menú ⋮ o el icono “…” de arriba.
+618|Elige “Abrir en el navegador”.
+619|Vuelve a tocar el botón “Descargar la app” en ese navegador.
