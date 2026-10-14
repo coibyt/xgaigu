@@ -596,3 +596,6 @@
 595|Results for “
 596|No matching videos found
 597|Try different keywords, such as another area name or nickname.
+598|views
+599|Views
+600|{0} views

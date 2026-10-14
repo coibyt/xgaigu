@@ -385,6 +385,9 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
 .suggest li small{font-size:11px}
 @media (max-width:560px){.nav .iconbtn{width:40px;height:40px}.nav{padding-left:12px;padding-right:12px}}
 
+.vcard .views .vsep{opacity:.6}
+.vcard .views svg{width:13px;height:13px}
+
 /* toast */
 #toast-root{position:fixed;left:50%;bottom:calc(var(--tab-h) + 20px);transform:translateX(-50%);z-index:300;display:grid;gap:8px;width:min(92vw,420px)}
 .toast{background:#fff;color:#18101f;padding:12px 16px;border-radius:14px;font-weight:600;box-shadow:0 12px 40px rgba(0,0,0,.5);animation:pop .3s var(--ease)}

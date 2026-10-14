@@ -13,6 +13,7 @@ const P = {
   globe: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20',
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   search: 'M21 21l-4.3-4.3M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
+  eye2: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
   msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
   phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
@@ -457,7 +458,7 @@ function mediaEl(v, { controls = false, lazy = false } = {}) {
   const y = !v.file && ytId(v.url);
   if (y && lazy) return h('iframe', { 'data-yt': y, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video' });
   if (y) return h('iframe', { src: `https://www.youtube-nocookie.com/embed/${y}?playsinline=1&rel=0&modestbranding=1`, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video', loading: 'lazy' });
-  const el = h('video', { playsinline: true, loop: true, muted: true, preload: 'metadata', poster: v.thumb || null, controls: controls || null, 'aria-label': v.caption || 'Video' });
+  const el = h('video', { playsinline: true, muted: true, preload: 'metadata', poster: v.thumb || null, controls: controls || null, 'aria-label': v.caption || 'Video' });
   el.muted = true;
   if (/\.m3u8(\?|$)/.test(src) && window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(src); hls.attachMedia(el); }
   else el.src = src;
@@ -479,9 +480,14 @@ function observePlay(el) {
   if (!playObserver) {
     playObserver = new IntersectionObserver((es) => es.forEach((e) => {
       const v = e.target;
+      { // count a view once the video has been on screen for 3 seconds
+        const vis = e.isIntersecting && e.intersectionRatio > 0.6;
+        clearTimeout(v._vt);
+        if (vis && v.dataset.vid && !v._viewed) v._vt = setTimeout(() => { v._viewed = true; fetch('/api/videos/' + v.dataset.vid + '/view', { method: 'POST', credentials: 'same-origin' }).catch(() => {}); }, 3000);
+      }
       if (v instanceof HTMLIFrameElement) {
         const id = v.dataset.yt, on = e.isIntersecting && e.intersectionRatio > 0.6;
-        if (on && !v.src) v.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=${S.sound ? 0 : 1}&loop=1&playlist=${id}&playsinline=1&rel=0&modestbranding=1`;
+        if (on && !v.src) v.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=${S.sound ? 0 : 1}&enablejsapi=1&playsinline=1&rel=0&modestbranding=1`;
         else if (!on && v.src) v.removeAttribute('src');
         return;
       }
@@ -682,8 +688,23 @@ function actBtn(cls, label, ic, count, onclick) {
   return b;
 }
 
+// YouTube tells the page (via postMessage) when a video ends, so linked videos also move on automatically.
+window.addEventListener('message', (e) => {
+  if (!/(^|\.)youtube(-nocookie)?\.com$/.test((() => { try { return new URL(e.origin).hostname; } catch { return ''; } })())) return;
+  let d = e.data; if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
+  if (d && d.event === 'onStateChange' && d.info === 0) { const f = [...document.querySelectorAll('iframe[data-yt]')].find((x) => x.contentWindow === e.source); if (f) f.dispatchEvent(new Event('ytended')); }
+});
+
 function slide(v) {
   const media = mediaEl(v, { lazy: true });
+  media.dataset.vid = v.id;
+  const goNext = () => {
+    const nx = el.nextElementSibling;
+    if (nx && nx.dataset.id) nx.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else el.dispatchEvent(new CustomEvent('xg-end', { bubbles: true })); // last loaded slide: the feed loads more or starts over
+  };
+  if (media instanceof HTMLVideoElement) media.addEventListener('ended', goNext);
+  else if (media.dataset.yt) { media.addEventListener('ytended', goNext); media.addEventListener('load', () => { try { media.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1 }), '*'); } catch {} }); }
   const mute = h('button', { class: 'mute soundbtn', 'aria-label': 'Bật/tắt tiếng', html: icon('mute') + '<span>Chạm để bật tiếng</span>', onclick: (e) => { e.stopPropagation(); setSound(!S.sound); } });
   if (media instanceof HTMLVideoElement) {
     media._sync = () => { mute.innerHTML = media.muted ? icon('mute') + '<span>Chạm để bật tiếng</span>' : icon('vol'); mute.classList.toggle('on', !media.muted); };
@@ -733,6 +754,13 @@ async function pageFeed(startId, home) {
     loading = false;
   };
   await more();
+  box.addEventListener('xg-end', async (e) => {
+    const cur = e.target.closest('.slide'); await more();
+    const nx = cur && cur.nextElementSibling;
+    if (nx && nx.dataset.id) return nx.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const first = box.querySelector('.slide[data-id]'); // reached the end: start again from the first video
+    if (first === cur) { const m = cur.querySelector('video'); if (m) { m.currentTime = 0; m.play().catch(() => {}); } } else if (first) first.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   if (startId && !box.querySelector(`[data-id="${startId}"]`)) {
     try { const { video } = await api('/videos/' + startId); if (box.querySelector('.empty')) box.innerHTML = ''; box.prepend(slide(video)); } catch {}
   }
@@ -746,6 +774,7 @@ function emptyFeed() {
 }
 
 // ---------- home ----------
+const fmtCount = (n) => new Intl.NumberFormat(loc(), { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 function vthumb(v) {
   const yt = !v.file && ytId(v.url);
   const poster = v.thumb || (yt ? `https://i.ytimg.com/vi/${yt}/hqdefault.jpg` : '');
@@ -754,7 +783,7 @@ function vthumb(v) {
   else { media.style.pointerEvents = 'none'; }
   return h('a', { class: 'vcard', href: '#/feed/' + v.id, 'aria-label': 'Xem video của ' + v.user.name },
     media, h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(v.user), v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.caption && h('div', { class: 'cap', translate: 'no' }, v.caption)),
-    h('span', { class: 'views', html: icon('heart') + v.likes }),
+    h('span', { class: 'views', title: fmtCount(v.views || 0) + ' lượt xem', html: icon('heart') + v.likes + '<span class="vsep">·</span>' + icon('eye2') + fmtCount(v.views || 0) }),
     v.distanceKm != null && h('span', { class: 'distance', html: icon('pin') + '≈ ' + v.distanceKm + ' km' }));
 }
 function lcard(s) {
@@ -999,6 +1028,7 @@ function openInfo(v) {
   const i = v.info || {};
   const rows = [
     ['Khu vực', [v.district, v.province, REGION_NAMES[v.region]].filter(Boolean).join(', ')],
+    ['Lượt xem', fmtCount(v.views || 0)],
     ['Năm sinh', i.birthYear], ['Chiều cao', i.height && i.height + ' cm'], ['Cân nặng', i.weight && i.weight + ' kg'],
     ['Xuất xứ', i.origin], ['Nghề nghiệp', i.occupation], ['Địa chỉ', i.address], ['Thời gian rảnh', i.workTime],
   ].filter((r) => r[1]);

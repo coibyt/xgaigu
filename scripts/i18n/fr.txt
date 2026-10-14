@@ -596,3 +596,6 @@
 595|Résultats pour “
 596|Aucune vidéo correspondante
 597|Essayez d'autres mots-clés, par exemple un autre nom de zone ou un autre pseudo.
+598|vues
+599|Vues
+600|{0} vues

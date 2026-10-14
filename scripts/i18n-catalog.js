@@ -6,11 +6,11 @@ const root = path.join(__dirname, '..');
 const files = ['public/js/app.js', 'public/js/editor.js', 'public/js/music.js', 'public/index.html', 'server.js'];
 const vi = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
 const SKIP = new Set(['Ngôn ngữ không hợp lệ', 'Không tải được danh sách khu vực', 'Hà Nội']); // not shown to people
-const EXTRA = ['Video', 'Live', 'Chat', 'Mic', 'Camera', 'Có {0} video và {1} thành viên quanh bạn', '{0} bài', 'Livestream', 'Bỏ qua điều hướng', 'Gặp gỡ qua video,', 'làm quen qua livestream'];
+const EXTRA = ['Video', 'Live', 'Chat', 'Mic', 'Camera', 'Có {0} video và {1} thành viên quanh bạn', '{0} bài', 'Livestream', 'Bỏ qua điều hướng', 'Gặp gỡ qua video,', 'làm quen qua livestream', 'Lượt xem'];
 // Templates: {n} is filled with the dynamic part (a name, a number…), which lets each language put it where its grammar wants.
 const TEMPLATES = ['{0} phút trước', '{0} giờ trước', '{0} ngày trước', 'Gọi cho {0}', 'Hẹn gặp {0}', 'Cuộc gọi nhỡ từ {0}', 'Đã chuyển sang {0}', 'Xem video của {0}',
   'Bạn mời {0}', 'Lời mời từ {0}', 'Biệt danh: {0}', 'Chèn {0}', 'Ảnh {0}', 'Clip {0}', 'Nghe thử {0}', 'Dừng nghe thử {0}', 'Đã gắn nhạc: {0}',
-  'Không tạo được bài nhạc: {0}', 'Xuất video thất bại: {0}', 'Phóng to nhẹ khi chiếu: Bật', 'Phóng to nhẹ khi chiếu: Tắt', 'Video của {0}'];
+  'Không tạo được bài nhạc: {0}', 'Xuất video thất bại: {0}', 'Phóng to nhẹ khi chiếu: Bật', 'Phóng to nhẹ khi chiếu: Tắt', 'Video của {0}', '{0} lượt xem'];
 
 // Stable order: strings already in catalog.json keep their index (translations are matched by position); new ones are appended.
 const catalogPath = path.join(__dirname, 'i18n', 'catalog.json');

@@ -393,7 +393,7 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
       id: r.id, caption: r.caption, file: r.file, url: r.url, thumb: r.thumb || '', createdAt: r.created_at,
       region: r.region || '', province: r.province || '', district: r.district || '', info,
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
-      likes: r.likes, comments: r.comments, liked: !!r.liked,
+      views: r.views || 0, likes: r.likes, comments: r.comments, liked: !!r.liked,
       // On a video only the uploader's chosen nickname is shown, not the account name.
       user: { id: r.user_id, name: r.nickname || r.u_name, avatar: r.u_avatar, city: r.u_city,
         age: currentYear() - (Number(info.birthYear) || r.u_by), canCall: !!(r.u_sp && r.u_phone) },
@@ -500,6 +500,24 @@ app.delete('/api/videos/:id', needUser, (req, res) => {
   rmUpload(v.file && v.file.replace('/uploads/', ''));
   rmUpload(v.thumb && v.thumb.replace('/uploads/', ''));
   try { for (const f of fs.readdirSync(path.join(UPLOAD_DIR, 'wm'))) if (f.startsWith(v.id + '-')) fs.rmSync(path.join(UPLOAD_DIR, 'wm', f), { force: true }); } catch {}
+  res.json({ ok: true });
+});
+
+// A view = watched for a few seconds. One per viewer (member id, or hashed IP+browser for guests) per video per 30 minutes;
+// the uploader's own views are not counted.
+const viewSeen = new Map();
+app.post('/api/videos/:id(\\d+)/view', (req, res) => {
+  const v = db.prepare('SELECT id, user_id FROM videos WHERE id = ? AND hidden = 0').get(req.params.id);
+  if (!v) return fail(res, 404, 'Không tìm thấy video');
+  if (!req.user || req.user.id !== v.user_id) {
+    const who = req.user ? 'u' + req.user.id : 'i' + crypto.createHash('sha1').update(req.ip + '|' + (req.get('user-agent') || '')).digest('hex').slice(0, 12);
+    const k = v.id + '|' + who, t = Date.now();
+    if (!(viewSeen.get(k) > t - 30 * 60_000)) {
+      viewSeen.set(k, t);
+      db.prepare('UPDATE videos SET views = views + 1 WHERE id = ?').run(v.id);
+      if (viewSeen.size > 50_000) for (const [kk, tt] of viewSeen) if (tt < t - 30 * 60_000) viewSeen.delete(kk);
+    }
+  }
   res.json({ ok: true });
 });
 
