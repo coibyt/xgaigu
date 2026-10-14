@@ -1134,8 +1134,6 @@ function openInfo(v) {
     i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
     !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
     h('div', { class: 'row', style: 'margin-top:14px' },
-      h('button', { class: 'btn primary', onclick: () => startChat(v.user), html: icon('send') + 'Nhắn tin' }),
-      h('button', { class: 'btn', onclick: () => startVideoCall(v.user), html: icon('video') + 'Gọi video' }),
       v.hasPhone && h('button', { class: 'btn', onclick: () => openCall({ ...v.user, canCall: true }, v.id), html: icon('phone') + 'Gọi' }),
       h('button', { class: 'btn', onclick: () => openBook(v.user, v.id), html: icon('cal') + 'Hẹn gặp' })));
   modal(body, { sheet: true });
