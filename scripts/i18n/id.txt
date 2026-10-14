@@ -618,3 +618,8 @@
 617|Ketuk menu ⋮ atau ikon “…” di bagian atas.
 618|Pilih “Buka di browser”.
 619|Ketuk lagi tombol “Unduh aplikasi” di browser tersebut.
+638|Tautan profil disalin
+639|Panggilan suara
+640|Bagikan profil
+641|Suka
+642|Lainnya

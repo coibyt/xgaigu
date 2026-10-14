@@ -618,3 +618,8 @@
 617|Toca el menú ⋮ o el icono “…” de arriba.
 618|Elige “Abrir en el navegador”.
 619|Vuelve a tocar el botón “Descargar la app” en ese navegador.
+638|Enlace del perfil copiado
+639|Llamada de voz
+640|Compartir perfil
+641|Me gusta
+642|Más

@@ -618,3 +618,8 @@
 617|Tippe oben auf das ⋮-Menü oder das „…“-Symbol.
 618|Wähle „Im Browser öffnen“.
 619|Tippe in diesem Browser erneut auf „App herunterladen“.
+638|Profillink kopiert
+639|Sprachanruf
+640|Profil teilen
+641|Likes
+642|Mehr

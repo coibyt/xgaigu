@@ -618,3 +618,8 @@
 617|Tap the ⋮ menu or the “…” icon at the top.
 618|Choose “Open in browser”.
 619|Tap the “Get the app” button again in that browser.
+638|Profile link copied
+639|Voice call
+640|Share profile
+641|Likes
+642|More

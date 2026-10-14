@@ -452,3 +452,38 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
   .rail .act .iconbtn svg{width:19px;height:19px}
   .rail .act:not(.cnt) .n{display:none}
 }
+
+/* TikTok-style profile */
+.avatar.xl{width:112px;height:112px;font-size:42px;border-width:3px}
+.tk{max-width:720px}
+.tk-head{display:flex;flex-direction:column;align-items:center;text-align:center;padding:26px 0 8px;gap:8px}
+.tk-name{font-size:22px;font-weight:800;margin-top:6px}
+.tk-handle{color:var(--muted);font-size:15px;margin-top:-4px;min-height:0}
+.tk-handle:empty{display:none}
+.tk-stats{display:flex;gap:6px;margin:10px 0 6px;width:100%;max-width:420px;justify-content:center}
+.pstat{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 6px}
+.pstat+.pstat{border-left:1px solid var(--line)}
+.pstat b{font-size:22px;font-weight:800}
+.pstat span{color:var(--muted);font-size:14px}
+.tk-actions{display:flex;gap:8px;justify-content:center;width:100%;max-width:420px;margin-top:6px}
+.tk-actions .btn{flex:1;justify-content:center;min-height:46px}
+.tk-actions .btn.more{flex:none;width:48px;padding:0}
+.tk-bio{max-width:520px;white-space:pre-line;line-height:1.5;margin-top:8px}
+.tk-loc{color:var(--muted);font-size:14px;display:flex;gap:6px;align-items:center}
+.tk-facts{justify-content:center}
+.tk-more{max-width:520px;font-size:14px}
+.tk-tabs{display:flex;border-bottom:1px solid var(--line);margin-top:16px}
+.tk-tabs>span{flex:1;display:flex;justify-content:center;align-items:center;gap:8px;padding:12px;font-weight:700;border-bottom:2px solid var(--text);margin-bottom:-1px}
+.tk-tabs svg{width:18px;height:18px}
+.tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:2px -16px 0}
+@media (min-width:721px){.tgrid{margin-inline:0}}
+.tcell{position:relative;aspect-ratio:3/4;background:var(--surface2);overflow:hidden;display:block}
+.tcell img,.tcell video{width:100%;height:100%;object-fit:cover;display:block}
+.tcell .tviews{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:4px;font-weight:700;font-size:14px;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+.tcell .tviews svg{width:15px;height:15px}
+.tcell .tdel{position:absolute;top:6px;right:6px;width:34px;height:34px;background:rgba(0,0,0,.6)}
+.menu-list{display:grid;gap:4px}
+.menu-list h3{margin-bottom:8px}
+.menu-item{display:flex;align-items:center;gap:12px;padding:14px 10px;background:none;border:0;color:var(--text);font:inherit;font-weight:600;border-radius:12px;cursor:pointer;text-align:left}
+.menu-item:hover{background:var(--surface2)}
+.menu-item svg{width:20px;height:20px}

@@ -351,7 +351,10 @@ app.get('/api/geocode', geoLimiter, (req, res) => {
 app.get('/api/users/:id', (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id = ? AND banned = 0').get(req.params.id);
   if (!u) return fail(res, 404, 'Không tìm thấy người dùng');
-  res.json({ user: publicUser(u), videos: listVideos(req.user, { userId: u.id, limit: 30 }) });
+  const stats = db.prepare(
+    `SELECT COUNT(*) AS videos, COALESCE(SUM(v.views), 0) AS views, COALESCE(SUM((SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id)), 0) AS likes
+     FROM videos v WHERE v.user_id = ? AND v.hidden = 0`).get(u.id);
+  res.json({ user: publicUser(u), videos: listVideos(req.user, { userId: u.id, limit: 60 }), stats });
 });
 
 app.get('/api/users/:id/phone', needUser, (req, res) => {

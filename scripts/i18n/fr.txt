@@ -618,3 +618,8 @@
 617|Touchez le menu ⋮ ou l’icône « … » en haut.
 618|Choisissez « Ouvrir dans le navigateur ».
 619|Touchez de nouveau le bouton « Télécharger l'appli » dans ce navigateur.
+638|Lien du profil copié
+639|Appel vocal
+640|Partager le profil
+641|J'aime
+642|Plus
