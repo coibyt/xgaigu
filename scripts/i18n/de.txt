@@ -590,3 +590,9 @@
 589|Ungültiges Logo-Bild
 590|Der Server ist ausgelastet, bitte versuche es in ein paar Minuten erneut
 591|Das Logo konnte nicht ins Video eingefügt werden
+592|Suchen
+593|Nach Spitzname oder Adresse suchen…
+594|Gib einen Spitznamen oder eine Adresse ein, um Videos zu finden.
+595|Ergebnisse für “
+596|Keine passenden Videos gefunden
+597|Versuche andere Suchbegriffe, z. B. einen anderen Gebietsnamen oder Spitznamen.

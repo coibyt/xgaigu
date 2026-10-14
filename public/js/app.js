@@ -12,6 +12,7 @@ const P = {
   videooff: 'M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.7 0H14a2 2 0 0 1 2 2v3.3l1 1L23 7v10M1 1l22 22',
   globe: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20',
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  search: 'M21 21l-4.3-4.3M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
   msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
   phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
@@ -428,6 +429,7 @@ function renderNav() {
       S.user && h('a', { href: '#/dates', class: on('#/dates') ? 'on' : '' }, 'Lịch hẹn')),
     h('div', { class: 'grow' }),
     h('div', { class: 'nav-actions' },
+      h('a', { class: 'iconbtn', href: '#/search', 'aria-label': 'Tìm kiếm', html: icon('search') }),
       h('button', { type: 'button', class: 'iconbtn lang-btn', 'aria-label': 'Ngôn ngữ / Language', onclick: openLanguage, html: icon('globe') }),
       S.user ? [
         h('a', { class: 'btn primary sm', href: '#/upload', html: icon('plus') + '<span>Đăng video</span>' }),
@@ -1055,6 +1057,50 @@ async function pageRegions(reg, prov, dist) {
   main.append(wrap, footer());
 }
 
+// ---------- search (nickname or address) ----------
+function pageSearch(initial) {
+  const input = h('input', { type: 'search', placeholder: 'Tìm theo biệt danh hoặc địa chỉ…', 'aria-label': 'Tìm kiếm', autocomplete: 'off', maxlength: 80, value: initial, role: 'combobox', 'aria-autocomplete': 'list' });
+  const list = h('ul', { class: 'suggest', role: 'listbox', hidden: true });
+  const head = h('h3', { class: 'sect', hidden: true });
+  const grid = h('div', { class: 'grid g4' });
+  const hint = h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('search') }), h('p', {}, 'Nhập biệt danh hoặc địa chỉ để tìm video.'));
+  let t, seq = 0;
+  const hide = () => { list.hidden = true; };
+  const run = async (q) => {
+    q = q.trim(); hide();
+    try { history.replaceState(null, '', '#/search' + (q ? '?q=' + encodeURIComponent(q) : '')); } catch {}
+    grid.replaceChildren(); head.hidden = true; hint.hidden = true;
+    if (q.length < 2) { hint.hidden = false; return; }
+    grid.append(h('div', { class: 'spin' }));
+    try {
+      const { videos } = await api('/search?q=' + encodeURIComponent(q));
+      grid.replaceChildren(); head.hidden = false; head.textContent = 'Kết quả cho “' + q + '”';
+      if (!videos.length) grid.append(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('search') }), h('h3', {}, 'Không tìm thấy video phù hợp'), h('p', {}, 'Thử đổi từ khoá, ví dụ tên khu vực hoặc biệt danh khác.')));
+      videos.forEach((v) => grid.append(vthumb(v)));
+    } catch (e) { grid.replaceChildren(); fail(e); }
+  };
+  input.addEventListener('input', () => {
+    clearTimeout(t);
+    const q = input.value.trim(); if (!q) return hide();
+    const my = ++seq;
+    t = setTimeout(async () => {
+      try {
+        const { suggestions } = await api('/suggest?q=' + encodeURIComponent(q));
+        if (my !== seq) return;
+        list.replaceChildren(...suggestions.map((s) => h('li', { role: 'option', tabindex: '0', onclick: () => { input.value = s.text; run(s.text); }, onkeydown: (e) => { if (e.key === 'Enter') { input.value = s.text; run(s.text); } } },
+          h('span', { html: icon(s.type === 'nick' ? 'user' : 'pin') }), h('span', { translate: 'no' }, s.text), h('small', { class: 'muted', style: 'margin-left:auto' }, s.type === 'nick' ? 'Biệt danh' : 'Địa chỉ'))));
+        list.hidden = !suggestions.length;
+      } catch { hide(); }
+    }, 220);
+  });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); run(input.value); } });
+  input.addEventListener('blur', () => setTimeout(hide, 250));
+  main.append(h('div', { class: 'wrap', style: 'padding:24px 0;max-width:1000px' },
+    h('form', { class: 'searchbar', onsubmit: (e) => { e.preventDefault(); run(input.value); } }, h('div', { class: 'picker' }, input, list), h('button', { class: 'btn primary', type: 'submit', 'aria-label': 'Tìm kiếm', html: icon('search') })),
+    head, hint, grid), footer());
+  if (initial) run(initial); else input.focus();
+}
+
 // ---------- upload ----------
 async function pageUpload() {
   if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
@@ -1458,6 +1504,7 @@ async function route() {
     if (a === 'feed') return pageFeed(b);
     if (a === 'people') return pagePeople();
     if (a === 'nearby') return pageNearby();
+    if (a === 'search') return pageSearch(new URLSearchParams(query || '').get('q') || '');
     if (a === 'regions') return pageRegions(b && decodeURIComponent(b), seg[2] && decodeURIComponent(seg[2]), seg[3] && decodeURIComponent(seg[3]));
     if (a === 'u') return pageUser(b);
     if (a === 'me') return pageMe();

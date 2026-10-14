@@ -590,3 +590,9 @@
 589|Imagen de logotipo no válida
 590|El servidor está ocupado, inténtalo de nuevo en unos minutos
 591|No se pudo añadir el logotipo al vídeo
+592|Buscar
+593|Buscar por apodo o dirección…
+594|Escribe un apodo o una dirección para encontrar vídeos.
+595|Resultados para “
+596|No se encontraron vídeos
+597|Prueba con otras palabras clave, por ejemplo otro nombre de zona o de apodo.

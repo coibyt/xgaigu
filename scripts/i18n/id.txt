@@ -590,3 +590,9 @@
 589|Gambar logo tidak valid
 590|Server sedang sibuk, silakan coba lagi beberapa menit lagi
 591|Tidak dapat menambahkan logo ke video
+592|Cari
+593|Cari berdasarkan nama panggilan atau alamat…
+594|Masukkan nama panggilan atau alamat untuk mencari video.
+595|Hasil untuk “
+596|Tidak ada video yang cocok
+597|Coba kata kunci lain, misalnya nama area atau nama panggilan lain.

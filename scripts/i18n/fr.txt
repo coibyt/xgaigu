@@ -590,3 +590,9 @@
 589|Image du logo invalide
 590|Le serveur est occupé, veuillez réessayer dans quelques minutes
 591|Impossible d'ajouter le logo à la vidéo
+592|Rechercher
+593|Rechercher par pseudo ou adresse…
+594|Saisissez un pseudo ou une adresse pour trouver des vidéos.
+595|Résultats pour “
+596|Aucune vidéo correspondante
+597|Essayez d'autres mots-clés, par exemple un autre nom de zone ou un autre pseudo.

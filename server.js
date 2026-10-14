@@ -396,7 +396,7 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
       likes: r.likes, comments: r.comments, liked: !!r.liked,
       // On a video only the uploader's chosen nickname is shown, not the account name.
       user: { id: r.user_id, name: r.nickname || r.u_name, avatar: r.u_avatar, city: r.u_city,
-        age: currentYear() - r.u_by, canCall: !!(r.u_sp && r.u_phone) },
+        age: currentYear() - (Number(info.birthYear) || r.u_by), canCall: !!(r.u_sp && r.u_phone) },
     };
   });
 }
@@ -412,6 +412,43 @@ app.get('/api/videos/:id(\\d+)', (req, res) => {
   const v = listVideos(req.user, { id: Number(req.params.id), limit: 1 })[0];
   if (!v) return fail(res, 404, 'Không tìm thấy video');
   res.json({ video: v });
+});
+
+// ---------- search by nickname or address (accent-insensitive: "ha noi" finds "Hà Nội") ----------
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/\s+/g, ' ').trim();
+function searchIndex() {
+  const rows = db.prepare(
+    `SELECT v.id, v.nickname, u.name AS uname, v.province, v.district, v.info FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.hidden = 0 AND u.banned = 0 ORDER BY v.id DESC LIMIT 5000`
+  ).all();
+  return rows.map((r) => {
+    let addr = ''; try { addr = (JSON.parse(r.info || '{}').address) || ''; } catch {}
+    const nick = r.nickname || r.uname; // only the nickname shown on the video is searchable, never the account name behind it
+    const place = [r.district, r.province].filter(Boolean).join(', ');
+    return { id: r.id, nick, nickN: norm(nick), place, addr, placeN: norm([r.district, r.province, addr].join(' ')) };
+  });
+}
+
+app.get('/api/search', (req, res) => {
+  const q = norm(String(req.query.q || '').slice(0, 80));
+  if (q.length < 2) return res.json({ videos: [] });
+  const tokens = q.split(' ').slice(0, 5);
+  const hits = searchIndex().filter((x) => tokens.every((t) => x.nickN.includes(t) || x.placeN.includes(t)))
+    .sort((a, b) => (b.nickN.includes(q) ? 1 : 0) - (a.nickN.includes(q) ? 1 : 0) || b.id - a.id).slice(0, 48);
+  if (!hits.length) return res.json({ videos: [] });
+  const byId = new Map(listVideos(req.user, { ids: hits.map((x) => x.id), limit: 48 }).map((v) => [v.id, v]));
+  res.json({ videos: hits.map((x) => byId.get(x.id)).filter(Boolean) });
+});
+
+app.get('/api/suggest', (req, res) => {
+  const q = norm(String(req.query.q || '').slice(0, 80));
+  if (!q) return res.json({ suggestions: [] });
+  const idx = searchIndex(), nicks = new Map(), places = new Map();
+  for (const x of idx) {
+    if (nicks.size < 6 && x.nickN.includes(q) && !nicks.has(x.nickN)) nicks.set(x.nickN, x.nick);
+    for (const label of [x.place, x.addr]) if (label && places.size < 6 && norm(label).includes(q) && !places.has(norm(label))) places.set(norm(label), label);
+  }
+  res.json({ suggestions: [...[...nicks.values()].slice(0, 5).map((text) => ({ type: 'nick', text })), ...[...places.values()].slice(0, 5).map((text) => ({ type: 'place', text }))] });
 });
 
 // How many videos each region / province / district has (powers the "Khu vực" browser).

@@ -381,6 +381,10 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
 
 @media (max-width:760px){.rail{gap:8px}.rail .act .iconbtn{width:44px;height:44px}.rail .act{font-size:11px}}
 
+.searchbar{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}.searchbar .picker{flex:1;min-width:0}
+.suggest li small{font-size:11px}
+@media (max-width:560px){.nav .iconbtn{width:40px;height:40px}.nav{padding-left:12px;padding-right:12px}}
+
 /* toast */
 #toast-root{position:fixed;left:50%;bottom:calc(var(--tab-h) + 20px);transform:translateX(-50%);z-index:300;display:grid;gap:8px;width:min(92vw,420px)}
 .toast{background:#fff;color:#18101f;padding:12px 16px;border-radius:14px;font-weight:600;box-shadow:0 12px 40px rgba(0,0,0,.5);animation:pop .3s var(--ease)}

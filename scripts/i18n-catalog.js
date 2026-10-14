@@ -5,7 +5,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const files = ['public/js/app.js', 'public/js/editor.js', 'public/js/music.js', 'public/index.html', 'server.js'];
 const vi = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
-const SKIP = new Set(['Ngôn ngữ không hợp lệ', 'Không tải được danh sách khu vực']); // not shown to people
+const SKIP = new Set(['Ngôn ngữ không hợp lệ', 'Không tải được danh sách khu vực', 'Hà Nội']); // not shown to people
 const EXTRA = ['Video', 'Live', 'Chat', 'Mic', 'Camera', 'Có {0} video và {1} thành viên quanh bạn', '{0} bài', 'Livestream', 'Bỏ qua điều hướng', 'Gặp gỡ qua video,', 'làm quen qua livestream'];
 // Templates: {n} is filled with the dynamic part (a name, a number…), which lets each language put it where its grammar wants.
 const TEMPLATES = ['{0} phút trước', '{0} giờ trước', '{0} ngày trước', 'Gọi cho {0}', 'Hẹn gặp {0}', 'Cuộc gọi nhỡ từ {0}', 'Đã chuyển sang {0}', 'Xem video của {0}',

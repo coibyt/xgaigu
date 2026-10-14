@@ -590,3 +590,9 @@
 589|Invalid logo image
 590|The server is busy, please try again in a few minutes
 591|Couldn't add the logo to the video
+592|Search
+593|Search by nickname or address…
+594|Enter a nickname or address to find videos.
+595|Results for “
+596|No matching videos found
+597|Try different keywords, such as another area name or nickname.
