@@ -487,3 +487,9 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
 .menu-item{display:flex;align-items:center;gap:12px;padding:14px 10px;background:none;border:0;color:var(--text);font:inherit;font-weight:600;border-radius:12px;cursor:pointer;text-align:left}
 .menu-item:hover{background:var(--surface2)}
 .menu-item svg{width:20px;height:20px}
+
+/* prominent red call button in the video info sheet */
+.btn.callbtn{background:linear-gradient(135deg,#ff2a3d,#d90429);border-color:transparent;color:#fff;font-weight:800;box-shadow:0 8px 24px rgba(230,20,50,.45);animation:callpulse 2s ease-in-out infinite}
+.btn.callbtn:hover{filter:brightness(1.08)}
+@keyframes callpulse{50%{box-shadow:0 8px 30px rgba(230,20,50,.8);transform:scale(1.04)}}
+@media (prefers-reduced-motion:reduce){.btn.callbtn{animation:none}}
