@@ -635,7 +635,7 @@ async function openComments(v, countEl) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault(); if (!input.value.trim()) return;
     if (!S.user) return openAuth('login');
-    try { await api('/videos/' + v.id + '/comments', { method: 'POST', body: { body: input.value } }); input.value = ''; load(); } catch (ex) { fail(ex); }
+    try { await api('/videos/' + v.id + '/comments', { method: 'POST', body: { body: input.value } }); input.value = ''; Pref.bump(v.province, 3); load(); } catch (ex) { fail(ex); }
   });
 }
 
@@ -643,7 +643,7 @@ async function toggleLike(v, btn) {
   if (!(await needLogin())) return;
   try {
     const r = await api('/videos/' + v.id + '/like', { method: 'POST' });
-    v.liked = r.liked; v.likes = r.likes;
+    v.liked = r.liked; v.likes = r.likes; if (r.liked) Pref.bump(v.province, 3);
     btn.classList.toggle('liked', r.liked); btn.querySelector('span.n').textContent = r.likes;
   } catch (e) { fail(e); }
 }
@@ -735,6 +735,22 @@ async function downloadVideo(v) {
   note.remove(); downloading = false;
 }
 
+// ---------- region interest (kept on this device; the home feed favours these provinces) ----------
+const Pref = {
+  get() { try { return JSON.parse(localStorage.getItem('xg_pref') || '{}') || {}; } catch { return {}; } },
+  bump(province, w) {
+    if (!province) return;
+    try {
+      const p = this.get();
+      for (const k of Object.keys(p)) { p[k] *= 0.97; if (p[k] < 0.2) delete p[k]; } // old interests fade slowly
+      p[province] = (p[province] || 0) + w;
+      const keep = Object.entries(p).sort((a, b) => b[1] - a[1]).slice(0, 12);
+      localStorage.setItem('xg_pref', JSON.stringify(Object.fromEntries(keep)));
+    } catch {}
+  },
+  param() { return Object.entries(this.get()).map(([k, v]) => k.replace(/[|~]/g, ' ') + '~' + v.toFixed(2)).join('|'); },
+};
+
 // ---------- feed ----------
 function actBtn(cls, label, ic, count, onclick) {
   const b = h('button', { class: 'act ' + cls + (count == null ? '' : ' cnt'), onclick, 'aria-label': label }, h('span', { class: 'iconbtn', html: icon(ic) }), h('span', { class: 'n' }, count == null ? label : count));
@@ -795,13 +811,15 @@ async function pageFeed(startId, home) {
   const box = h('div', { class: 'feedpage', id: 'feedbox' });
   main.append(h('div', { class: 'feedwrap' }, box, feedTabs('foryou')));
   let before = null, done = false, loading = false, first = true;
+  const seen = []; // home feed: ids already shown, so the random order never repeats a video
   const more = async () => {
     if (loading || done) return; loading = true;
     try {
-      const { videos } = await api('/videos' + (before ? '?before=' + before : ''));
+      const { videos } = home ? await api('/feed?limit=12&seen=' + seen.slice(-500).join(',') + '&pref=' + encodeURIComponent(Pref.param())) : await api('/videos' + (before ? '?before=' + before : ''));
+      if (home) videos.forEach((v) => seen.push(v.id));
       if (!videos.length && first && home) { loading = false; main.innerHTML = ''; return pageHome(); }
       if (!videos.length) { done = true; box.append(h('div', { class: 'slide' }, h('div', { class: 'endcap' }, videos.length || !first ? 'Bạn đã xem hết video 🎉' : ''))); if (first) { box.innerHTML = ''; box.append(emptyFeed()); } }
-      else { videos.forEach((v) => box.append(slide(v))); before = videos[videos.length - 1].id; if (videos.length < 12) done = true; }
+      else { videos.forEach((v) => box.append(slide(v))); before = videos[videos.length - 1].id; if (videos.length < (home ? 1 : 12)) done = true; }
       first = false;
     } catch (e) { toast(e.message, true); }
     loading = false;
@@ -1100,6 +1118,7 @@ function openInfo(v) {
 }
 
 async function pageRegions(reg, prov, dist) {
+  if (prov) Pref.bump(prov, 1.5);
   const [geo, { areas }] = await Promise.all([loadGeo(), api('/areas')]);
   const sum = (f) => areas.filter(f).reduce((n, x) => n + x.n, 0);
   const enc = encodeURIComponent;
@@ -1158,6 +1177,11 @@ function pageSearch(initial) {
     grid.append(h('div', { class: 'spin' }));
     try {
       const { videos } = await api('/search?q=' + encodeURIComponent(q));
+      { // searching for a place: remember the province most of the results are in
+        const cnt = {}; videos.forEach((v) => { if (v.province) cnt[v.province] = (cnt[v.province] || 0) + 1; });
+        const [p, n] = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0] || [];
+        if (p && n >= Math.ceil(videos.length / 2) && Pref.lastQ !== q) { Pref.lastQ = q; Pref.bump(p, 2); }
+      }
       grid.replaceChildren(); head.hidden = false; head.textContent = 'Kết quả cho “' + q + '”';
       if (!videos.length) grid.append(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('search') }), h('h3', {}, 'Không tìm thấy video phù hợp'), h('p', {}, 'Thử đổi từ khoá, ví dụ tên khu vực hoặc biệt danh khác.')));
       videos.forEach((v) => grid.append(vthumb(v)));

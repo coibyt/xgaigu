@@ -419,6 +419,40 @@ app.get('/api/videos', (req, res) => {
   res.json({ videos: listVideos(req.user, { before, limit, ...area }) });
 });
 
+// Home feed: random order, but provinces the visitor shows interest in (searches, likes, comments) are much more likely to come up.
+// Weighted random sampling (Efraimidis-Spirakis): key = -ln(U) / weight, smallest keys win. Nothing is ever excluded, only made rarer.
+app.get('/api/feed', (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 24);
+  const seen = new Set(String(req.query.seen || '').split(',').map(Number).filter(Boolean).slice(0, 600));
+  const pk = (p) => norm(p).replace(/^(tp\.? ?|thanh pho |tinh )/, '').trim(); // "TP. Hồ Chí Minh" and "Hồ Chí Minh" are the same place
+  const score = new Map(); // province key -> interest
+  for (const part of String(req.query.pref || '').split('|').slice(0, 20)) { // sent by the browser: "Hà Nội~3.5|Đà Nẵng~1"
+    const [p, n] = part.split('~'); const v = Number(n);
+    if (p && v > 0 && v < 1000) score.set(pk(p.slice(0, 60)), (score.get(pk(p.slice(0, 60))) || 0) + v);
+  }
+  if (req.user) { // members: what they liked / commented on, on any device
+    const rows = db.prepare(
+      `SELECT v.province AS p, COUNT(*) AS n FROM (SELECT video_id FROM likes WHERE user_id = ? ORDER BY rowid DESC LIMIT 60) x JOIN videos v ON v.id = x.video_id
+       WHERE v.province IS NOT NULL AND v.province <> '' GROUP BY v.province`).all(req.user.id);
+    for (const r of rows) score.set(pk(r.p), (score.get(pk(r.p)) || 0) + r.n * 2);
+    const rc = db.prepare(
+      `SELECT v.province AS p, COUNT(*) AS n FROM (SELECT video_id FROM comments WHERE user_id = ? ORDER BY rowid DESC LIMIT 60) x JOIN videos v ON v.id = x.video_id
+       WHERE v.province IS NOT NULL AND v.province <> '' GROUP BY v.province`).all(req.user.id);
+    for (const r of rc) score.set(pk(r.p), (score.get(pk(r.p)) || 0) + r.n * 2);
+  }
+  const top = Math.max(0, ...score.values());
+  const pool = db.prepare(
+    `SELECT v.id, v.province FROM videos v JOIN users u ON u.id = v.user_id WHERE v.hidden = 0 AND u.banned = 0 ORDER BY v.id DESC LIMIT 1500`).all();
+  const picked = pool.filter((r) => !seen.has(r.id)).map((r) => {
+    const interest = top ? (score.get(pk(r.province)) || 0) / top : 0; // 0..1
+    const w = 1 + 7 * interest; // a favourite region is up to 8x as likely as an unknown one
+    return { id: r.id, key: -Math.log(1 - Math.random()) / w };
+  }).sort((a, b) => a.key - b.key).slice(0, limit).map((r) => r.id);
+  if (!picked.length) return res.json({ videos: [] });
+  const byId = new Map(listVideos(req.user, { ids: picked, limit: picked.length }).map((v) => [v.id, v]));
+  res.json({ videos: picked.map((id) => byId.get(id)).filter(Boolean) });
+});
+
 app.get('/api/videos/:id(\\d+)', (req, res) => {
   const v = listVideos(req.user, { id: Number(req.params.id), limit: 1 })[0];
   if (!v) return fail(res, 404, 'Không tìm thấy video');
