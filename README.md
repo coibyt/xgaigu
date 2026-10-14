@@ -67,3 +67,9 @@ git push -u origin main
 - Nút **Tải xuống** (chỉ với video tải lên từ máy; video dùng liên kết YouTube/ngoài thì không có) lưu video về máy khách **kèm logo xgaigu và biệt danh** ở góc dưới bên trái. Trên website, video vẫn hiển thị sạch, không logo.
 - Trình duyệt vẽ logo + biệt danh thành ảnh PNG nhỏ (hiển thị đúng mọi ngôn ngữ/emoji) và gửi lên `POST /api/videos/:id/download`; máy chủ dùng **ffmpeg** (gói `ffmpeg-static`, tự tải khi `npm install`) ghép vào video rồi trả về file MP4. Kết quả được lưu đệm trong `uploads/wm/`.
 - Nếu máy chủ không chạy được ffmpeg, trình duyệt tự chuyển sang cách dự phòng: phát video lên canvas kèm logo rồi ghi lại (mất đúng bằng thời lượng video, định dạng MP4/WebM tùy trình duyệt).
+
+## Ứng dụng cài thẳng về máy (PWA)
+Nút "Cài đặt ứng dụng" (thanh trên, trang chủ, chân trang) cài xgaigu thành app trên màn hình điện thoại/máy tính mà không qua CH Play / App Store.
+- Android/Chrome/Edge: bấm là hiện hộp thoại cài đặt của trình duyệt. iPhone: Safari → Chia sẻ → "Thêm vào Màn hình chính" (Apple không cho cài một chạm).
+- App chính là website (`public/sw.js` luôn lấy bản mới từ mạng trước), nên mọi thay đổi trên web hiện ngay trong app.
+- Biểu tượng tạo bằng `node scripts/make-icons.js`. Cần HTTPS (xgaigu.com đã có).

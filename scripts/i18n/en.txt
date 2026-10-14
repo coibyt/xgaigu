@@ -599,3 +599,17 @@
 598|views
 599|Views
 600|{0} views
+601|App xgaigu installed!
+602|Install the xgaigu app
+603|On iPhone/iPad, open this page in Safari and follow 3 steps:
+604|Tap the Share button ⬆️ at the bottom of Safari.
+605|Choose “Add to Home Screen”.
+606|Tap “Add” – the xgaigu icon appears on your screen right away.
+607|Your browser did not show the automatic install window. Do this instead:
+608|Open the browser menu ⋮ (top right).
+609|Choose “Install app” or “Add to Home screen”.
+610|Confirm – the app is installed on your device right away, no app store needed.
+611|Install app
+612|Install the xgaigu app on your device
+613|One tap puts the icon on your screen, no Google Play or App Store needed. The app always stays in sync with the website.
+614|📲 Install app

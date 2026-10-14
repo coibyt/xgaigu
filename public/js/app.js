@@ -414,6 +414,27 @@ function openLanguage() {
   modal(h('div', {}, h('h3', {}, 'Ngôn ngữ / Language'), h('p', { class: 'sub' }, 'Website tự dịch sang ngôn ngữ bạn chọn. Bản dịch tự động có thể chưa hoàn hảo.'), auto, search, list), { wide: true });
 }
 
+// ---------- install app (PWA) ----------
+const Install = (() => {
+  let evt = null;
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const ios = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const refresh = () => document.querySelectorAll('.xg-install').forEach((el) => { el.hidden = standalone(); });
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); evt = e; refresh(); });
+  window.addEventListener('appinstalled', () => { evt = null; refresh(); toast('Đã cài ứng dụng xgaigu!'); });
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  const steps = (items) => h('ol', { style: 'margin:12px 0 0 20px;display:grid;gap:8px;line-height:1.5' }, items.map((t) => h('li', {}, t)));
+  async function run() {
+    if (evt) { const e = evt; evt = null; e.prompt(); await e.userChoice.catch(() => {}); refresh(); return; }
+    if (ios()) modal(h('div', {}, h('h3', {}, 'Cài ứng dụng xgaigu'), h('p', { class: 'sub' }, 'Trên iPhone/iPad, hãy mở trang này bằng Safari rồi làm theo 3 bước:'),
+      steps(['Bấm nút Chia sẻ ⬆️ ở thanh dưới của Safari.', 'Chọn “Thêm vào Màn hình chính”.', 'Bấm “Thêm” – biểu tượng xgaigu sẽ xuất hiện ngay trên màn hình.'])));
+    else modal(h('div', {}, h('h3', {}, 'Cài ứng dụng xgaigu'), h('p', { class: 'sub' }, 'Trình duyệt của bạn chưa hiện cửa sổ cài đặt tự động. Bạn làm theo cách sau:'),
+      steps(['Mở menu ⋮ của trình duyệt (góc trên bên phải).', 'Chọn “Cài đặt ứng dụng” hoặc “Thêm vào màn hình chính”.', 'Xác nhận – ứng dụng sẽ được cài vào máy ngay, không cần qua cửa hàng ứng dụng.'])));
+  }
+  const button = (cls, withText = true) => h('button', { type: 'button', class: 'xg-install ' + cls, hidden: standalone(), onclick: run, 'aria-label': 'Cài đặt ứng dụng', html: '<span aria-hidden="true">📲</span>' + (withText ? '<span class="t">Cài đặt ứng dụng</span>' : '') });
+  return { run, button, standalone };
+})();
+
 // ---------- nav ----------
 const NAV = [
   ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/regions', 'Khu vực', 'pin'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
@@ -430,6 +451,7 @@ function renderNav() {
       S.user && h('a', { href: '#/dates', class: on('#/dates') ? 'on' : '' }, 'Lịch hẹn')),
     h('div', { class: 'grow' }),
     h('div', { class: 'nav-actions' },
+      Install.button('btn install-btn sm'),
       h('a', { class: 'iconbtn', href: '#/search', 'aria-label': 'Tìm kiếm', html: icon('search') }),
       h('button', { type: 'button', class: 'iconbtn lang-btn', 'aria-label': 'Ngôn ngữ / Language', onclick: openLanguage, html: icon('globe') }),
       S.user ? [
@@ -834,6 +856,7 @@ async function pageHome() {
     h('div', { class: 'ico', style: 'margin:0', html: icon('shield') }), h('div', { style: 'flex:1;min-width:240px' }, h('h3', {}, 'An toàn là ưu tiên'),
       h('p', {}, 'Chỉ dành cho 18+, có nút báo cáo ở mọi nơi, số điện thoại chỉ hiện khi chủ tài khoản cho phép. Không cho phép nội dung khiêu dâm, mua bán dịch vụ tình dục hay lừa đảo.')),
     h('a', { class: 'btn', href: '#/terms' }, 'Quy tắc cộng đồng'))));
+  w.append(h('section', { class: 'block wrap xg-install', hidden: Install.standalone() }, h('div', { class: 'cta' }, h('h2', {}, 'Cài ứng dụng xgaigu về máy'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Một chạm là có ngay biểu tượng trên màn hình, không cần CH Play hay App Store. Ứng dụng luôn đồng bộ với website.'), Install.button('btn primary lg'))));
   if (!S.user) w.append(h('section', { class: 'block wrap' }, h('div', { class: 'cta' }, h('h2', {}, 'Sẵn sàng gặp người ấy?'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Tạo tài khoản miễn phí trong 30 giây.'), h('button', { class: 'btn primary lg', onclick: () => openAuth('register') }, 'Bắt đầu ngay'))));
   w.append(footer());
   main.append(w);
@@ -842,7 +865,7 @@ async function pageHome() {
 function footer() {
   return h('footer', { class: 'footer' }, h('div', { class: 'wrap cols' },
     h('div', {}, h('div', { class: 'logo' }, h('span', { class: 'logo-mark' }), h('span', {}, 'xgai', h('b', {}, 'gu'))), h('p', { style: 'margin-top:10px' }, '© ' + new Date().getFullYear() + ' xgaigu.com · Dành cho người từ 18 tuổi.')),
-    h('div', { class: 'row' }, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openLanguage(); } }, '🌐 Ngôn ngữ / Language'), h('a', { href: '#/welcome' }, 'Giới thiệu'), h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
+    h('div', { class: 'row' }, h('a', { class: 'xg-install', hidden: Install.standalone(), href: '#', onclick: (e) => { e.preventDefault(); Install.run(); } }, '📲 Cài đặt ứng dụng'), h('a', { href: '#', onclick: (e) => { e.preventDefault(); openLanguage(); } }, '🌐 Ngôn ngữ / Language'), h('a', { href: '#/welcome' }, 'Giới thiệu'), h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
 }
 
 // ---------- people & profiles ----------

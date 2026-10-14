@@ -599,3 +599,17 @@
 598|vues
 599|Vues
 600|{0} vues
+601|L'application xgaigu est installée !
+602|Installer l'application xgaigu
+603|Sur iPhone/iPad, ouvrez cette page dans Safari et suivez 3 étapes :
+604|Touchez le bouton Partager ⬆️ en bas de Safari.
+605|Choisissez « Sur l'écran d'accueil ».
+606|Touchez « Ajouter » – l'icône xgaigu apparaît aussitôt sur votre écran.
+607|Votre navigateur n'a pas affiché la fenêtre d'installation automatique. Faites ceci :
+608|Ouvrez le menu du navigateur ⋮ (en haut à droite).
+609|Choisissez « Installer l'application » ou « Ajouter à l'écran d'accueil ».
+610|Confirmez – l'application s'installe aussitôt sur votre appareil, sans boutique d'applications.
+611|Installer l'application
+612|Installez l'application xgaigu sur votre appareil
+613|Un seul geste suffit pour placer l'icône sur votre écran, sans Google Play ni App Store. L'application reste toujours synchronisée avec le site.
+614|📲 Installer l'application

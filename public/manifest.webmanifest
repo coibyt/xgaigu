@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "xgaigu – Video, livestream & hẹn hò",
+  "short_name": "xgaigu",
+  "description": "Đăng video, làm quen, chat, xem livestream và hẹn gặp an toàn. Dành cho người từ 18 tuổi.",
+  "lang": "vi",
+  "start_url": "/?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0610",
+  "theme_color": "#0B0610",
+  "categories": ["social", "entertainment"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Video", "url": "/#/feed", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Livestream", "url": "/#/live", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Tin nhắn", "url": "/#/messages", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

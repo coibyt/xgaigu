@@ -985,6 +985,9 @@ function renderPage(req, res, v) {
 
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));
 app.get('/', (req, res) => renderPage(req, res, null));
+// installable app (PWA): the worker must never be cached by the browser so updates reach installed apps at once
+app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(__dirname, 'public', 'sw.js')));
+app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'public, max-age=3600').type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'manifest.webmanifest')));
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: PROD ? '1h' : 0, extensions: ['html'], index: false }));
 app.get('*', (req, res) => renderPage(req, res, null));
 

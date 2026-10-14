@@ -599,3 +599,17 @@
 598|tayangan
 599|Tayangan
 600|{0} tayangan
+601|Aplikasi xgaigu terpasang!
+602|Pasang aplikasi xgaigu
+603|Di iPhone/iPad, buka halaman ini di Safari lalu ikuti 3 langkah:
+604|Ketuk tombol Bagikan ⬆️ di bagian bawah Safari.
+605|Pilih “Tambah ke Layar Utama”.
+606|Ketuk “Tambah” – ikon xgaigu langsung muncul di layar Anda.
+607|Browser Anda tidak menampilkan jendela pemasangan otomatis. Lakukan ini:
+608|Buka menu browser ⋮ (kanan atas).
+609|Pilih “Instal aplikasi” atau “Tambahkan ke layar utama”.
+610|Konfirmasi – aplikasi langsung terpasang di perangkat, tanpa toko aplikasi.
+611|Pasang aplikasi
+612|Pasang aplikasi xgaigu di perangkat Anda
+613|Sekali ketuk, ikon langsung ada di layar, tanpa Google Play atau App Store. Aplikasi selalu sinkron dengan situs web.
+614|📲 Pasang aplikasi

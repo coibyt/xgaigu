@@ -429,3 +429,9 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
   .toast-root{bottom:90px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+
+/* install app button */
+.xg-install[hidden]{display:none!important}
+.install-btn{background:#e5213c;border-color:#e5213c;color:#fff;font-weight:700}
+.install-btn:hover{background:#c91a33}
+@media (max-width:760px){.install-btn .t{display:none}.install-btn{padding-inline:10px}}
