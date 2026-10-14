@@ -21,6 +21,17 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase();
 
 const app = express();
 app.set('trust proxy', 1);
+
+// ---- domain change: old domains (LEGACY_HOSTS) forward everything to SITE_URL, installed apps follow ----
+const hostOf = (v) => { try { return new URL(/^https?:/.test(v) ? v : 'https://' + v).host.toLowerCase(); } catch { return ''; } };
+const LEGACY = (process.env.LEGACY_HOSTS || '').split(',').map((x) => hostOf(x.trim())).filter(Boolean);
+const isLegacy = (req) => LEGACY.includes((req.get('host') || '').toLowerCase());
+app.use((req, res, next) => {
+  if (!process.env.SITE_URL || !isLegacy(req) || !['GET', 'HEAD'].includes(req.method)) return next();
+  if (/^\/(api|uploads|icons)\/|^\/(sw\.js|manifest\.webmanifest)$/.test(req.path)) return next(); // keep serving what old apps/links need
+  res.redirect(302, process.env.SITE_URL.replace(/\/$/, '') + req.originalUrl);
+});
+app.get('/api/site', (req, res) => res.set('Cache-Control', 'no-store').json({ url: (process.env.SITE_URL || '').replace(/\/$/, ''), moved: !!process.env.SITE_URL && isLegacy(req) }));
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -987,7 +998,11 @@ app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id
 app.get('/', (req, res) => renderPage(req, res, null));
 // installable app (PWA): the worker must never be cached by the browser so updates reach installed apps at once
 app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(__dirname, 'public', 'sw.js')));
-app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'public, max-age=3600').type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'manifest.webmanifest')));
+app.get('/manifest.webmanifest', (req, res) => {
+  const m = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'manifest.webmanifest'), 'utf8'));
+  m.related_applications = [{ platform: 'webapp', url: req.protocol + '://' + req.get('host') + '/manifest.webmanifest' }]; // always this domain
+  res.set('Cache-Control', 'public, max-age=3600').type('application/manifest+json').send(JSON.stringify(m));
+});
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: PROD ? '1h' : 0, extensions: ['html'], index: false }));
 app.get('*', (req, res) => renderPage(req, res, null));
 

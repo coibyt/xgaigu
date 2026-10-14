@@ -431,6 +431,8 @@ const Install = (() => {
   if (navigator.getInstalledRelatedApps) navigator.getInstalledRelatedApps().then((a) => { if (a && a.length) { known = true; lsSet(); refresh(); } }).catch(() => {});
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); evt = e; refresh(); });
   window.addEventListener('appinstalled', () => { evt = null; known = true; lsSet(); refresh(); toast('Đã cài ứng dụng xgaigu!'); });
+  // if the website moved to a new domain, an app installed from the old one jumps to the new domain
+  fetch('/api/site', { cache: 'no-store' }).then((r) => r.json()).then((j) => { if (j && j.moved && j.url) location.replace(j.url + location.pathname + location.search + location.hash); }).catch(() => {});
   if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
   const steps = (items) => h('ol', { style: 'margin:12px 0 0 20px;display:grid;gap:8px;line-height:1.5' }, items.map((t) => h('li', {}, t)));
   async function run() {

@@ -73,3 +73,8 @@ Nút "Cài đặt ứng dụng" (thanh trên, trang chủ, chân trang) cài xga
 - Android/Chrome/Edge: bấm là hiện hộp thoại cài đặt của trình duyệt. iPhone: Safari → Chia sẻ → "Thêm vào Màn hình chính" (Apple không cho cài một chạm).
 - App chính là website (`public/sw.js` luôn lấy bản mới từ mạng trước), nên mọi thay đổi trên web hiện ngay trong app.
 - Biểu tượng tạo bằng `node scripts/make-icons.js`. Cần HTTPS (xgaigu.com đã có).
+
+### Đổi tên miền
+1. Trỏ tên miền mới vào cùng app trên Hostinger, đặt `SITE_URL=https://ten-mien-moi.com`.
+2. Giữ tên miền cũ trỏ vào app và đặt `LEGACY_HOSTS=xgaigu.com` (nhiều tên miền thì cách nhau bằng dấu phẩy), rồi Redeploy.
+3. Link cũ và app đã cài từ tên miền cũ sẽ tự chuyển sang tên miền mới. App là một "cửa sổ" gắn với tên miền nên không đổi tên miền ngay trong chính nó được: khách sẽ thấy nút "Tải ứng dụng" ở tên miền mới để cài lại bản mới.
