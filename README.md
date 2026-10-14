@@ -43,7 +43,7 @@ git push -u origin main
 - Đây là nền tảng cho người trưởng thành: hãy duy trì kiểm duyệt (báo cáo → admin) và tuân thủ pháp luật về nội dung/mạng xã hội tại Việt Nam (đăng ký, quản lý nội dung, bảo vệ dữ liệu cá nhân).
 
 ## Thư viện nhạc trong trình chỉnh sửa video
-- 300 bài nhạc không lời (12 thể loại × 25 bài) do website **tự sáng tác bằng mã** (`public/js/music.js`) và tạo âm thanh ngay trên trình duyệt, nên không dính bản quyền bên thứ ba. Mỗi bài là một đoạn lặp (~15–28 giây) được lặp lại dưới video.
+- 600 bài nhạc không lời (24 thể loại × 25 bài, gồm nhiều bản remix sôi động: Vinahouse, Bass Boost, Dance Pop, Future House, Drill, Hardstyle…) do website **tự sáng tác bằng mã** (`public/js/music.js`) và tạo âm thanh ngay trên trình duyệt, nên không dính bản quyền bên thứ ba. Mỗi bài là một đoạn lặp (~15–28 giây) được lặp lại dưới video.
 - Muốn thêm nhạc thật (MP3) đã có giấy phép sử dụng: đặt file vào `public/music/` rồi khai báo trong `public/data/music.json`, ví dụ:
   `[{ "id": "bai-1", "title": "Tên bài", "style": "Pop", "meta": "Tác giả · 120 BPM", "url": "/music/bai-1.mp3" }]`
   Các bài này sẽ hiện đầu danh sách. Chỉ thêm nhạc bạn có quyền phân phối (royalty-free/CC0 hoặc đã mua giấy phép).
