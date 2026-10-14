@@ -87,6 +87,14 @@ CREATE TABLE IF NOT EXISTS translations (
   out TEXT NOT NULL,
   PRIMARY KEY (lang, src)
 );
+CREATE TABLE IF NOT EXISTS app_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  did TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  device TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_events_kind ON app_events(kind, created_at);
 CREATE TABLE IF NOT EXISTS reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reporter_id INTEGER NOT NULL,
