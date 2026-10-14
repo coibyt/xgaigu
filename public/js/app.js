@@ -732,7 +732,7 @@ async function downloadVideo(v) {
 
 // ---------- feed ----------
 function actBtn(cls, label, ic, count, onclick) {
-  const b = h('button', { class: 'act ' + cls, onclick, 'aria-label': label }, h('span', { class: 'iconbtn', html: icon(ic) }), h('span', { class: 'n' }, count == null ? label : count));
+  const b = h('button', { class: 'act ' + cls + (count == null ? '' : ' cnt'), onclick, 'aria-label': label }, h('span', { class: 'iconbtn', html: icon(ic) }), h('span', { class: 'n' }, count == null ? label : count));
   return b;
 }
 

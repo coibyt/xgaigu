@@ -443,3 +443,12 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
 @keyframes fabpulse{50%{transform:scale(1.05)}}
 @media (max-width:760px){.install-fab{bottom:calc(var(--tab-h) + env(safe-area-inset-bottom) + 14px)}}
 @media (prefers-reduced-motion:reduce){.install-fab{animation:none}}
+
+/* phone: compact action rail — icons only (counts kept for like/comment) so 8 buttons never overlap */
+@media (max-width:760px){
+  .rail{gap:7px;bottom:calc(var(--tab-h) + env(safe-area-inset-bottom) + 12px);right:8px}
+  .rail .act{gap:1px;font-size:10px;line-height:1.1}
+  .rail .act .iconbtn{width:38px;height:38px}
+  .rail .act .iconbtn svg{width:19px;height:19px}
+  .rail .act:not(.cnt) .n{display:none}
+}
