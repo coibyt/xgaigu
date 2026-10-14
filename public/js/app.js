@@ -417,11 +417,20 @@ function openLanguage() {
 // ---------- install app (PWA) ----------
 const Install = (() => {
   let evt = null;
-  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const FLAG = 'xg_installed';
+  const lsGet = () => { try { return localStorage.getItem(FLAG) === '1'; } catch { return false; } };
+  const lsSet = () => { try { localStorage.setItem(FLAG, '1'); } catch {} };
+  const running = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let known = lsGet(); // installed before (remembered), or detected below
+  const standalone = () => { if (running()) { known = true; lsSet(); } return known; };
+  let fabDismissed = false; try { fabDismissed = sessionStorage.getItem('xg_fab_x') === '1'; } catch {}
   const ios = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const refresh = () => document.querySelectorAll('.xg-install').forEach((el) => { el.hidden = standalone(); });
+  const refresh = () => { const inst = standalone(); document.querySelectorAll('.xg-install').forEach((el) => { el.hidden = inst; }); if (fab) fab.hidden = inst || fabDismissed; };
+  let fab = null;
+  // Chrome can tell us whether this site's app is already installed on the device
+  if (navigator.getInstalledRelatedApps) navigator.getInstalledRelatedApps().then((a) => { if (a && a.length) { known = true; lsSet(); refresh(); } }).catch(() => {});
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); evt = e; refresh(); });
-  window.addEventListener('appinstalled', () => { evt = null; refresh(); toast('Đã cài ứng dụng xgaigu!'); });
+  window.addEventListener('appinstalled', () => { evt = null; known = true; lsSet(); refresh(); toast('Đã cài ứng dụng xgaigu!'); });
   if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
   const steps = (items) => h('ol', { style: 'margin:12px 0 0 20px;display:grid;gap:8px;line-height:1.5' }, items.map((t) => h('li', {}, t)));
   async function run() {
@@ -432,6 +441,14 @@ const Install = (() => {
       steps(['Mở menu ⋮ của trình duyệt (góc trên bên phải).', 'Chọn “Cài đặt ứng dụng” hoặc “Thêm vào màn hình chính”.', 'Xác nhận – ứng dụng sẽ được cài vào máy ngay, không cần qua cửa hàng ứng dụng.'])));
   }
   const button = (cls, withText = true) => h('button', { type: 'button', class: 'xg-install ' + cls, hidden: standalone(), onclick: run, 'aria-label': 'Cài đặt ứng dụng', html: '<span aria-hidden="true">📲</span>' + (withText ? '<span class="t">Cài đặt ứng dụng</span>' : '') });
+  // floating download button, shown on every page until the app is installed
+  const mountFab = () => {
+    fab = h('div', { class: 'install-fab', hidden: standalone() || fabDismissed },
+      h('button', { type: 'button', class: 'go', onclick: run, 'aria-label': 'Tải ứng dụng', html: '<span aria-hidden="true">📲</span><span>Tải ứng dụng</span>' }),
+      h('button', { type: 'button', class: 'x', 'aria-label': 'Đóng', onclick: () => { fabDismissed = true; try { sessionStorage.setItem('xg_fab_x', '1'); } catch {} refresh(); } }, '×'));
+    document.body.append(fab);
+  };
+  if (document.body) mountFab(); else document.addEventListener('DOMContentLoaded', mountFab);
   return { run, button, standalone };
 })();
 

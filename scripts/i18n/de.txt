@@ -613,3 +613,4 @@
 612|Installiere die xgaigu-App auf deinem Gerät
 613|Ein Fingertipp legt das Symbol auf deinen Bildschirm – ohne Google Play oder App Store. Die App bleibt immer mit der Website synchron.
 614|📲 App installieren
+615|App herunterladen

@@ -435,3 +435,11 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
 .install-btn{background:#e5213c;border-color:#e5213c;color:#fff;font-weight:700}
 .install-btn:hover{background:#c91a33}
 @media (max-width:760px){.install-btn .t{display:none}.install-btn{padding-inline:10px}}
+
+.install-fab{position:fixed;right:16px;bottom:20px;z-index:70;display:flex;align-items:center;gap:2px;background:#e5213c;color:#fff;border-radius:999px;box-shadow:0 8px 26px rgba(229,33,60,.5);animation:fabpulse 2.4s ease-in-out infinite}
+.install-fab[hidden]{display:none!important}
+.install-fab .go{background:none;border:0;color:#fff;font:inherit;font-weight:700;padding:13px 8px 13px 18px;display:flex;gap:8px;align-items:center;cursor:pointer}
+.install-fab .x{background:none;border:0;color:#fff;opacity:.75;font-size:20px;line-height:1;padding:10px 14px 10px 6px;cursor:pointer}
+@keyframes fabpulse{50%{transform:scale(1.05)}}
+@media (max-width:760px){.install-fab{bottom:calc(var(--tab-h) + env(safe-area-inset-bottom) + 14px)}}
+@media (prefers-reduced-motion:reduce){.install-fab{animation:none}}
