@@ -493,3 +493,6 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
 .btn.callbtn:hover{filter:brightness(1.08)}
 @keyframes callpulse{50%{box-shadow:0 8px 30px rgba(230,20,50,.8);transform:scale(1.04)}}
 @media (prefers-reduced-motion:reduce){.btn.callbtn{animation:none}}
+
+/* programmatic focus target only: no outline box around the whole page */
+main:focus,main:focus-visible{outline:none}
