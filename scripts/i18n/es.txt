@@ -623,3 +623,5 @@
 640|Compartir perfil
 641|Me gusta
 642|Más
+647|Seguir
+674|Siguiendo

@@ -623,3 +623,5 @@
 640|Share profile
 641|Likes
 642|More
+647|Follow
+674|Following

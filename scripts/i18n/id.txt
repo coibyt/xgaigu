@@ -623,3 +623,5 @@
 640|Bagikan profil
 641|Suka
 642|Lainnya
+647|Ikuti
+674|Mengikuti

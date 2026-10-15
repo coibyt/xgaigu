@@ -501,3 +501,14 @@ main:focus,main:focus-visible{outline:none}
 .tk-actions .btn span{white-space:nowrap}
 .tk-stats .pstat span{font-size:12.5px;text-align:center}
 .tk-stats .pstat b{font-size:19px}
+
+/* profile: keep stats and buttons on one tidy line */
+.tk-stats .pstat span{white-space:nowrap;font-size:13px}
+.tk-actions .btn{min-width:0;white-space:nowrap}
+@media (max-width:560px){
+  .tk-actions{gap:6px}
+  .tk-actions .btn{padding:0 8px;font-size:14px;gap:5px}
+  .tk-actions .btn svg{display:none}
+  .tk-actions .btn.more{width:44px}
+  .tk-actions .btn.more svg{display:block}
+}

@@ -1003,12 +1003,12 @@ async function pageUser(id) {
       item('share', 'Chia sẻ hồ sơ', shareProfile), item('flag', 'Báo cáo', () => openReport('user', user.id))), { sheet: true });
   };
   const facts = [['Nghề nghiệp', user.occupation], ['Xuất xứ', user.origin], ['Chiều cao', user.height && user.height + ' cm'], ['Cân nặng', user.weight && user.weight + ' kg'], ['Thời gian rảnh', user.availability]].filter((x) => x[1]);
-  const followBtn = h('button', { class: 'btn primary follow' + (following ? ' on' : '') }, following ? 'Đang theo dõi' : 'Theo dõi');
+  const followBtn = h('button', { class: 'btn primary follow' + (following ? ' on' : '') }, following ? 'Đã theo dõi' : 'Theo dõi');
   followBtn.addEventListener('click', async () => {
     if (!(await needLogin())) return;
     try {
       const r = await api('/users/' + user.id + '/follow', { method: 'POST' });
-      followBtn.classList.toggle('on', r.following); followBtn.textContent = r.following ? 'Đang theo dõi' : 'Theo dõi';
+      followBtn.classList.toggle('on', r.following); followBtn.textContent = r.following ? 'Đã theo dõi' : 'Theo dõi';
       const n = document.querySelector('.tk-stats .pstat b'); if (n) n.textContent = fmtCount(r.followers);
     } catch (e) { fail(e); }
   });
@@ -1016,7 +1016,7 @@ async function pageUser(id) {
     avatar(user, 'xl'),
     h('h2', { class: 'tk-name' }, user.name + (user.age ? ', ' + user.age : '')),
     h('div', { class: 'tk-handle', translate: 'no' }, user.nickname ? '@' + user.nickname : ''),
-    h('div', { class: 'tk-stats' }, stat(stats.followers, 'Người theo dõi'), stat(stats.videos, 'Video'), stat(stats.likes, 'Lượt thích'), stat(stats.views, 'Lượt xem')),
+    h('div', { class: 'tk-stats' }, stat(stats.followers, 'Theo dõi'), stat(stats.videos, 'Video'), stat(stats.likes, 'Lượt thích'), stat(stats.views, 'Lượt xem')),
     h('div', { class: 'tk-actions' }, !me
       ? [followBtn,
         h('button', { class: 'btn', onclick: () => startChat(user), html: icon('send') + '<span>Nhắn tin</span>' }),
