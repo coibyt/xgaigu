@@ -980,7 +980,7 @@ async function pageNearby() {
     h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Tìm quanh đây'), radius),
     h('div', { class: 'card', style: 'padding:20px;display:grid;gap:14px' },
       h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'button', onclick: locate, html: icon('pin') + 'Dùng vị trí hiện tại của tôi' }), h('span', { class: 'muted' }, 'hoặc nhập khu vực:')),
-      h('div', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, h('div', { style: 'flex:1;min-width:0' }, picker.el), go),
+      h('div', { class: 'near-row' }, h('div', { class: 'near-pick' }, picker.el), go),
       h('p', { class: 'muted', style: 'font-size:13px' }, 'Vị trí của bạn chỉ dùng để tìm kiếm, không được lưu lên máy chủ. Người khác chỉ thấy khoảng cách làm tròn.')),
     status, grid), footer());
   if (pos) show();
@@ -1040,9 +1040,30 @@ async function pageUser(id) {
     return c;
   };
   const w = h('div', { class: 'wrap tk' }, head,
-    h('div', { class: 'tk-tabs' }, h('span', { class: 'on', html: icon('video') + '<span>Video</span>' })),
+    h('div', { class: 'tk-tabs' }, h('span', { class: 'on', html: icon('video') + '<span>Video (' + stats.videos + ')</span>' })),
     videos.length ? h('div', { class: 'tgrid' }, videos.map(cell)) : h('div', { class: 'card empty' }, h('p', {}, 'Chưa có video.')));
   main.append(w, footer());
+  // members with many videos: keep loading older ones while scrolling, until all are shown
+  const grid = w.querySelector('.tgrid');
+  if (grid && videos.length >= 60) {
+    let last = videos[videos.length - 1].id, busy = false, finished = false;
+    const sentinel = h('div', { style: 'height:1px' });
+    grid.after(sentinel);
+    const io = new IntersectionObserver(async (en) => {
+      if (!en[0].isIntersecting || busy || finished) return;
+      busy = true;
+      try {
+        const r = await api('/users/' + user.id + '/videos?before=' + last);
+        r.videos.forEach((v) => grid.append(cell(v)));
+        if (r.videos.length) last = r.videos[r.videos.length - 1].id;
+        if (r.videos.length < 60) { finished = true; io.disconnect(); sentinel.remove(); }
+      } catch {}
+      busy = false;
+      if (!finished) { io.unobserve(sentinel); io.observe(sentinel); } // re-check in case the sentinel is still on screen
+    }, { rootMargin: '600px' });
+    io.observe(sentinel);
+    S.cleanups.push(() => io.disconnect());
+  }
 }
 
 async function pageMe() {
@@ -1657,10 +1678,12 @@ async function pageAdmin() {
   S.cleanups.push(() => clearInterval(tick));
   // member list
   const memBody = h('tbody', {}), memInfo = h('div', { class: 'muted', style: 'margin:10px 0;font-size:14px' }), pager = h('div', { class: 'row', style: 'gap:8px;margin-top:12px' });
-  const qIn = h('input', { type: 'search', placeholder: 'Tìm theo email hoặc tên…', style: 'max-width:340px' });
+  const qIn = h('input', { type: 'search', placeholder: 'Tìm theo email hoặc tên…', style: 'flex:1;min-width:200px' });
+  const sortSel = h('select', { 'aria-label': 'Sắp xếp', style: 'width:auto' }, [['newest', 'Mới đăng ký nhất'], ['videos', 'Nhiều video nhất'], ['followers', 'Nhiều người theo dõi nhất'], ['likes', 'Nhiều lượt thích nhất'], ['oldest', 'Đăng ký lâu nhất']].map(([v, l]) => h('option', { value: v }, l)));
+  sortSel.addEventListener('change', () => { page = 0; loadMembers().catch(fail); });
   let page = 0, qt;
   const loadMembers = async () => {
-    const d = await api('/admin/users?page=' + page + '&q=' + encodeURIComponent(qIn.value.trim()));
+    const d = await api('/admin/users?page=' + page + '&q=' + encodeURIComponent(qIn.value.trim()) + '&sort=' + sortSel.value);
     memInfo.textContent = 'Tổng số thành viên: ' + d.total;
     memBody.replaceChildren(...d.users.map((u) => h('tr', {}, h('td', {}, String(u.id)), h('td', { translate: 'no', style: 'word-break:break-all' }, u.email), h('td', { translate: 'no' }, u.name + (u.role === 'admin' ? ' (admin)' : '')),
       h('td', {}, String(u.videos)), h('td', {}, String(u.followers)), h('td', {}, String(u.likes)), h('td', {}, new Date(u.created_at).toLocaleDateString('vi-VN')),
@@ -1669,7 +1692,7 @@ async function pageAdmin() {
   };
   qIn.addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(() => { page = 0; loadMembers().catch(fail); }, 300); });
   await loadMembers().catch(fail);
-  const membersBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thành viên đã đăng ký'), qIn, memInfo,
+  const membersBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thành viên đã đăng ký'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, qIn, sortSel), memInfo,
     h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Email', 'Tên', 'Video', 'Theo dõi', 'Lượt thích', 'Ngày đăng ký', ''].map((x) => h('th', {}, x)))), memBody)), pager);
   main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, membersBox, statBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));

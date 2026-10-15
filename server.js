@@ -361,6 +361,13 @@ app.get('/api/users/:id', (req, res) => {
   res.json({ user: publicUser(u), videos: listVideos(req.user, { userId: u.id, limit: 60 }), stats, following });
 });
 
+app.get('/api/users/:id(\\d+)/videos', (req, res) => {
+  const u = db.prepare('SELECT id FROM users WHERE id = ? AND banned = 0').get(req.params.id);
+  if (!u) return fail(res, 404, 'Không tìm thấy người dùng');
+  const before = parseInt(req.query.before, 10) || null;
+  res.json({ videos: listVideos(req.user, { userId: u.id, before, limit: 60 }) });
+});
+
 app.get('/api/users/:id/phone', needUser, (req, res) => {
   const u = db.prepare('SELECT phone, show_phone FROM users WHERE id = ? AND banned = 0').get(req.params.id);
   if (!u || !u.show_phone || !u.phone) return fail(res, 404, 'Người này chưa mở số điện thoại');
@@ -957,6 +964,7 @@ app.get('/api/admin/traffic', needAdmin, (_req, res) => {
 app.get('/api/admin/users', needAdmin, (req, res) => {
   const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
   const page = Math.max(parseInt(req.query.page, 10) || 0, 0), size = 30;
+  const order = { videos: 'videos DESC, u.id DESC', followers: 'followers DESC, u.id DESC', likes: 'likes DESC, u.id DESC', oldest: 'u.id ASC' }[req.query.sort] || 'u.id DESC';
   const where = "(lower(u.email) LIKE ? OR lower(u.name) LIKE ?)";
   const total = db.prepare('SELECT COUNT(*) AS n FROM users u WHERE ' + where).get(q, q).n;
   const users = db.prepare(
@@ -964,7 +972,7 @@ app.get('/api/admin/users', needAdmin, (req, res) => {
        (SELECT COUNT(*) FROM videos v WHERE v.user_id = u.id AND v.hidden = 0) AS videos,
        (SELECT COUNT(*) FROM likes l JOIN videos v ON v.id = l.video_id WHERE v.user_id = u.id) AS likes,
        (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers
-     FROM users u WHERE ${where} ORDER BY u.id DESC LIMIT ? OFFSET ?`).all(q, q, size, page * size);
+     FROM users u WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`).all(q, q, size, page * size);
   res.json({ users, total, page, size });
 });
 
