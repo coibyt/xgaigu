@@ -356,7 +356,9 @@ app.get('/api/users/:id', (req, res) => {
   const stats = db.prepare(
     `SELECT COUNT(*) AS videos, COALESCE(SUM(v.views), 0) AS views, COALESCE(SUM((SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id)), 0) AS likes
      FROM videos v WHERE v.user_id = ? AND v.hidden = 0`).get(u.id);
-  res.json({ user: publicUser(u), videos: listVideos(req.user, { userId: u.id, limit: 60 }), stats });
+  stats.followers = db.prepare('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?').get(u.id).n;
+  const following = !!(req.user && db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?').get(req.user.id, u.id));
+  res.json({ user: publicUser(u), videos: listVideos(req.user, { userId: u.id, limit: 60 }), stats, following });
 });
 
 app.get('/api/users/:id/phone', needUser, (req, res) => {
@@ -926,6 +928,56 @@ app.get('/api/admin/app-stats', needAdmin, (_req, res) => {
      WHERE created_at > ? GROUP BY day, kind ORDER BY day DESC`).all(t - 14 * DAY);
   res.json({ click: block('click'), install: block('install'), open: block('open'), byDevice, daily });
 });
+// ---------- visitor analytics ----------
+// Every open page pings now and then with an anonymous device id; "online now" = pinged in the last ~70 s.
+const vnDay = (t = now()) => new Date(t + 7 * 3600_000).toISOString().slice(0, 10); // Vietnam time (UTC+7)
+const pingLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false });
+app.post('/api/ping', pingLimiter, (req, res) => {
+  const did = String(req.body.did || '').replace(/[^\w-]/g, '').slice(0, 40);
+  if (did.length < 8) return res.json({ ok: true });
+  const t = now();
+  db.prepare(
+    `INSERT INTO presence (did, day, first_seen, last_seen, hits) VALUES (?,?,?,?,?)
+     ON CONFLICT(did, day) DO UPDATE SET last_seen = excluded.last_seen, hits = hits + excluded.hits`
+  ).run(did, vnDay(t), t, t, req.body.pv ? 1 : 0);
+  res.json({ ok: true });
+});
+app.get('/api/admin/traffic', needAdmin, (_req, res) => {
+  const t = now(), today = vnDay(t), yesterday = vnDay(t - 86400_000);
+  const day = (d) => db.prepare('SELECT COUNT(*) AS visitors, COALESCE(SUM(hits), 0) AS views FROM presence WHERE day = ?').get(d);
+  const daily = db.prepare('SELECT day, COUNT(*) AS visitors, COALESCE(SUM(hits), 0) AS views FROM presence WHERE day >= ? GROUP BY day ORDER BY day DESC').all(vnDay(t - 13 * 86400_000));
+  res.json({
+    online: db.prepare('SELECT COUNT(*) AS n FROM presence WHERE last_seen > ?').get(t - 70_000).n,
+    today: day(today), yesterday: day(yesterday), daily,
+    allTime: db.prepare('SELECT COUNT(DISTINCT did) AS n FROM presence').get().n,
+  });
+});
+
+// ---------- members (admin) ----------
+app.get('/api/admin/users', needAdmin, (req, res) => {
+  const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
+  const page = Math.max(parseInt(req.query.page, 10) || 0, 0), size = 30;
+  const where = "(lower(u.email) LIKE ? OR lower(u.name) LIKE ?)";
+  const total = db.prepare('SELECT COUNT(*) AS n FROM users u WHERE ' + where).get(q, q).n;
+  const users = db.prepare(
+    `SELECT u.id, u.email, u.name, u.role, u.banned, u.created_at,
+       (SELECT COUNT(*) FROM videos v WHERE v.user_id = u.id AND v.hidden = 0) AS videos,
+       (SELECT COUNT(*) FROM likes l JOIN videos v ON v.id = l.video_id WHERE v.user_id = u.id) AS likes,
+       (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers
+     FROM users u WHERE ${where} ORDER BY u.id DESC LIMIT ? OFFSET ?`).all(q, q, size, page * size);
+  res.json({ users, total, page, size });
+});
+
+// ---------- follow ----------
+app.post('/api/users/:id(\\d+)/follow', needUser, postLimiter, (req, res) => {
+  const id = Number(req.params.id);
+  if (id === req.user.id) return fail(res, 400, 'Không thể tự theo dõi mình');
+  if (!db.prepare('SELECT 1 FROM users WHERE id = ? AND banned = 0').get(id)) return fail(res, 404, 'Không tìm thấy người dùng');
+  const had = db.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').run(req.user.id, id).changes;
+  if (!had) db.prepare('INSERT INTO follows (follower_id, followee_id, created_at) VALUES (?,?,?)').run(req.user.id, id, now());
+  res.json({ following: !had, followers: db.prepare('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?').get(id).n });
+});
+
 app.get('/api/admin/reports', needAdmin, (_req, res) => {
   const rows = db.prepare(
     `SELECT r.*, u.name AS reporter FROM reports r JOIN users u ON u.id = r.reporter_id

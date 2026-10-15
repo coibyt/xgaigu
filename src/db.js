@@ -95,6 +95,22 @@ CREATE TABLE IF NOT EXISTS app_events (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_app_events_kind ON app_events(kind, created_at);
+CREATE TABLE IF NOT EXISTS follows (
+  follower_id INTEGER NOT NULL,
+  followee_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (follower_id, followee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_follows_followee ON follows(followee_id);
+CREATE TABLE IF NOT EXISTS presence (
+  did TEXT NOT NULL,
+  day TEXT NOT NULL,
+  first_seen INTEGER NOT NULL,
+  last_seen INTEGER NOT NULL,
+  hits INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (did, day)
+);
+CREATE INDEX IF NOT EXISTS idx_presence_last ON presence(last_seen);
 CREATE TABLE IF NOT EXISTS reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reporter_id INTEGER NOT NULL,

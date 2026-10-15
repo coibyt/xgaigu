@@ -414,6 +414,15 @@ function openLanguage() {
   modal(h('div', {}, h('h3', {}, 'Ngôn ngữ / Language'), h('p', { class: 'sub' }, 'Website tự dịch sang ngôn ngữ bạn chọn. Bản dịch tự động có thể chưa hoàn hảo.'), auto, search, list), { wide: true });
 }
 
+// ---------- visitor ping (anonymous device id; lets the admin see online visitors and daily traffic) ----------
+function ping(pv) {
+  try {
+    let d = localStorage.getItem('xg_did');
+    if (!d) { d = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/[^\w-]/g, ''); localStorage.setItem('xg_did', d); }
+    fetch('/api/ping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ did: d, pv: !!pv }), keepalive: true }).catch(() => {});
+  } catch {}
+}
+
 // ---------- install app (PWA) ----------
 const Install = (() => {
   let evt = null;
@@ -978,7 +987,7 @@ async function pageNearby() {
 }
 
 async function pageUser(id) {
-  const { user, videos, stats } = await api('/users/' + id);
+  const { user, videos, stats, following } = await api('/users/' + id);
   const me = S.user && S.user.id === user.id;
   const stat = (n, label) => h('div', { class: 'pstat' }, h('b', {}, fmtCount(n)), h('span', {}, label));
   const profileLink = location.origin + '/#/u/' + user.id;
@@ -994,13 +1003,23 @@ async function pageUser(id) {
       item('share', 'Chia sẻ hồ sơ', shareProfile), item('flag', 'Báo cáo', () => openReport('user', user.id))), { sheet: true });
   };
   const facts = [['Nghề nghiệp', user.occupation], ['Xuất xứ', user.origin], ['Chiều cao', user.height && user.height + ' cm'], ['Cân nặng', user.weight && user.weight + ' kg'], ['Thời gian rảnh', user.availability]].filter((x) => x[1]);
+  const followBtn = h('button', { class: 'btn primary follow' + (following ? ' on' : '') }, following ? 'Đang theo dõi' : 'Theo dõi');
+  followBtn.addEventListener('click', async () => {
+    if (!(await needLogin())) return;
+    try {
+      const r = await api('/users/' + user.id + '/follow', { method: 'POST' });
+      followBtn.classList.toggle('on', r.following); followBtn.textContent = r.following ? 'Đang theo dõi' : 'Theo dõi';
+      const n = document.querySelector('.tk-stats .pstat b'); if (n) n.textContent = fmtCount(r.followers);
+    } catch (e) { fail(e); }
+  });
   const head = h('div', { class: 'tk-head' },
     avatar(user, 'xl'),
     h('h2', { class: 'tk-name' }, user.name + (user.age ? ', ' + user.age : '')),
     h('div', { class: 'tk-handle', translate: 'no' }, user.nickname ? '@' + user.nickname : ''),
-    h('div', { class: 'tk-stats' }, stat(stats.videos, 'Video'), stat(stats.likes, 'Lượt thích'), stat(stats.views, 'Lượt xem')),
+    h('div', { class: 'tk-stats' }, stat(stats.followers, 'Người theo dõi'), stat(stats.videos, 'Video'), stat(stats.likes, 'Lượt thích'), stat(stats.views, 'Lượt xem')),
     h('div', { class: 'tk-actions' }, !me
-      ? [h('button', { class: 'btn primary', onclick: () => startChat(user), html: icon('send') + '<span>Nhắn tin</span>' }),
+      ? [followBtn,
+        h('button', { class: 'btn', onclick: () => startChat(user), html: icon('send') + '<span>Nhắn tin</span>' }),
         h('button', { class: 'btn', onclick: () => openBook(user), html: icon('cal') + '<span>Hẹn gặp</span>' }),
         h('button', { class: 'btn more', 'aria-label': 'Thêm', onclick: more, html: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M7 10l5 6 5-6z"/></svg>' })]
       : [h('a', { class: 'btn primary', href: '#/me' }, 'Sửa hồ sơ'), h('button', { class: 'btn', onclick: shareProfile, html: icon('share') + '<span>Chia sẻ hồ sơ</span>' })]),
@@ -1605,7 +1624,7 @@ function pageTerms() {
 // ---------- admin ----------
 async function pageAdmin() {
   if (!S.user || S.user.role !== 'admin') { location.hash = '#/'; return; }
-  const [{ reports }, st] = await Promise.all([api('/admin/reports'), api('/admin/app-stats')]);
+  const [{ reports }, st, tr] = await Promise.all([api('/admin/reports'), api('/admin/app-stats'), api('/admin/traffic')]);
   const kv = (label, b, note) => h('div', { class: 'card', style: 'padding:16px;flex:1;min-width:210px' }, h('div', { class: 'muted', style: 'font-size:13px' }, label),
     h('div', { style: 'font-size:32px;font-weight:800;margin:4px 0' }, String(b.total)),
     h('div', { class: 'muted', style: 'font-size:13px;line-height:1.6' }, 'Hôm nay: ' + b.today + ' · 7 ngày: ' + b.week + ' · 30 ngày: ' + b.month, h('br'), 'Số thiết bị khác nhau: ' + b.devices), note && h('div', { class: 'muted', style: 'font-size:12px;margin-top:6px' }, note));
@@ -1624,7 +1643,35 @@ async function pageAdmin() {
       r.target_type === 'video' && h('button', { class: 'btn sm', onclick: async () => { await api('/admin/videos/' + r.target_id + '/hide', { method: 'POST' }); toast('Đã ẩn'); } }, 'Ẩn video'),
       r.target_type === 'user' && h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá người dùng này?')) { await api('/admin/users/' + r.target_id + '/ban', { method: 'POST' }); toast('Đã khoá'); } } }, 'Khoá user'),
       h('button', { class: 'btn sm primary', onclick: async () => { await api('/admin/reports/' + r.id + '/resolve', { method: 'POST' }); route(); } }, 'Xong')))));
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, statBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  const big = (label, val, note) => h('div', { class: 'card', style: 'padding:16px;flex:1;min-width:150px' }, h('div', { class: 'muted', style: 'font-size:13px' }, label), h('div', { style: 'font-size:32px;font-weight:800;margin:4px 0' }, val), note && h('div', { class: 'muted', style: 'font-size:12px' }, note));
+  const onlineEl = h('span', {}, String(tr.online));
+  const trafficBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:16px' }, 'Lượng truy cập website'),
+    h('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap;margin-bottom:16px' },
+      big('Đang xem website lúc này', h('span', {}, h('span', { style: 'color:#34d399' }, '● '), onlineEl), 'Tự cập nhật mỗi 20 giây'),
+      big('Khách truy cập hôm nay', String(tr.today.visitors), 'Mỗi thiết bị tính 1 lần/ngày · hôm qua: ' + tr.yesterday.visitors),
+      big('Lượt xem trang hôm nay', String(tr.today.views), 'Hôm qua: ' + tr.yesterday.views),
+      big('Tổng số thiết bị đã vào', String(tr.allTime), 'Từ khi bật thống kê')),
+    tr.daily.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['Ngày (giờ Việt Nam)', 'Khách truy cập', 'Lượt xem trang'].map((x) => h('th', {}, x)))),
+      h('tbody', {}, tr.daily.map((d) => h('tr', {}, h('td', {}, d.day), h('td', {}, String(d.visitors)), h('td', {}, String(d.views))))))) : h('p', { class: 'muted' }, 'Chưa có dữ liệu. Số liệu bắt đầu đếm từ khi website cập nhật bản này.'));
+  const tick = setInterval(async () => { try { onlineEl.textContent = String((await api('/admin/traffic')).online); } catch {} }, 20000);
+  S.cleanups.push(() => clearInterval(tick));
+  // member list
+  const memBody = h('tbody', {}), memInfo = h('div', { class: 'muted', style: 'margin:10px 0;font-size:14px' }), pager = h('div', { class: 'row', style: 'gap:8px;margin-top:12px' });
+  const qIn = h('input', { type: 'search', placeholder: 'Tìm theo email hoặc tên…', style: 'max-width:340px' });
+  let page = 0, qt;
+  const loadMembers = async () => {
+    const d = await api('/admin/users?page=' + page + '&q=' + encodeURIComponent(qIn.value.trim()));
+    memInfo.textContent = 'Tổng số thành viên: ' + d.total;
+    memBody.replaceChildren(...d.users.map((u) => h('tr', {}, h('td', {}, String(u.id)), h('td', { translate: 'no', style: 'word-break:break-all' }, u.email), h('td', { translate: 'no' }, u.name + (u.role === 'admin' ? ' (admin)' : '')),
+      h('td', {}, String(u.videos)), h('td', {}, String(u.followers)), h('td', {}, String(u.likes)), h('td', {}, new Date(u.created_at).toLocaleDateString('vi-VN')),
+      h('td', {}, u.banned ? h('span', { class: 'muted' }, 'Đã khoá') : u.role === 'admin' ? '' : h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá tài khoản ' + u.email + '?')) { await api('/admin/users/' + u.id + '/ban', { method: 'POST' }); loadMembers(); } } }, 'Khoá')))));
+    pager.replaceChildren(page > 0 && h('button', { class: 'btn sm', onclick: () => { page--; loadMembers(); } }, '← Trước'), (page + 1) * d.size < d.total && h('button', { class: 'btn sm', onclick: () => { page++; loadMembers(); } }, 'Sau →'));
+  };
+  qIn.addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(() => { page = 0; loadMembers().catch(fail); }, 300); });
+  await loadMembers().catch(fail);
+  const membersBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thành viên đã đăng ký'), qIn, memInfo,
+    h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Email', 'Tên', 'Video', 'Theo dõi', 'Lượt thích', 'Ngày đăng ký', ''].map((x) => h('th', {}, x)))), memBody)), pager);
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, membersBox, statBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 
@@ -1682,7 +1729,10 @@ window.XG = { h, toast, icon };
   { const m = location.pathname.match(/^\/v\/(\d+)\/?$/); if (m) history.replaceState(null, '', '/#/feed/' + m[1]); } // opened from a shared link
   try { S.user = (await api('/me')).user; } catch {}
   connectEvents();
-  window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', () => { route(); ping(true); });
   route();
+  ping(true);
+  setInterval(() => { if (document.visibilityState === 'visible') ping(false); }, 25000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') ping(false); });
 })();
 })();

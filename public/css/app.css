@@ -496,3 +496,8 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
 
 /* programmatic focus target only: no outline box around the whole page */
 main:focus,main:focus-visible{outline:none}
+
+.btn.follow.on{background:var(--surface2);border:1px solid var(--line);color:var(--text);box-shadow:none}
+.tk-actions .btn span{white-space:nowrap}
+.tk-stats .pstat span{font-size:12.5px;text-align:center}
+.tk-stats .pstat b{font-size:19px}
