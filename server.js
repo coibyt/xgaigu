@@ -17,7 +17,9 @@ const db = require('./src/db');
 
 const PORT = process.env.PORT || 3000;
 const PROD = process.env.NODE_ENV === 'production';
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+// the account that uses ADMIN_EMAIL is always an admin, even if it was registered before the variable was set
+if (ADMIN_EMAIL) db.prepare("UPDATE users SET role = 'admin' WHERE lower(email) = ? AND role <> 'admin'").run(ADMIN_EMAIL);
 
 const app = express();
 app.set('trust proxy', 1);
