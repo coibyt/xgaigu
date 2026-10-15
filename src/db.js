@@ -153,6 +153,8 @@ for (const [col, ddl] of [
   ['lat', 'lat REAL'],
   ['lng', 'lng REAL'],
   ['views', 'views INTEGER DEFAULT 0'],
+  ['locked', 'locked INTEGER DEFAULT 0'],
+  ['mod_note', "mod_note TEXT DEFAULT ''"],
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 
 // Streams left "live" by a previous process are no longer live.

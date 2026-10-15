@@ -997,6 +997,50 @@ app.post('/api/admin/reports/:id/resolve', needAdmin, (req, res) => {
   db.prepare('UPDATE reports SET resolved = 1 WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
+// Video moderation: status is "visible", "hidden" (admin hid it, can be shown again) or "banned" (cấm xuất bản, with a reason).
+const adminVideoRow = (id) => {
+  const r = db.prepare(
+    `SELECT v.*, u.email AS u_email, u.name AS u_name,
+       (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id) AS likes, (SELECT COUNT(*) FROM comments c WHERE c.video_id = v.id) AS comments
+     FROM videos v JOIN users u ON u.id = v.user_id WHERE v.id = ?`).get(id);
+  if (!r) return null;
+  let info = {}; try { info = JSON.parse(r.info || '{}'); } catch {}
+  return { id: r.id, caption: r.caption, nickname: r.nickname, phone: r.v_phone, file: r.file, url: r.url, thumb: r.thumb, region: r.region, province: r.province, district: r.district,
+    info, views: r.views || 0, likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? 'hidden' : 'visible', note: r.mod_note || '',
+    owner: { id: r.user_id, email: r.u_email, name: r.u_name } };
+};
+app.get('/api/admin/videos', needAdmin, (req, res) => {
+  const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
+  const st = { visible: 'v.hidden = 0 AND v.locked = 0', hidden: 'v.hidden = 1 AND v.locked = 0', banned: 'v.locked = 1' }[req.query.status] || '1 = 1';
+  const page = Math.max(parseInt(req.query.page, 10) || 0, 0), size = 20;
+  const where = `${st} AND (lower(v.caption) LIKE ? OR lower(v.nickname) LIKE ? OR lower(u.email) LIKE ? OR CAST(v.id AS TEXT) = ?)`;
+  const idq = String(req.query.q || '').trim();
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM videos v JOIN users u ON u.id = v.user_id WHERE ${where}`).get(q, q, q, idq).n;
+  const ids = db.prepare(`SELECT v.id FROM videos v JOIN users u ON u.id = v.user_id WHERE ${where} ORDER BY v.id DESC LIMIT ? OFFSET ?`).all(q, q, q, idq, size, page * size);
+  res.json({ videos: ids.map((x) => adminVideoRow(x.id)), total, page, size });
+});
+app.get('/api/admin/videos/:id(\\d+)', needAdmin, (req, res) => {
+  const v = adminVideoRow(req.params.id);
+  if (!v) return fail(res, 404, 'Không tìm thấy video');
+  res.json({ video: v });
+});
+app.post('/api/admin/videos/:id(\\d+)/status', needAdmin, (req, res) => {
+  const status = req.body.status;
+  if (!['visible', 'hidden', 'banned'].includes(status)) return fail(res, 400, 'Trạng thái không hợp lệ');
+  if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(req.params.id)) return fail(res, 404, 'Không tìm thấy video');
+  db.prepare('UPDATE videos SET hidden = ?, locked = ?, mod_note = ? WHERE id = ?')
+    .run(status === 'visible' ? 0 : 1, status === 'banned' ? 1 : 0, status === 'visible' ? '' : clean(req.body.note, 300), req.params.id);
+  res.json({ ok: true, video: adminVideoRow(req.params.id) });
+});
+app.put('/api/admin/videos/:id(\\d+)', needAdmin, (req, res) => {
+  const v = db.prepare('SELECT id FROM videos WHERE id = ?').get(req.params.id);
+  if (!v) return fail(res, 404, 'Không tìm thấy video');
+  const area = readArea(req.body);
+  if (!area.region || !area.province) return fail(res, 400, 'Vui lòng chọn miền và tỉnh/thành');
+  db.prepare('UPDATE videos SET caption = ?, nickname = ?, v_phone = ?, region = ?, province = ?, district = ?, info = ? WHERE id = ?')
+    .run(clean(req.body.caption, 300), clean(req.body.nickname, 40), clean(req.body.phone, 20).replace(/[^\d+]/g, ''), area.region, area.province, area.district, JSON.stringify(readInfo(req.body)), v.id);
+  res.json({ ok: true, video: adminVideoRow(v.id) });
+});
 app.post('/api/admin/videos/:id/hide', needAdmin, (req, res) => {
   db.prepare('UPDATE videos SET hidden = 1 WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
