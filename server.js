@@ -1146,6 +1146,12 @@ app.use('/api', (_req, res) => fail(res, 404, 'Không tìm thấy'));
 const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cut = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s; };
 
+// Version stamp for scripts and styles (latest change time), so phones and CDNs always fetch the new files after a redeploy.
+const ASSET_V = (() => {
+  let t = 0;
+  for (const d of ['js', 'css']) { try { for (const f of fs.readdirSync(path.join(__dirname, 'public', d))) t = Math.max(t, fs.statSync(path.join(__dirname, 'public', d, f)).mtimeMs); } catch {} }
+  return Math.round(t / 1000).toString(36);
+})();
 function renderPage(req, res, v) {
   const base = (process.env.SITE_URL || req.protocol + '://' + req.get('host')).replace(/\/$/, '');
   const abs = (u) => (!u ? '' : /^https?:\/\//.test(u) ? u : base + u);
@@ -1176,8 +1182,9 @@ function renderPage(req, res, v) {
   ].join('\n');
   let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
   html = html.replace(/<title>[\s\S]*?<\/title>\s*/, '').replace(/<meta name="description"[^>]*>\s*/, '').replace(/<meta property="og:[^>]*>\s*/g, '');
+  html = html.replace(/(\/(?:js\/[\w.-]+\.js|css\/app\.css))"/g, '$1?v=' + ASSET_V + '"');
   html = html.replace('</head>', tags + '\n</head>');
-  res.set('Cache-Control', 'public, max-age=300').type('html').send(html);
+  res.set('Cache-Control', 'no-cache').type('html').send(html);
 }
 
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));

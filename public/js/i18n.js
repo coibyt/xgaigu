@@ -127,7 +127,7 @@ function translate(raw) {
   return null;
 }
 async function loadDict(code) {
-  const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(u); return r.json(); };
+  const get = async (u) => { const r = await fetch(u, { cache: 'no-cache' }); if (!r.ok) throw new Error(u); return r.json(); };
   build(await get('/i18n/catalog.json'), await get('/i18n/' + code + '.json'));
 }
 
@@ -195,7 +195,7 @@ async function startEngine(l) {
   E.started = true;
   document.documentElement.classList.add('xg-tr-pending'); setTimeout(unveil, 1500); // avoid a flash of Vietnamese
   let hasDict = false;
-  try { hasDict = ((await (await fetch('/i18n/index.json')).json()).langs || []).includes(l.code); } catch {}
+  try { hasDict = ((await (await fetch('/i18n/index.json', { cache: 'no-cache' })).json()).langs || []).includes(l.code); } catch {}
   if (hasDict) { try { await loadDict(l.code); E.mode = 'dict'; } catch {} }
   if (!E.mode) { E.mode = 'api'; T.lang = l.code; loadCache(l.code); }
   const go = () => {
