@@ -625,3 +625,5 @@
 642|Plus
 647|S'abonner
 674|Abonné
+677|🔥 Tendance
+678|🆕 Nouveau

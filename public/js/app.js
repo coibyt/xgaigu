@@ -760,6 +760,10 @@ const Pref = {
   param() { return Object.entries(this.get()).map(([k, v]) => k.replace(/[|~]/g, ' ') + '~' + v.toFixed(2)).join('|'); },
 };
 
+// "Đang hot" / "Mới" badge on a video (automatic, or chosen by an admin)
+const isAdmin = () => !!(S.user && S.user.role === 'admin');
+const vtag = (v) => (v.badge ? h('span', { class: 'vtag ' + v.badge }, v.badge === 'hot' ? '🔥 Đang hot' : '🆕 Mới') : null);
+
 // ---------- feed ----------
 function actBtn(cls, label, ic, count, onclick) {
   const b = h('button', { class: 'act ' + cls + (count == null ? '' : ' cnt'), onclick, 'aria-label': label }, h('span', { class: 'iconbtn', html: icon(ic) }), h('span', { class: 'n' }, count == null ? label : count));
@@ -801,7 +805,7 @@ function slide(v) {
     actBtn('', 'Báo cáo', 'flag', null, () => openReport('video', v.id)));
   const el = h('article', { class: 'slide', 'data-id': v.id },
     h('div', { class: 'player' }, media, mute,
-      h('div', { class: 'meta' },
+      h('div', { class: 'meta' }, vtag(v),
         h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
         (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
         h('button', { class: 'infobtn', type: 'button', onclick: () => openInfo(v), html: icon('info') + 'Xem thông tin' }),
@@ -863,7 +867,8 @@ function vthumb(v) {
   else { media.style.pointerEvents = 'none'; }
   return h('a', { class: 'vcard', href: '#/feed/' + v.id, 'aria-label': 'Xem video của ' + v.user.name },
     media, h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(v.user), v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.caption && h('div', { class: 'cap', translate: 'no' }, v.caption)),
-    h('span', { class: 'views', title: fmtCount(v.views || 0) + ' lượt xem', html: icon('heart') + v.likes + '<span class="vsep">·</span>' + icon('eye2') + fmtCount(v.views || 0) }),
+    vtag(v),
+    h('span', { class: 'views', title: isAdmin() ? fmtCount(v.views || 0) + ' lượt xem' : '', html: icon('heart') + v.likes + (isAdmin() ? '<span class="vsep">·</span>' + icon('eye2') + fmtCount(v.views || 0) : '') }),
     v.distanceKm != null && h('span', { class: 'distance', html: icon('pin') + '≈ ' + v.distanceKm + ' km' }));
 }
 function lcard(s) {
@@ -1016,7 +1021,7 @@ async function pageUser(id) {
     avatar(user, 'xl'),
     h('h2', { class: 'tk-name' }, user.name + (user.age ? ', ' + user.age : '')),
     h('div', { class: 'tk-handle', translate: 'no' }, user.nickname ? '@' + user.nickname : ''),
-    h('div', { class: 'tk-stats' }, stat(stats.followers, 'Theo dõi'), stat(stats.videos, 'Video'), stat(stats.likes, 'Lượt thích'), stat(stats.views, 'Lượt xem')),
+    h('div', { class: 'tk-stats' }, stat(stats.followers, 'Theo dõi'), stat(stats.videos, 'Video'), stat(stats.likes, 'Lượt thích'), isAdmin() && stats.views != null && stat(stats.views, 'Lượt xem')),
     h('div', { class: 'tk-actions' }, !me
       ? [followBtn,
         h('button', { class: 'btn', onclick: () => startChat(user), html: icon('send') + '<span>Nhắn tin</span>' }),
@@ -1035,7 +1040,7 @@ async function pageUser(id) {
     const media = poster ? h('img', { src: poster, alt: v.caption || 'Video', loading: 'lazy' })
       : (() => { const m = mediaEl(v); if (m instanceof HTMLVideoElement) m.setAttribute('preload', 'metadata'); else m.style.pointerEvents = 'none'; return m; })();
     const c = h('a', { class: 'tcell', href: '#/feed/' + v.id, 'aria-label': 'Xem video' }, media,
-      h('span', { class: 'tviews', html: icon('play') + fmtCount(v.views || 0) }));
+      vtag(v), h('span', { class: 'tviews', html: isAdmin() ? icon('play') + fmtCount(v.views || 0) : icon('heart') + fmtCount(v.likes || 0) }));
     if (me) c.append(h('button', { class: 'iconbtn tdel', 'aria-label': 'Xoá video', html: icon('trash'), onclick: async (e) => { e.preventDefault(); e.stopPropagation(); if (!confirm('Xoá video này?')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); route(); } catch (er) { fail(er); } } }));
     return c;
   };
@@ -1164,7 +1169,7 @@ function openInfo(v) {
   const i = v.info || {};
   const rows = [
     ['Khu vực', [v.district, v.province, REGION_NAMES[v.region]].filter(Boolean).join(', ')],
-    ['Lượt xem', fmtCount(v.views || 0)],
+    isAdmin() && ['Lượt xem (thật, chỉ admin thấy)', fmtCount(v.views || 0)],
     ['Năm sinh', i.birthYear], ['Chiều cao', i.height && i.height + ' cm'], ['Cân nặng', i.weight && i.weight + ' kg'],
     ['Xuất xứ', i.origin], ['Nghề nghiệp', i.occupation], ['Địa chỉ', i.address], ['Thời gian rảnh', i.workTime],
   ].filter((r) => r[1]);
@@ -1649,6 +1654,8 @@ async function adminVideoDialog(id, onChange) {
   let v;
   try { v = (await api('/admin/videos/' + id)).video; } catch (e) { return fail(e); }
   const STATUS = { visible: 'Đang hiển thị', hidden: 'Đã ẩn', banned: 'Bị cấm xuất bản' };
+  const badgeSel = h('select', { 'aria-label': 'Huy hiệu', style: 'width:auto' }, [['', 'Huy hiệu: tự động'], ['hot', '🔥 Luôn hiện “Đang hot”'], ['new', '🆕 Luôn hiện “Mới”'], ['off', 'Không hiện huy hiệu']].map(([a, b]) => h('option', { value: a, selected: (v.badge || '') === a }, b)));
+  badgeSel.addEventListener('change', async () => { try { v = (await api('/admin/videos/' + v.id + '/badge', { method: 'POST', body: { badge: badgeSel.value } })).video; toast('Đã cập nhật huy hiệu'); onChange && onChange(); } catch (e) { fail(e); } });
   const geo = geoPicker();
   const input = (name, label, val, attrs = {}) => h('label', { class: 'f' }, h('span', {}, label), h('input', { name, value: val == null ? '' : val, ...attrs }));
   const i = v.info || {};
@@ -1677,7 +1684,7 @@ async function adminVideoDialog(id, onChange) {
       h('button', { class: 'btn sm', type: 'button', onclick: () => setStatus('hidden') }, 'Ẩn video'),
       h('button', { class: 'btn sm live', type: 'button', onclick: () => setStatus('banned') }, 'Cấm xuất bản'),
       h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!confirm('XOÁ vĩnh viễn video này? Không thể khôi phục.')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); toast('Đã xoá video'); m.close(); onChange && onChange(); } catch (e) { fail(e); } } }, 'Xoá')),
-    note, h('div', { style: 'height:12px' }), f), { wide: true });
+    h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), note, h('div', { style: 'height:12px' }), f), { wide: true });
   // fill the area selects once the region list has loaded
   loadGeo().then((g) => {
     const [reg, prov, dist] = geo.el.querySelectorAll('select');

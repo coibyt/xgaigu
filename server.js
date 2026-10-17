@@ -62,6 +62,12 @@ app.use('/api', apiLimiter);
 
 // ---------- helpers ----------
 const now = () => Date.now();
+// Recent activity (view = 1 point, like or comment = 3 points) decides which videos are "hot". Only the last 3 days are kept.
+const DAY_MS = 86400_000, HOT_MIN = Number(process.env.HOT_MIN) || 12;
+const act = (videoId, kind) => { try { db.prepare('INSERT INTO video_activity (video_id, kind, at) VALUES (?,?,?)').run(videoId, kind, Date.now()); } catch {} };
+setInterval(() => { try { db.prepare('DELETE FROM video_activity WHERE at < ?').run(Date.now() - 3 * DAY_MS); } catch {} }, 3600_000).unref();
+// badge: admin choice first ("hot" / "new" / "off" = none), otherwise automatic
+const badgeOf = (setting, heat, createdAt) => (setting === 'off' ? '' : setting === 'hot' || setting === 'new' ? setting : heat >= HOT_MIN ? 'hot' : Date.now() - createdAt < DAY_MS ? 'new' : '');
 const clean = (s, max) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
 const fail = (res, code, msg) => res.status(code).json({ error: msg });
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -356,6 +362,7 @@ app.get('/api/users/:id', (req, res) => {
   const stats = db.prepare(
     `SELECT COUNT(*) AS videos, COALESCE(SUM(v.views), 0) AS views, COALESCE(SUM((SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id)), 0) AS likes
      FROM videos v WHERE v.user_id = ? AND v.hidden = 0`).get(u.id);
+  if (!(req.user && req.user.role === 'admin')) delete stats.views;
   stats.followers = db.prepare('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?').get(u.id).n;
   const following = !!(req.user && db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?').get(req.user.id, u.id));
   res.json({ user: publicUser(u), videos: listVideos(req.user, { userId: u.id, limit: 60 }), stats, following });
@@ -404,12 +411,13 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
        u.show_phone AS u_sp, u.phone AS u_phone,
        (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id) AS likes,
        (SELECT COUNT(*) FROM comments c WHERE c.video_id = v.id) AS comments,
-       (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id AND l.user_id = ?) AS liked
+       (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id AND l.user_id = ?) AS liked,
+       (SELECT COALESCE(SUM(CASE a.kind WHEN 'view' THEN 1 ELSE 3 END), 0) FROM video_activity a WHERE a.video_id = v.id AND a.at > ?) AS heat
      FROM videos v JOIN users u ON u.id = v.user_id
      WHERE v.hidden = 0 AND u.banned = 0 AND (? IS NULL OR v.user_id = ?) AND (? IS NULL OR v.id < ?)
        AND (? IS NULL OR instr(?, ',' || v.id || ',') > 0) AND (? IS NULL OR v.id = ?) AND (? IS NULL OR v.region = ?) AND (? IS NULL OR v.province = ?) AND (? IS NULL OR v.district = ?)
      ORDER BY v.id DESC LIMIT ?`
-  ).all(viewer ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null,
+  ).all(viewer ? viewer.id : 0, Date.now() - DAY_MS, userId ?? null, userId ?? null, before ?? null, before ?? null,
     ids ? ',' + ids.join(',') + ',' : null, ids ? ',' + ids.join(',') + ',' : null, id ?? null, id ?? null,
     region || null, region || null, province || null, province || null, district || null, district || null, limit);
   return rows.map((r) => {
@@ -418,7 +426,9 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
       id: r.id, caption: r.caption, file: r.file, url: r.url, thumb: r.thumb || '', createdAt: r.created_at,
       region: r.region || '', province: r.province || '', district: r.district || '', info,
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
-      views: r.views || 0, likes: r.likes, comments: r.comments, liked: !!r.liked,
+      // the real view count is for admins only; everybody else sees no view numbers at all
+      ...(viewer && viewer.role === 'admin' ? { views: r.views || 0, heat: r.heat } : {}),
+      badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes, comments: r.comments, liked: !!r.liked,
       // On a video only the uploader's chosen nickname is shown, not the account name.
       user: { id: r.user_id, name: r.nickname || r.u_name, avatar: r.u_avatar, city: r.u_city,
         age: currentYear() - (Number(info.birthYear) || r.u_by), canCall: !!(r.u_sp && r.u_phone) },
@@ -456,10 +466,12 @@ app.get('/api/feed', (req, res) => {
   }
   const top = Math.max(0, ...score.values());
   const pool = db.prepare(
-    `SELECT v.id, v.province FROM videos v JOIN users u ON u.id = v.user_id WHERE v.hidden = 0 AND u.banned = 0 ORDER BY v.id DESC LIMIT 1500`).all();
+    `SELECT v.id, v.province, v.badge, v.created_at FROM videos v JOIN users u ON u.id = v.user_id WHERE v.hidden = 0 AND u.banned = 0 ORDER BY v.id DESC LIMIT 1500`).all();
+  const heatOf = new Map(db.prepare("SELECT video_id, SUM(CASE kind WHEN 'view' THEN 1 ELSE 3 END) AS h FROM video_activity WHERE at > ? GROUP BY video_id").all(Date.now() - DAY_MS).map((x) => [x.video_id, x.h]));
   const picked = pool.filter((r) => !seen.has(r.id)).map((r) => {
     const interest = top ? (score.get(pk(r.province)) || 0) / top : 0; // 0..1
-    const w = 1 + 7 * interest; // a favourite region is up to 8x as likely as an unknown one
+    const b = badgeOf(r.badge, heatOf.get(r.id) || 0, r.created_at);
+    const w = (1 + 7 * interest) * (b === 'new' ? 8 : b === 'hot' ? 5 : 1); // favourite regions up to 8x; new videos 8x and hot videos 5x so they surface first
     return { id: r.id, key: -Math.log(1 - Math.random()) / w };
   }).sort((a, b) => a.key - b.key).slice(0, limit).map((r) => r.id);
   if (!picked.length) return res.json({ videos: [] });
@@ -573,7 +585,7 @@ app.post('/api/videos/:id(\\d+)/view', (req, res) => {
     const k = v.id + '|' + who, t = Date.now();
     if (!(viewSeen.get(k) > t - 30 * 60_000)) {
       viewSeen.set(k, t);
-      db.prepare('UPDATE videos SET views = views + 1 WHERE id = ?').run(v.id);
+      db.prepare('UPDATE videos SET views = views + 1 WHERE id = ?').run(v.id); act(v.id, 'view');
       if (viewSeen.size > 50_000) for (const [kk, tt] of viewSeen) if (tt < t - 30 * 60_000) viewSeen.delete(kk);
     }
   }
@@ -584,7 +596,7 @@ app.post('/api/videos/:id/like', needUser, (req, res) => {
   const id = Number(req.params.id);
   if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(id)) return fail(res, 404, 'Không tìm thấy video');
   const had = db.prepare('DELETE FROM likes WHERE video_id = ? AND user_id = ?').run(id, req.user.id).changes;
-  if (!had) db.prepare('INSERT INTO likes (video_id, user_id) VALUES (?,?)').run(id, req.user.id);
+  if (!had) { db.prepare('INSERT INTO likes (video_id, user_id) VALUES (?,?)').run(id, req.user.id); act(id, 'like'); }
   const n = db.prepare('SELECT COUNT(*) AS n FROM likes WHERE video_id = ?').get(id).n;
   res.json({ liked: !had, likes: n });
 });
@@ -602,6 +614,7 @@ app.post('/api/videos/:id/comments', needUser, postLimiter, (req, res) => {
   const body = clean(req.body.body, 300);
   if (!body) return fail(res, 400, 'Bình luận trống');
   if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(req.params.id)) return fail(res, 404, 'Không tìm thấy video');
+  act(Number(req.params.id), 'comment');
   db.prepare('INSERT INTO comments (video_id, user_id, body, created_at) VALUES (?,?,?,?)')
     .run(req.params.id, req.user.id, body, now());
   res.json({ ok: true });
@@ -1006,7 +1019,7 @@ const adminVideoRow = (id) => {
   if (!r) return null;
   let info = {}; try { info = JSON.parse(r.info || '{}'); } catch {}
   return { id: r.id, caption: r.caption, nickname: r.nickname, phone: r.v_phone, file: r.file, url: r.url, thumb: r.thumb, region: r.region, province: r.province, district: r.district,
-    info, views: r.views || 0, likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? 'hidden' : 'visible', note: r.mod_note || '',
+    info, views: r.views || 0, badge: r.badge || '', likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? 'hidden' : 'visible', note: r.mod_note || '',
     owner: { id: r.user_id, email: r.u_email, name: r.u_name } };
 };
 app.get('/api/admin/videos', needAdmin, (req, res) => {
@@ -1030,6 +1043,13 @@ app.post('/api/admin/videos/:id(\\d+)/status', needAdmin, (req, res) => {
   if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(req.params.id)) return fail(res, 404, 'Không tìm thấy video');
   db.prepare('UPDATE videos SET hidden = ?, locked = ?, mod_note = ? WHERE id = ?')
     .run(status === 'visible' ? 0 : 1, status === 'banned' ? 1 : 0, status === 'visible' ? '' : clean(req.body.note, 300), req.params.id);
+  res.json({ ok: true, video: adminVideoRow(req.params.id) });
+});
+app.post('/api/admin/videos/:id(\\d+)/badge', needAdmin, (req, res) => {
+  const badge = ['', 'hot', 'new', 'off'].includes(req.body.badge) ? req.body.badge : null;
+  if (badge === null) return fail(res, 400, 'Huy hiệu không hợp lệ');
+  if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(req.params.id)) return fail(res, 404, 'Không tìm thấy video');
+  db.prepare('UPDATE videos SET badge = ? WHERE id = ?').run(badge, req.params.id);
   res.json({ ok: true, video: adminVideoRow(req.params.id) });
 });
 app.put('/api/admin/videos/:id(\\d+)', needAdmin, (req, res) => {

@@ -111,6 +111,12 @@ CREATE TABLE IF NOT EXISTS presence (
   PRIMARY KEY (did, day)
 );
 CREATE INDEX IF NOT EXISTS idx_presence_last ON presence(last_seen);
+CREATE TABLE IF NOT EXISTS video_activity (
+  video_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_video_activity ON video_activity(video_id, at);
 CREATE TABLE IF NOT EXISTS reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reporter_id INTEGER NOT NULL,
@@ -154,6 +160,7 @@ for (const [col, ddl] of [
   ['lng', 'lng REAL'],
   ['views', 'views INTEGER DEFAULT 0'],
   ['locked', 'locked INTEGER DEFAULT 0'],
+  ['badge', "badge TEXT DEFAULT ''"],
   ['mod_note', "mod_note TEXT DEFAULT ''"],
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 

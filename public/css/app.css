@@ -522,3 +522,12 @@ main:focus,main:focus-visible{outline:none}
   .near-pick input{min-height:52px;font-size:16px}
   .near-pick .picker{width:100%}
 }
+
+/* video badges */
+.vtag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800;color:#fff;line-height:1.4;white-space:nowrap}
+.vtag.hot{background:linear-gradient(135deg,#ff5a1f,#e11d48);box-shadow:0 4px 14px rgba(255,90,31,.45)}
+.vtag.new{background:linear-gradient(135deg,#10b981,#0ea5e9);box-shadow:0 4px 14px rgba(16,185,129,.4)}
+.vcard .vtag,.tcell .vtag{position:absolute;top:10px;left:10px;z-index:2}
+.tcell .vtag{top:6px;left:6px;font-size:11px;padding:2px 8px}
+.vcard .distance{top:44px}
+.meta .vtag{margin-bottom:8px;align-self:flex-start}

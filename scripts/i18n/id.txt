@@ -625,3 +625,5 @@
 642|Lainnya
 647|Ikuti
 674|Mengikuti
+677|🔥 Lagi hot
+678|🆕 Baru

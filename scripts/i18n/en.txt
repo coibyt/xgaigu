@@ -625,3 +625,5 @@
 642|More
 647|Follow
 674|Following
+677|🔥 Hot now
+678|🆕 New
