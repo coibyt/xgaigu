@@ -161,6 +161,7 @@ for (const [col, ddl] of [
   ['views', 'views INTEGER DEFAULT 0'],
   ['locked', 'locked INTEGER DEFAULT 0'],
   ['badge', "badge TEXT DEFAULT ''"],
+  ['hidden_by', "hidden_by TEXT DEFAULT ''"],
   ['mod_note', "mod_note TEXT DEFAULT ''"],
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 

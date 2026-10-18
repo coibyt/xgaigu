@@ -531,3 +531,6 @@ main:focus,main:focus-visible{outline:none}
 .tcell .vtag{top:6px;left:6px;font-size:11px;padding:2px 8px}
 .vcard .distance{top:44px}
 .meta .vtag{margin-bottom:8px;align-self:flex-start}
+
+.tcell .selfhid{position:absolute;left:0;right:0;bottom:0;padding:6px;text-align:center;background:rgba(0,0,0,.72);font-size:12px;font-weight:700;color:#fbbf24}
+.tcell:has(.selfhid) img,.tcell:has(.selfhid) video{opacity:.45}

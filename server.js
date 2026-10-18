@@ -414,10 +414,10 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
        (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id AND l.user_id = ?) AS liked,
        (SELECT COALESCE(SUM(CASE a.kind WHEN 'view' THEN 1 ELSE 3 END), 0) FROM video_activity a WHERE a.video_id = v.id AND a.at > ?) AS heat
      FROM videos v JOIN users u ON u.id = v.user_id
-     WHERE v.hidden = 0 AND u.banned = 0 AND (? IS NULL OR v.user_id = ?) AND (? IS NULL OR v.id < ?)
+     WHERE (v.hidden = 0 OR (v.hidden_by = 'owner' AND v.locked = 0 AND v.user_id = ?)) AND u.banned = 0 AND (? IS NULL OR v.user_id = ?) AND (? IS NULL OR v.id < ?)
        AND (? IS NULL OR instr(?, ',' || v.id || ',') > 0) AND (? IS NULL OR v.id = ?) AND (? IS NULL OR v.region = ?) AND (? IS NULL OR v.province = ?) AND (? IS NULL OR v.district = ?)
      ORDER BY v.id DESC LIMIT ?`
-  ).all(viewer ? viewer.id : 0, Date.now() - DAY_MS, userId ?? null, userId ?? null, before ?? null, before ?? null,
+  ).all(viewer ? viewer.id : 0, Date.now() - DAY_MS, viewer && ((userId != null && userId === viewer.id) || id != null) ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null,
     ids ? ',' + ids.join(',') + ',' : null, ids ? ',' + ids.join(',') + ',' : null, id ?? null, id ?? null,
     region || null, region || null, province || null, province || null, district || null, district || null, limit);
   return rows.map((r) => {
@@ -428,7 +428,7 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
       // the real view count is for admins only; everybody else sees no view numbers at all
       ...(viewer && viewer.role === 'admin' ? { views: r.views || 0, heat: r.heat } : {}),
-      badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes, comments: r.comments, liked: !!r.liked,
+      selfHidden: r.hidden === 1, badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes, comments: r.comments, liked: !!r.liked,
       // On a video only the uploader's chosen nickname is shown, not the account name.
       user: { id: r.user_id, name: r.nickname || r.u_name, avatar: r.u_avatar, city: r.u_city,
         age: currentYear() - (Number(info.birthYear) || r.u_by), canCall: !!(r.u_sp && r.u_phone) },
@@ -566,7 +566,7 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
 app.delete('/api/videos/:id', needUser, (req, res) => {
   const v = db.prepare('SELECT * FROM videos WHERE id = ?').get(req.params.id);
   if (!v) return fail(res, 404, 'Không tìm thấy video');
-  if (v.user_id !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'Không có quyền');
+  if (req.user.role !== 'admin') return fail(res, 403, 'Chỉ quản trị viên mới được xoá video. Bạn có thể ẩn video để chỉ mình bạn thấy.');
   db.prepare('DELETE FROM videos WHERE id = ?').run(v.id);
   rmUpload(v.file && v.file.replace('/uploads/', ''));
   rmUpload(v.thumb && v.thumb.replace('/uploads/', ''));
@@ -1019,12 +1019,12 @@ const adminVideoRow = (id) => {
   if (!r) return null;
   let info = {}; try { info = JSON.parse(r.info || '{}'); } catch {}
   return { id: r.id, caption: r.caption, nickname: r.nickname, phone: r.v_phone, file: r.file, url: r.url, thumb: r.thumb, region: r.region, province: r.province, district: r.district,
-    info, views: r.views || 0, badge: r.badge || '', likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? 'hidden' : 'visible', note: r.mod_note || '',
+    info, views: r.views || 0, badge: r.badge || '', likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? (r.hidden_by === 'owner' ? 'self' : 'hidden') : 'visible', note: r.mod_note || '',
     owner: { id: r.user_id, email: r.u_email, name: r.u_name } };
 };
 app.get('/api/admin/videos', needAdmin, (req, res) => {
   const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
-  const st = { visible: 'v.hidden = 0 AND v.locked = 0', hidden: 'v.hidden = 1 AND v.locked = 0', banned: 'v.locked = 1' }[req.query.status] || '1 = 1';
+  const st = { visible: 'v.hidden = 0 AND v.locked = 0', hidden: "v.hidden = 1 AND v.locked = 0 AND v.hidden_by <> 'owner'", banned: 'v.locked = 1' }[req.query.status] || '1 = 1';
   const page = Math.max(parseInt(req.query.page, 10) || 0, 0), size = 20;
   const where = `${st} AND (lower(v.caption) LIKE ? OR lower(v.nickname) LIKE ? OR lower(u.email) LIKE ? OR CAST(v.id AS TEXT) = ?)`;
   const idq = String(req.query.q || '').trim();
@@ -1041,8 +1041,8 @@ app.post('/api/admin/videos/:id(\\d+)/status', needAdmin, (req, res) => {
   const status = req.body.status;
   if (!['visible', 'hidden', 'banned'].includes(status)) return fail(res, 400, 'Trạng thái không hợp lệ');
   if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(req.params.id)) return fail(res, 404, 'Không tìm thấy video');
-  db.prepare('UPDATE videos SET hidden = ?, locked = ?, mod_note = ? WHERE id = ?')
-    .run(status === 'visible' ? 0 : 1, status === 'banned' ? 1 : 0, status === 'visible' ? '' : clean(req.body.note, 300), req.params.id);
+  db.prepare("UPDATE videos SET hidden = ?, locked = ?, hidden_by = ?, mod_note = ? WHERE id = ?")
+    .run(status === 'visible' ? 0 : 1, status === 'banned' ? 1 : 0, status === 'visible' ? '' : 'admin', status === 'visible' ? '' : clean(req.body.note, 300), req.params.id);
   res.json({ ok: true, video: adminVideoRow(req.params.id) });
 });
 app.post('/api/admin/videos/:id(\\d+)/badge', needAdmin, (req, res) => {
@@ -1052,14 +1052,40 @@ app.post('/api/admin/videos/:id(\\d+)/badge', needAdmin, (req, res) => {
   db.prepare('UPDATE videos SET badge = ? WHERE id = ?').run(badge, req.params.id);
   res.json({ ok: true, video: adminVideoRow(req.params.id) });
 });
-app.put('/api/admin/videos/:id(\\d+)', needAdmin, (req, res) => {
-  const v = db.prepare('SELECT id FROM videos WHERE id = ?').get(req.params.id);
-  if (!v) return fail(res, 404, 'Không tìm thấy video');
+const saveVideoEdit = (req, res, id) => {
   const area = readArea(req.body);
   if (!area.region || !area.province) return fail(res, 400, 'Vui lòng chọn miền và tỉnh/thành');
   db.prepare('UPDATE videos SET caption = ?, nickname = ?, v_phone = ?, region = ?, province = ?, district = ?, info = ? WHERE id = ?')
-    .run(clean(req.body.caption, 300), clean(req.body.nickname, 40), clean(req.body.phone, 20).replace(/[^\d+]/g, ''), area.region, area.province, area.district, JSON.stringify(readInfo(req.body)), v.id);
-  res.json({ ok: true, video: adminVideoRow(v.id) });
+    .run(clean(req.body.caption, 300), clean(req.body.nickname, 40), clean(req.body.phone, 20).replace(/[^\d+]/g, ''), area.region, area.province, area.district, JSON.stringify(readInfo(req.body)), id);
+  res.json({ ok: true, video: adminVideoRow(id) });
+};
+app.put('/api/admin/videos/:id(\\d+)', needAdmin, (req, res) => {
+  if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(req.params.id)) return fail(res, 404, 'Không tìm thấy video');
+  saveVideoEdit(req, res, Number(req.params.id));
+});
+
+// ---------- a member's own videos: edit, hide / show (never delete) ----------
+const ownVideo = (req, res) => {
+  const v = db.prepare('SELECT id, user_id, hidden, hidden_by, locked FROM videos WHERE id = ?').get(req.params.id);
+  if (!v || v.user_id !== req.user.id) { fail(res, 404, 'Không tìm thấy video của bạn'); return null; }
+  return v;
+};
+app.get('/api/videos/:id(\\d+)/edit', needUser, (req, res) => {
+  const v = ownVideo(req, res); if (!v) return;
+  const row = adminVideoRow(v.id); delete row.owner; delete row.views; delete row.heat; delete row.note;
+  res.json({ video: { ...row, lockedByAdmin: !!v.locked, hiddenByAdmin: v.hidden === 1 && v.hidden_by !== 'owner' } });
+});
+app.put('/api/videos/:id(\\d+)', needUser, postLimiter, (req, res) => {
+  const v = ownVideo(req, res); if (!v) return;
+  if (v.locked) return fail(res, 403, 'Video này đã bị cấm xuất bản nên không thể chỉnh sửa');
+  saveVideoEdit(req, res, v.id);
+});
+app.post('/api/videos/:id(\\d+)/visibility', needUser, postLimiter, (req, res) => {
+  const v = ownVideo(req, res); if (!v) return;
+  if (v.locked || (v.hidden && v.hidden_by !== 'owner')) return fail(res, 403, 'Video đang bị quản trị viên ẩn hoặc cấm, bạn không thể đổi.');
+  const hide = !!req.body.hidden;
+  db.prepare("UPDATE videos SET hidden = ?, hidden_by = ? WHERE id = ?").run(hide ? 1 : 0, hide ? 'owner' : '', v.id);
+  res.json({ ok: true, hidden: hide });
 });
 app.post('/api/admin/videos/:id/hide', needAdmin, (req, res) => {
   db.prepare('UPDATE videos SET hidden = 1 WHERE id = ?').run(req.params.id);

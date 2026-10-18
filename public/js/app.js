@@ -1041,7 +1041,8 @@ async function pageUser(id) {
       : (() => { const m = mediaEl(v); if (m instanceof HTMLVideoElement) m.setAttribute('preload', 'metadata'); else m.style.pointerEvents = 'none'; return m; })();
     const c = h('a', { class: 'tcell', href: '#/feed/' + v.id, 'aria-label': 'Xem video' }, media,
       vtag(v), h('span', { class: 'tviews', html: isAdmin() ? icon('play') + fmtCount(v.views || 0) : icon('heart') + fmtCount(v.likes || 0) }));
-    if (me) c.append(h('button', { class: 'iconbtn tdel', 'aria-label': 'Xoá video', html: icon('trash'), onclick: async (e) => { e.preventDefault(); e.stopPropagation(); if (!confirm('Xoá video này?')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); route(); } catch (er) { fail(er); } } }));
+    if (me) c.append(h('button', { class: 'iconbtn tdel', 'aria-label': 'Sửa video', html: '✎', style: 'font-size:18px', onclick: (e) => { e.preventDefault(); e.stopPropagation(); adminVideoDialog(v.id, () => route(), true); } }));
+    if (v.selfHidden) c.append(h('span', { class: 'selfhid' }, 'Đang ẩn'));
     return c;
   };
   const w = h('div', { class: 'wrap tk' }, head,
@@ -1180,6 +1181,7 @@ function openInfo(v) {
     !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
     h('div', { class: 'row', style: 'margin-top:14px' },
       S.user && S.user.role === 'admin' && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id), html: icon('flag') + 'Quản lý video (admin)' }),
+      S.user && S.user.id === v.user.id && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id, null, true), html: '✎ Sửa / ẩn video của tôi' }),
       v.hasPhone && h('button', { class: 'btn callbtn', onclick: () => openCall({ ...v.user, canCall: true }, v.id), html: icon('phone') + 'Gọi' }),
       h('button', { class: 'btn', onclick: () => openBook(v.user, v.id), html: icon('cal') + 'Hẹn gặp' })));
   modal(body, { sheet: true });
@@ -1650,10 +1652,10 @@ function pageTerms() {
 
 // ---------- admin ----------
 // Admin: edit / hide / ban / delete a member's video. onChange runs after any change so the caller can refresh.
-async function adminVideoDialog(id, onChange) {
+async function adminVideoDialog(id, onChange, own = false) {
   let v;
-  try { v = (await api('/admin/videos/' + id)).video; } catch (e) { return fail(e); }
-  const STATUS = { visible: 'Đang hiển thị', hidden: 'Đã ẩn', banned: 'Bị cấm xuất bản' };
+  try { v = (await api(own ? '/videos/' + id + '/edit' : '/admin/videos/' + id)).video; } catch (e) { return fail(e); }
+  const STATUS = { visible: 'Đang hiển thị', hidden: 'Đã ẩn', banned: 'Bị cấm xuất bản', self: own ? 'Đang ẩn (chỉ mình bạn thấy)' : 'Chủ video tự ẩn' };
   const badgeSel = h('select', { 'aria-label': 'Huy hiệu', style: 'width:auto' }, [['', 'Huy hiệu: tự động'], ['hot', '🔥 Luôn hiện “Đang hot”'], ['new', '🆕 Luôn hiện “Mới”'], ['off', 'Không hiện huy hiệu']].map(([a, b]) => h('option', { value: a, selected: (v.badge || '') === a }, b)));
   badgeSel.addEventListener('change', async () => { try { v = (await api('/admin/videos/' + v.id + '/badge', { method: 'POST', body: { badge: badgeSel.value } })).video; toast('Đã cập nhật huy hiệu'); onChange && onChange(); } catch (e) { fail(e); } });
   const geo = geoPicker();
@@ -1670,21 +1672,28 @@ async function adminVideoDialog(id, onChange) {
     h('label', { class: 'f' }, h('span', {}, 'Điều không muốn'), h('textarea', { name: 'boundaries', rows: 2, maxlength: 300 }, i.boundaries || '')),
     h('button', { class: 'btn primary', type: 'submit', style: 'width:100%' }, 'Lưu chỉnh sửa'));
   const statusLine = h('p', { class: 'sub' });
-  const paint = () => { statusLine.textContent = '#' + v.id + ' · ' + v.owner.email + ' · ' + STATUS[v.status] + (v.note ? ' — ' + v.note : '') + ' · ' + v.views + ' lượt xem'; };
+  const paint = () => { statusLine.textContent = own ? STATUS[v.status] + (v.lockedByAdmin ? ' — video đã bị cấm xuất bản' : v.hiddenByAdmin ? ' — đang bị quản trị viên ẩn' : '') : '#' + v.id + ' · ' + v.owner.email + ' · ' + STATUS[v.status] + (v.note ? ' — ' + v.note : '') + ' · ' + v.views + ' lượt xem'; };
   paint();
   const note = h('input', { placeholder: 'Lý do (không bắt buộc, chỉ admin thấy)', maxlength: 300 });
   const setStatus = async (status) => {
     if (status === 'banned' && !confirm('Cấm xuất bản video này? Video sẽ bị gỡ khỏi website.')) return;
     try { v = (await api('/admin/videos/' + v.id + '/status', { method: 'POST', body: { status, note: note.value } })).video; paint(); toast(STATUS[v.status]); onChange && onChange(); } catch (e) { fail(e); }
   };
-  const m = modal(h('div', {}, h('h3', {}, 'Quản lý video'), statusLine,
-    h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;margin-bottom:10px' },
+  const toggleSelf = async () => {
+    const hide = v.status === 'visible';
+    try { await api('/videos/' + v.id + '/visibility', { method: 'POST', body: { hidden: hide } }); v.status = hide ? 'self' : 'visible'; paint(); selfBtn.textContent = hide ? 'Hiện lại cho mọi người' : 'Ẩn video (chỉ mình tôi thấy)'; toast(hide ? 'Đã ẩn video, chỉ mình bạn thấy' : 'Video đã hiện lại'); onChange && onChange(); } catch (e) { fail(e); }
+  };
+  const selfBtn = h('button', { class: 'btn sm', type: 'button', onclick: toggleSelf }, v.status === 'visible' ? 'Ẩn video (chỉ mình tôi thấy)' : 'Hiện lại cho mọi người');
+  if (own && (v.lockedByAdmin || v.hiddenByAdmin)) selfBtn.disabled = true;
+  const ownRow = h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;margin-bottom:12px' }, h('a', { class: 'btn sm', href: '#/feed/' + v.id, onclick: () => m.close() }, 'Xem video'), selfBtn);
+  const m = modal(h('div', {}, h('h3', {}, own ? 'Sửa video của tôi' : 'Quản lý video'), statusLine,
+    own ? ownRow : h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap;margin-bottom:10px' },
       h('a', { class: 'btn sm', href: '#/feed/' + v.id, onclick: () => m.close() }, 'Xem video'),
       h('button', { class: 'btn sm', type: 'button', onclick: () => setStatus('visible') }, 'Hiện lại'),
       h('button', { class: 'btn sm', type: 'button', onclick: () => setStatus('hidden') }, 'Ẩn video'),
       h('button', { class: 'btn sm live', type: 'button', onclick: () => setStatus('banned') }, 'Cấm xuất bản'),
       h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!confirm('XOÁ vĩnh viễn video này? Không thể khôi phục.')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); toast('Đã xoá video'); m.close(); onChange && onChange(); } catch (e) { fail(e); } } }, 'Xoá')),
-    h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), note, h('div', { style: 'height:12px' }), f), { wide: true });
+    own ? null : h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), own ? null : note, h('div', { style: 'height:12px' }), f), { wide: true });
   // fill the area selects once the region list has loaded
   loadGeo().then((g) => {
     const [reg, prov, dist] = geo.el.querySelectorAll('select');
@@ -1696,7 +1705,10 @@ async function adminVideoDialog(id, onChange) {
     const fd = Object.fromEntries(new FormData(f));
     const [reg, prov, dist] = geo.el.querySelectorAll('select');
     try {
-      v = (await api('/admin/videos/' + v.id, { method: 'PUT', body: { ...fd, region: reg.value, province: prov.value, district: dist.value } })).video;
+      const keep = { lockedByAdmin: v.lockedByAdmin, hiddenByAdmin: v.hiddenByAdmin };
+      v = (await api((own ? '/videos/' : '/admin/videos/') + v.id, { method: 'PUT', body: { ...fd, region: reg.value, province: prov.value, district: dist.value } })).video;
+      if (own) Object.assign(v, keep);
+      if (own) { v.status = v.status || 'visible'; }
       toast('Đã lưu'); paint(); onChange && onChange();
     } catch (er) { fail(er); }
   });
@@ -1758,7 +1770,7 @@ async function pageAdmin() {
   const vq = h('input', { type: 'search', placeholder: 'Tìm theo nội dung, biệt danh, email chủ video hoặc số ID…', style: 'flex:1;min-width:200px' });
   const vst = h('select', { 'aria-label': 'Trạng thái', style: 'width:auto' }, [['', 'Tất cả video'], ['visible', 'Đang hiển thị'], ['hidden', 'Đã ẩn'], ['banned', 'Bị cấm xuất bản']].map(([a, b]) => h('option', { value: a }, b)));
   let vpage = 0, vqt;
-  const BADGE = { visible: ['Hiển thị', '#34d399'], hidden: ['Đã ẩn', '#fbbf24'], banned: ['Bị cấm', '#f43f5e'] };
+  const BADGE = { visible: ['Hiển thị', '#34d399'], hidden: ['Đã ẩn', '#fbbf24'], self: ['Chủ tự ẩn', '#a78bfa'], banned: ['Bị cấm', '#f43f5e'] };
   const loadVideos = async () => {
     const d = await api('/admin/videos?page=' + vpage + '&status=' + vst.value + '&q=' + encodeURIComponent(vq.value.trim()));
     vInfo.textContent = 'Tổng số video: ' + d.total;
