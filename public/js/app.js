@@ -62,7 +62,7 @@ async function api(path, opts = {}) {
   else if (opts.body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opts.body); }
   const r = await fetch('/api' + path, o);
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) { const e = new Error(data.error || 'Có lỗi xảy ra'); e.status = r.status; throw e; }
+  if (!r.ok) { const e = new Error(data.error || 'Có lỗi xảy ra'); e.status = r.status; e.code = data.code; throw e; }
   return data;
 }
 
@@ -331,6 +331,51 @@ async function openAccounts() {
 }
 
 // ---------- auth ----------
+// shown after sign-up when the site requires email confirmation
+function verifyNotice(email, m, resendNow = false) {
+  const note = h('p', { class: 'muted', style: 'margin-top:10px;font-size:14px' });
+  const send = async () => { try { await api('/resend-verification', { method: 'POST', body: { email } }); note.textContent = 'Đã gửi lại email xác nhận. Hãy kiểm tra hộp thư.'; } catch (e) { note.textContent = e.message; } };
+  if (resendNow) send();
+  return h('form', { onsubmit: (e) => e.preventDefault() }, h('h3', {}, 'Kiểm tra email của bạn 📬'),
+    h('p', { class: 'sub' }, 'Chúng tôi đã gửi liên kết xác nhận tới ' + email + '. Bấm vào liên kết trong email để kích hoạt tài khoản (nhớ xem cả mục Spam).'),
+    h('button', { type: 'button', class: 'btn', onclick: send }, 'Gửi lại email'), h('button', { type: 'button', class: 'btn ghost', style: 'margin-left:8px', onclick: () => m.close() }, 'Đóng'), note);
+}
+function forgotForm(m) {
+  const msg = h('div', { class: 'err', hidden: true });
+  const f = h('form', { novalidate: true }, h('h3', {}, 'Quên mật khẩu'), h('p', { class: 'sub' }, 'Nhập email đã đăng ký, chúng tôi sẽ gửi liên kết để đặt lại mật khẩu.'), msg,
+    h('label', { class: 'f' }, h('span', {}, 'Email'), h('input', { name: 'email', type: 'email', autocomplete: 'email', required: true })),
+    h('button', { class: 'btn primary lg', style: 'width:100%', type: 'submit' }, 'Gửi liên kết đặt lại'),
+    h('p', { style: 'text-align:center;margin-top:12px' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => { m.close(); openAuth('login'); } }, 'Quay lại đăng nhập')));
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
+    try { await api('/forgot', { method: 'POST', body: { email: f.email.value } }); msg.hidden = false; msg.style.color = '#34d399'; msg.textContent = 'Nếu email này đã đăng ký, bạn sẽ nhận được thư trong ít phút. Hãy kiểm tra cả mục Spam.'; }
+    catch (ex) { msg.hidden = false; msg.textContent = ex.message; btn.disabled = false; }
+  });
+  return f;
+}
+function pageReset(query) {
+  const token = new URLSearchParams(query || '').get('token') || '';
+  const err = h('div', { class: 'err', hidden: true });
+  const f = h('form', { novalidate: true, class: 'card', style: 'padding:24px;max-width:440px;margin:40px auto' }, h('h2', { class: 'title' }, 'Đặt lại mật khẩu'), err,
+    h('label', { class: 'f' }, h('span', {}, 'Mật khẩu mới'), h('input', { name: 'p1', type: 'password', minlength: 8, autocomplete: 'new-password', required: true }), h('small', {}, 'Tối thiểu 8 ký tự')),
+    h('label', { class: 'f' }, h('span', {}, 'Nhập lại mật khẩu'), h('input', { name: 'p2', type: 'password', minlength: 8, autocomplete: 'new-password', required: true })),
+    h('button', { class: 'btn primary lg', style: 'width:100%', type: 'submit' }, 'Đổi mật khẩu'));
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); err.hidden = true;
+    if (f.p1.value !== f.p2.value) { err.textContent = 'Hai mật khẩu chưa giống nhau'; err.hidden = false; return; }
+    try { await api('/reset', { method: 'POST', body: { token, password: f.p1.value } }); toast('Đã đổi mật khẩu, hãy đăng nhập'); location.hash = '#/'; openAuth('login'); }
+    catch (ex) { err.textContent = ex.message; err.hidden = false; }
+  });
+  main.append(h('div', { class: 'wrap' }, f));
+}
+function pageEmailVerified(query) {
+  const ok = new URLSearchParams(query || '').get('ok') === '1';
+  main.append(h('div', { class: 'wrap' }, h('div', { class: 'card empty', style: 'margin:60px auto;max-width:480px' }, h('h2', {}, ok ? 'Đã xác nhận email ✅' : 'Liên kết không hợp lệ'),
+    h('p', { class: 'muted' }, ok ? 'Tài khoản của bạn đã được kích hoạt và đã đăng nhập.' : 'Liên kết đã hết hạn hoặc đã dùng rồi. Hãy đăng nhập để nhận lại email xác nhận.'),
+    h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/' }, 'Vào xgaigu'))));
+  if (ok) api('/me').then((r) => { S.user = r.user; renderNav(); connectEvents(); }).catch(() => {});
+}
+
 function openAuth(mode = 'login') {
   let m;
   const thisYear = new Date().getFullYear();
@@ -364,7 +409,8 @@ function openAuth(mode = 'login') {
       reg && h('div', { class: 'f' }, h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Địa chỉ / khu vực của bạn'), picker.el),
       reg && h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'agree' }),
         h('span', { html: 'Tôi đủ 18 tuổi và đồng ý với <a href="#/terms" style="text-decoration:underline">Điều khoản & Quy tắc cộng đồng</a>.' })),
-      h('button', { class: 'btn primary lg', style: 'width:100%', type: 'submit' }, reg ? 'Tạo tài khoản' : 'Đăng nhập'));
+      h('button', { class: 'btn primary lg', style: 'width:100%', type: 'submit' }, reg ? 'Tạo tài khoản' : 'Đăng nhập'),
+      !reg && h('p', { style: 'text-align:center;margin-top:12px' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => m.box.querySelector('form').replaceWith(forgotForm(m)) }, 'Quên mật khẩu?')));
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(f));
@@ -373,8 +419,12 @@ function openAuth(mode = 'login') {
       const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
       try {
         const r = await api(reg ? '/register' : '/login', { method: 'POST', body: d });
+        if (r.needVerify) { m.box.querySelector('form').replaceWith(verifyNotice(r.email, m)); return; }
         S.user = r.user; m.close(); afterAuth(); toast(reg ? 'Chào mừng đến với xgaigu 💖' : 'Đã đăng nhập');
-      } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+      } catch (ex) {
+        err.textContent = ex.message; err.hidden = false; btn.disabled = false;
+        if (ex.code === 'unverified') { err.append(' ', h('button', { type: 'button', class: 'linkbtn', onclick: () => m.box.querySelector('form').replaceWith(verifyNotice(d.email, m, true)) }, 'Gửi lại email xác nhận')); }
+      }
     });
     return f;
   };
@@ -928,7 +978,7 @@ async function pageHome() {
 function footer() {
   return h('footer', { class: 'footer' }, h('div', { class: 'wrap cols' },
     h('div', {}, h('div', { class: 'logo' }, h('span', { class: 'logo-mark' }), h('span', {}, 'xgai', h('b', {}, 'gu'))), h('p', { style: 'margin-top:10px' }, '© ' + new Date().getFullYear() + ' xgaigu.com · Dành cho người từ 18 tuổi.')),
-    h('div', { class: 'row' }, h('a', { class: 'xg-install', hidden: Install.standalone(), href: '#', onclick: (e) => { e.preventDefault(); Install.run(); } }, '📲 Cài đặt ứng dụng'), h('a', { href: '#', onclick: (e) => { e.preventDefault(); openLanguage(); } }, '🌐 Ngôn ngữ / Language'), h('a', { href: '#/welcome' }, 'Giới thiệu'), h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
+    h('div', { class: 'row' }, h('a', { class: 'xg-install', hidden: Install.standalone(), href: '#', onclick: (e) => { e.preventDefault(); Install.run(); } }, '📲 Cài đặt ứng dụng'), h('a', { href: '#', onclick: (e) => { e.preventDefault(); openLanguage(); } }, '🌐 Ngôn ngữ / Language'), h('a', { href: '/khu-vuc' }, 'Khu vực'), h('a', { href: '#/welcome' }, 'Giới thiệu'), h('a', { href: '#/terms' }, 'Điều khoản & Quy tắc cộng đồng'))));
 }
 
 // ---------- people & profiles ----------
@@ -1189,7 +1239,10 @@ function openInfo(v) {
 
 async function pageRegions(reg, prov, dist) {
   if (prov) Pref.bump(prov, 1.5);
-  const [geo, { areas }] = await Promise.all([loadGeo(), api('/areas')]);
+  const infoQ = new URLSearchParams({ region: reg || '', province: prov || '', district: dist || '' });
+  const [geo, { areas }, info] = await Promise.all([loadGeo(), api('/areas'), reg ? api('/area-info?' + infoQ).catch(() => null) : null]);
+  document.title = info ? info.title : 'Làm quen & hẹn hò theo khu vực – Bắc, Trung, Nam | xgaigu';
+  const seoBox = (i) => (i ? h('section', { class: 'seo-box' }, h('div', { class: 'seo-intro' }, i.intro), h('div', { class: 'facts', style: 'margin-top:14px' }, i.keywords.map((k) => h('span', { class: 'fact tag' }, k)))) : null);
   const sum = (f) => areas.filter(f).reduce((n, x) => n + x.n, 0);
   const enc = encodeURIComponent;
   const crumb = [h('a', { href: '#/regions' }, 'Khu vực')];
@@ -1212,14 +1265,14 @@ async function pageRegions(reg, prov, dist) {
       });
     };
     filter.addEventListener('input', draw); draw();
-    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, REGION_NAMES[reg]), h('div', { class: 'filters' }, filter), grid);
+    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, REGION_NAMES[reg]), h('div', { class: 'filters' }, filter), grid, seoBox(info));
   } else {
     const p = geo[reg].find((x) => x[0] === prov);
     if (!p) { wrap.append(h('div', { class: 'empty' }, h('h3', {}, 'Không tìm thấy khu vực'))); main.append(wrap); return; }
     const chips = h('div', { class: 'ed-chips', style: 'margin:14px 0 24px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}` }, 'Tất cả'),
       p[1].map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, d, n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
     const grid = h('div', { class: 'grid g4' }, h('div', { class: 'spin' }));
-    wrap.append(h('h2', { class: 'title' }, dist || prov), chips, grid);
+    wrap.append(h('h2', { class: 'title' }, dist || prov), chips, grid, seoBox(info));
     const q = `/videos?limit=48&region=${reg}&province=${enc(prov)}` + (dist ? '&district=' + enc(dist) : '');
     api(q).then(({ videos }) => {
       grid.replaceChildren();
@@ -1789,7 +1842,65 @@ async function pageAdmin() {
   await loadVideos().catch(fail);
   const videosBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Quản lý video'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, vq, vst), vInfo,
     h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', '', 'Nội dung', 'Chủ video', 'Lượt xem', 'Trạng thái', ''].map((x) => h('th', {}, x)))), vBody)), vPager);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, videosBox, membersBox, statBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  // email: confirmation switch, test mail, campaigns
+  const ml = await api('/admin/mail').catch(() => null);
+  const mailBox = ml && (() => {
+    const chk = h('input', { type: 'checkbox', checked: ml.requireVerification });
+    chk.addEventListener('change', async () => { try { await api('/admin/mail', { method: 'PUT', body: { requireVerification: chk.checked } }); toast(chk.checked ? 'Đã BẬT: khách phải xác nhận email mới đăng nhập được' : 'Đã TẮT xác nhận email'); } catch (e) { chk.checked = !chk.checked; fail(e); } });
+    const testTo = h('input', { type: 'email', placeholder: 'Email nhận thư thử (để trống = email của bạn)', style: 'flex:1;min-width:220px' });
+    const testRes = h('p', { class: 'muted', style: 'font-size:14px;margin-top:8px' });
+    const subj = h('input', { placeholder: 'Tiêu đề email', maxlength: 150 }), body = h('textarea', { rows: 8, maxlength: 8000, placeholder: 'Nội dung email. Dùng {name} để chèn tên người nhận. Để trống một dòng giữa các đoạn.' });
+    const lim = h('input', { type: 'number', min: 1, max: 1000, value: 100, style: 'width:110px' }), ver = h('input', { type: 'checkbox' });
+    const camp = h('div', { style: 'margin-top:12px;display:grid;gap:8px' });
+    const drawC = (list) => camp.replaceChildren(...list.map((c) => h('div', { class: 'muted', style: 'font-size:13px' }, '#' + c.id + ' · ' + c.subject + ' — ' + ({ running: 'đang gửi…', done: 'xong', interrupted: 'bị gián đoạn' }[c.status] || c.status) + ' · gửi được ' + c.sent + '/' + c.total + (c.failed ? ' · lỗi ' + c.failed : '') + ' · ' + new Date(c.created_at).toLocaleString('vi-VN'))));
+    drawC(ml.campaigns);
+    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Email'),
+      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, ml.configured ? 'Gửi từ: ' + ml.from + ' (đã cấu hình)' : '⚠️ Chưa cấu hình email gửi đi. Hãy thêm biến SMTP_USER và SMTP_PASS trên Hostinger.'),
+        h('label', { class: 'check' }, chk, h('span', {}, 'Bắt buộc khách xác nhận email mới được đăng ký / đăng nhập (chỉ áp dụng cho người đăng ký mới)')),
+        h('p', { class: 'muted', style: 'font-size:13px' }, 'Thành viên: ' + ml.counts.total + ' · đã xác nhận: ' + ml.counts.verified + ' · đã hủy nhận email quảng bá: ' + (ml.counts.optout || 0)),
+        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, testTo, h('button', { class: 'btn', type: 'button', onclick: async (ev) => { ev.target.disabled = true; testRes.textContent = 'Đang gửi…'; try { const r = await api('/admin/mail/test', { method: 'POST', body: { to: testTo.value } }); testRes.textContent = '✅ Đã gửi thư thử tới ' + r.to + '. Hãy kiểm tra hộp thư (cả Spam).'; } catch (e) { testRes.textContent = '❌ ' + e.message; } ev.target.disabled = false; } }, 'Gửi email thử')), testRes,
+        h('hr', { style: 'border:0;border-top:1px solid var(--line);width:100%' }),
+        h('b', {}, 'Gửi email quảng bá cho thành viên'), subj, body,
+        h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, h('label', { class: 'muted', style: 'font-size:14px' }, 'Tối đa '), lim, h('span', { class: 'muted', style: 'font-size:14px' }, 'người nhận'), h('label', { class: 'check' }, ver, h('span', {}, 'Chỉ người đã xác nhận email'))),
+        h('p', { class: 'muted', style: 'font-size:13px' }, 'Mỗi email có liên kết "Hủy nhận email quảng bá". Gửi chậm khoảng 1,5 giây/email để tránh bị nhà cung cấp chặn. Hãy hỏi Hostinger giới hạn số email mỗi giờ của gói bạn.'),
+        h('button', { class: 'btn primary', type: 'button', onclick: async (ev) => { if (!confirm('Gửi email này cho tối đa ' + lim.value + ' thành viên?')) return; ev.target.disabled = true; try { const r = await api('/admin/mail/campaign', { method: 'POST', body: { subject: subj.value, body: body.value, limit: lim.value, verifiedOnly: ver.checked } }); toast('Đang gửi cho ' + r.total + ' người…'); const poll = setInterval(async () => { try { const x = await api('/admin/mail'); drawC(x.campaigns); if (!x.campaigns.some((c) => c.status === 'running')) { clearInterval(poll); ev.target.disabled = false; toast('Đã gửi xong'); } } catch { clearInterval(poll); } }, 4000); S.cleanups.push(() => clearInterval(poll)); drawC((await api('/admin/mail')).campaigns); } catch (e) { fail(e); ev.target.disabled = false; } } }, 'Gửi email'), camp));
+  })();
+  // SEO text of every area (region / province / district)
+  const geoSeo = geoPicker();
+  const sf = { title: h('input', { maxlength: 120, placeholder: 'Tiêu đề trang (nên dưới 60 ký tự)' }), description: h('textarea', { rows: 3, maxlength: 300, placeholder: 'Mô tả ngắn hiện trên Google (nên 120–160 ký tự)' }),
+    keywords: h('textarea', { rows: 2, maxlength: 600, placeholder: 'Từ khóa, cách nhau bằng dấu phẩy' }), intro: h('textarea', { rows: 10, maxlength: 6000, placeholder: 'Nội dung giới thiệu khu vực. Để trống một dòng giữa các đoạn.' }) };
+  const seoInfo = h('p', { class: 'muted', style: 'font-size:14px;margin:8px 0 12px' }, 'Chọn khu vực ở trên (ít nhất là miền) để sửa.');
+  const counter = (el, n) => { const c = h('small', { class: 'muted' }); const u = () => { c.textContent = el.value.length + ' ký tự' + (n ? ' (nên ≤ ' + n + ')' : ''); c.style.color = n && el.value.length > n ? '#fbbf24' : ''; }; el.addEventListener('input', u); u(); return [c, u]; };
+  const [cTitle, uTitle] = counter(sf.title, 60), [cDesc, uDesc] = counter(sf.description, 160);
+  let seoDef = null, seoUrl = '';
+  const seoView = h('a', { class: 'btn sm', target: '_blank', rel: 'noopener', hidden: true }, 'Xem trang này');
+  const seoBody = () => { const [r, p, d] = geoSeo.el.querySelectorAll('select'); return { region: r.value, province: p.value, district: d.value }; };
+  const loadSeo = async () => {
+    const b = seoBody();
+    if (!b.region) { seoInfo.textContent = 'Chọn khu vực ở trên (ít nhất là miền) để sửa.'; seoView.hidden = true; seoDef = null; return; }
+    try {
+      const d = await api('/admin/area-seo?' + new URLSearchParams(b));
+      seoDef = d.defaults; seoUrl = d.url;
+      const s = d.saved || {};
+      sf.title.value = s.title || ''; sf.description.value = s.description || ''; sf.keywords.value = s.keywords || ''; sf.intro.value = s.intro || '';
+      sf.title.placeholder = d.defaults.title; sf.description.placeholder = d.defaults.description; sf.keywords.placeholder = d.defaults.keywords; sf.intro.placeholder = d.defaults.intro;
+      uTitle(); uDesc();
+      seoInfo.textContent = d.saved ? 'Khu vực này đang dùng nội dung bạn đã viết.' : 'Khu vực này đang dùng nội dung tự động (hiện mờ trong các ô). Hãy viết nội dung riêng để tăng SEO.';
+      seoView.href = d.url; seoView.hidden = false;
+    } catch (e) { fail(e); }
+  };
+  geoSeo.el.addEventListener('change', () => setTimeout(loadSeo, 0));
+  const seoForm = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
+    h('label', { class: 'f' }, h('span', {}, 'Tiêu đề SEO'), sf.title, cTitle), h('label', { class: 'f' }, h('span', {}, 'Mô tả SEO (meta description)'), sf.description, cDesc),
+    h('label', { class: 'f' }, h('span', {}, 'Từ khóa'), sf.keywords), h('label', { class: 'f' }, h('span', {}, 'Nội dung giới thiệu khu vực'), sf.intro),
+    h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
+      h('button', { class: 'btn primary', type: 'button', onclick: async () => { const b = seoBody(); if (!b.region) return toast('Hãy chọn khu vực', true); try { await api('/admin/area-seo', { method: 'PUT', body: { ...b, title: sf.title.value, description: sf.description.value, keywords: sf.keywords.value, intro: sf.intro.value } }); toast('Đã lưu nội dung SEO'); loadSeo(); } catch (e) { fail(e); } } }, 'Lưu'),
+      h('button', { class: 'btn', type: 'button', onclick: () => { if (!seoDef) return toast('Hãy chọn khu vực', true); sf.title.value = seoDef.title; sf.description.value = seoDef.description; sf.keywords.value = seoDef.keywords; sf.intro.value = seoDef.intro; uTitle(); uDesc(); } }, 'Điền nội dung mẫu để sửa'),
+      h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
+  const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
+    h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, videosBox, seoBox, mailBox, membersBox, statBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 
@@ -1801,7 +1912,7 @@ async function route() {
   document.querySelectorAll('video').forEach((v) => v.pause());
   main.innerHTML = '<div class="spin"></div>';
   renderNav();
-  const [path, query] = (location.hash.slice(1) || '/').split('?');
+  const [path, query] = (location.hash.slice(1) || (document.querySelector('meta[name="xg-route"]') || {}).content || '/').split('?');
   const seg = path.split('/').filter(Boolean);
   const page = async () => {
     main.innerHTML = '';
@@ -1822,6 +1933,8 @@ async function route() {
     if (a === 'live') return b ? pageStream(b, /host=1/.test(query || '')) : pageLive();
     if (a === 'golive') return pageGoLive();
     if (a === 'terms') return pageTerms();
+    if (a === 'reset') return pageReset(query);
+    if (a === 'email-verified') return pageEmailVerified(query);
     if (a === 'admin') return pageAdmin();
     main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Không tìm thấy trang'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/' }, 'Về trang chủ')));
   };

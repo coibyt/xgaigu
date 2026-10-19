@@ -78,3 +78,9 @@ Nút "Cài đặt ứng dụng" (thanh trên, trang chủ, chân trang) cài xga
 1. Trỏ tên miền mới vào cùng app trên Hostinger, đặt `SITE_URL=https://ten-mien-moi.com`.
 2. Giữ tên miền cũ trỏ vào app và đặt `LEGACY_HOSTS=xgaigu.com` (nhiều tên miền thì cách nhau bằng dấu phẩy), rồi Redeploy.
 3. Link cũ và app đã cài từ tên miền cũ sẽ tự chuyển sang tên miền mới. App là một "cửa sổ" gắn với tên miền nên không đổi tên miền ngay trong chính nó được: khách sẽ thấy nút "Tải ứng dụng" ở tên miền mới để cài lại bản mới.
+
+## Email
+Đặt biến môi trường `SMTP_USER` (info@xgaigu.com) và `SMTP_PASS` (mật khẩu hộp thư), tuỳ chọn `SMTP_HOST`/`SMTP_PORT` (mặc định smtp.hostinger.com:465). Trang quản trị → mục **Email**: bật/tắt bắt buộc xác nhận email khi đăng ký, gửi email thử, gửi email quảng bá (có liên kết hủy nhận). Có nút "Quên mật khẩu?" ở màn hình đăng nhập.
+
+## SEO khu vực
+Mỗi miền / tỉnh / quận có trang riêng: `/khu-vuc/mien-nam/ho-chi-minh/quan-1` (tiêu đề, mô tả, từ khóa, giới thiệu, dữ liệu có cấu trúc). Admin sửa nội dung ở trang quản trị → **SEO khu vực**. Có `/sitemap.xml` và `/robots.txt`; hãy gửi sitemap trong Google Search Console.

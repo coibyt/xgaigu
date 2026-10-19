@@ -399,7 +399,7 @@ html.xg-tr-pending #main,html.xg-tr-pending .nav,html.xg-tr-pending .tabbar{opac
 .tabbar{display:none}
 .agegate{position:fixed;inset:0;z-index:500;background:radial-gradient(800px 500px at 50% 0,rgba(255,46,126,.3),#07030b);display:grid;place-items:center;padding:20px}
 .agegate-card{max-width:480px;text-align:center;background:var(--surface);border:1px solid var(--line);padding:36px 28px;border-radius:28px}
-.agegate h1{font-size:26px;margin-bottom:10px}.agegate p{color:var(--muted);margin-bottom:24px}.agegate a:not(.btn){color:#ff8ab4;text-decoration:underline}
+.agegate h1,.agegate h2{font-size:26px;margin-bottom:10px}.agegate p{color:var(--muted);margin-bottom:24px}.agegate a:not(.btn){color:#ff8ab4;text-decoration:underline}
 .agegate .row{justify-content:center}
 
 @media (max-width:980px){
@@ -534,3 +534,13 @@ main:focus,main:focus-visible{outline:none}
 
 .tcell .selfhid{position:absolute;left:0;right:0;bottom:0;padding:6px;text-align:center;background:rgba(0,0,0,.72);font-size:12px;font-weight:700;color:#fbbf24}
 .tcell:has(.selfhid) img,.tcell:has(.selfhid) video{opacity:.45}
+
+/* SEO area pages */
+.seo-box{margin-top:30px;padding:22px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.seo-intro{white-space:pre-line;line-height:1.65;color:#d6c9e2}
+.seo-area ul.seo-links{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 18px}
+.seo-area .seo-links a{color:#ffb3cd}
+.seo-area .crumbs{margin-bottom:10px}
+.seo-kw{color:var(--muted);font-size:14px}
+
+.linkbtn{background:none;border:0;color:#ff8ab4;text-decoration:underline;cursor:pointer;font:inherit;padding:0}

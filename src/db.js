@@ -117,6 +117,33 @@ CREATE TABLE IF NOT EXISTS video_activity (
   at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_video_activity ON video_activity(video_id, at);
+CREATE TABLE IF NOT EXISTS area_seo (
+  key TEXT PRIMARY KEY,
+  title TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  keywords TEXT DEFAULT '',
+  intro TEXT DEFAULT '',
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS email_tokens (
+  hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mail_campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject TEXT NOT NULL,
+  total INTEGER NOT NULL,
+  sent INTEGER NOT NULL DEFAULT 0,
+  failed INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reporter_id INTEGER NOT NULL,
@@ -145,6 +172,8 @@ for (const [col, ddl] of [
   ['interests', "interests TEXT DEFAULT ''"],
   ['looking_for', "looking_for TEXT DEFAULT ''"],
   ['allow_calls', 'allow_calls INTEGER DEFAULT 1'],
+  ['email_verified', 'email_verified INTEGER DEFAULT 1'],
+  ['marketing_optout', 'marketing_optout INTEGER DEFAULT 0'],
 ]) if (!userCols.includes(col)) db.exec('ALTER TABLE users ADD COLUMN ' + ddl);
 
 const videoCols = db.prepare('PRAGMA table_info(videos)').all().map((c) => c.name);

@@ -181,6 +181,8 @@ app.get('/api/events', needUser, (req, res) => {
 });
 
 // ---------- auth ----------
+const authMail = require('./src/auth-mail').install(app, { db, fail, clean, now, needAdmin, startSession });
+
 app.post('/api/register', authLimiter, wrap(async (req, res) => {
   const email = clean(req.body.email, 120).toLowerCase();
   const password = String(req.body.password || '');
@@ -197,11 +199,16 @@ app.post('/api/register', authLimiter, wrap(async (req, res) => {
   const role = ADMIN_EMAIL && email === ADMIN_EMAIL ? 'admin' : 'user';
   const gender = ['nam', 'nu', 'khac'].includes(req.body.gender) ? req.body.gender : '';
   const place = readPlace(req.body);
+  const needVerify = role !== 'admin' && authMail.configured() && authMail.requireVerification(); // admin can switch this on/off
   const info = db.prepare(
-    'INSERT INTO users (email, pass_hash, name, birth_year, gender, city, address, lat, lng, role, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-  ).run(email, hash, name, birthYear, gender, clean(req.body.city, 60), place.address, place.lat, place.lng, role, now());
-  startSession(req, res, Number(info.lastInsertRowid));
+    'INSERT INTO users (email, pass_hash, name, birth_year, gender, city, address, lat, lng, role, email_verified, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+  ).run(email, hash, name, birthYear, gender, clean(req.body.city, 60), place.address, place.lat, place.lng, role, needVerify ? 0 : 1, now());
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+  if (needVerify) { // no session until the email is confirmed
+    try { await authMail.sendVerification(u, req); } catch (e) { console.error('verification mail failed:', e.message); }
+    return res.json({ needVerify: true, email });
+  }
+  startSession(req, res, Number(info.lastInsertRowid));
   res.json({ user: selfUser(u) });
 }));
 
@@ -211,6 +218,7 @@ app.post('/api/login', authLimiter, wrap(async (req, res) => {
   if (!u || !(await bcrypt.compare(String(req.body.password || ''), u.pass_hash)))
     return fail(res, 401, 'Sai email hoặc mật khẩu');
   if (u.banned) return fail(res, 403, 'Tài khoản đã bị khóa');
+  if (u.email_verified === 0) return res.status(403).json({ error: 'Bạn cần xác nhận email trước khi đăng nhập. Hãy kiểm tra hộp thư (cả mục Spam).', code: 'unverified' });
   startSession(req, res, u.id);
   res.json({ user: selfUser(u) });
 }));
@@ -1166,7 +1174,6 @@ app.get('/api/geo', (req, res) => {
   const c = String(req.get('cf-ipcountry') || req.get('cloudfront-viewer-country') || req.get('x-vercel-ip-country') || req.get('x-country-code') || req.get('x-appengine-country') || '').toUpperCase();
   res.set('Cache-Control', 'no-store').json({ country: /^[A-Z]{2}$/.test(c) && !['XX', 'T1'].includes(c) ? c : '' });
 });
-app.use('/api', (_req, res) => fail(res, 404, 'Không tìm thấy'));
 // ---------- link previews (Telegram, Facebook, Zalo, X…): crawlers don't run JavaScript, so the share page /v/:id is
 // rendered on the server with Open Graph tags for that video; real visitors are sent to the SPA player by app.js. ----------
 const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1213,6 +1220,7 @@ function renderPage(req, res, v) {
   res.set('Cache-Control', 'no-cache').type('html').send(html);
 }
 
+require('./src/seo').install(app, { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));
 app.get('/', (req, res) => renderPage(req, res, null));
 // installable app (PWA): the worker must never be cached by the browser so updates reach installed apps at once
@@ -1223,6 +1231,7 @@ app.get('/manifest.webmanifest', (req, res) => {
   res.set('Cache-Control', 'public, max-age=3600').type('application/manifest+json').send(JSON.stringify(m));
 });
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: PROD ? '1h' : 0, extensions: ['html'], index: false }));
+app.use('/api', (_req, res) => fail(res, 404, 'Không tìm thấy'));
 app.get('*', (req, res) => renderPage(req, res, null));
 
 app.use((err, _req, res, _next) => {
