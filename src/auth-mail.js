@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const mail = require('./mail');
+const T = require('./mail-templates');
 
 function install(app, ctx) {
   const { db, fail, clean, now, needAdmin, startSession } = ctx;
@@ -33,14 +34,17 @@ function install(app, ctx) {
 
   // ---------- messages ----------
   async function sendVerification(user, req) {
-    const link = `${baseOf(req)}/verify?token=${makeToken(user.id, 'verify', 48 * 3600_000)}`;
-    await mail.send({ to: user.email, subject: 'Xác nhận email đăng ký xgaigu',
-      html: mail.layout('Xác nhận email của bạn', `<p>Chào ${mail.esc(user.name)},</p><p>Cảm ơn bạn đã đăng ký xgaigu. Bấm nút bên dưới để xác nhận email và kích hoạt tài khoản (liên kết có hiệu lực 48 giờ).</p>${mail.button(link, 'Xác nhận email')}<p style="color:#7a6d88;font-size:13px">Nếu nút không bấm được, hãy dán liên kết này vào trình duyệt:<br>${mail.esc(link)}</p><p style="color:#7a6d88;font-size:13px">Nếu bạn không đăng ký, hãy bỏ qua email này.</p>`) });
+    const url = `${baseOf(req)}/verify?token=${makeToken(user.id, 'verify', 48 * 3600_000)}`;
+    await mail.send({ to: user.email, ...T.verify({ name: user.name, url }) });
   }
   async function sendReset(user, req) {
-    const link = `${baseOf(req)}/reset?token=${makeToken(user.id, 'reset', 3600_000)}`;
-    await mail.send({ to: user.email, subject: 'Đặt lại mật khẩu xgaigu',
-      html: mail.layout('Đặt lại mật khẩu', `<p>Chào ${mail.esc(user.name)},</p><p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Bấm nút bên dưới để chọn mật khẩu mới (liên kết có hiệu lực 1 giờ).</p>${mail.button(link, 'Đặt lại mật khẩu')}<p style="color:#7a6d88;font-size:13px">Nếu bạn không yêu cầu, hãy bỏ qua email này, mật khẩu của bạn vẫn an toàn.</p>`) });
+    const url = `${baseOf(req)}/reset?token=${makeToken(user.id, 'reset', 3600_000)}`;
+    await mail.send({ to: user.email, ...T.reset({ name: user.name, url }) });
+  }
+  // Welcome mail once the account is usable. Never blocks or breaks sign-up if mail fails.
+  function sendWelcome(user, req) {
+    if (!mail.configured()) return;
+    mail.send({ to: user.email, ...T.welcome({ name: user.name, url: baseOf(req) + '/' }) }).catch((e) => console.error('welcome mail:', e.message));
   }
 
   const mailLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false });
@@ -53,6 +57,7 @@ function install(app, ctx) {
     useToken(t);
     const u = db.prepare('SELECT id, banned FROM users WHERE id = ?').get(t.user_id);
     if (u && !u.banned) startSession(req, res, u.id); // the link proves the email belongs to them: sign them in
+    if (u && !u.banned) sendWelcome(db.prepare('SELECT * FROM users WHERE id = ?').get(u.id), req);
     res.redirect('/#/email-verified?ok=1');
   });
   app.post('/api/resend-verification', mailLimiter, async (req, res) => {
@@ -67,6 +72,7 @@ function install(app, ctx) {
     if (u && mail.configured()) { try { await sendReset(u, req); } catch (e) { console.error('mail:', e.message); } }
     res.json({ ok: true }); // same answer whether the email exists or not
   });
+  app.get('/forgot', (_req, res) => res.redirect('/#/forgot-password'));
   app.get('/reset', (req, res) => res.redirect('/#/reset?token=' + encodeURIComponent(String(req.query.token || '').slice(0, 100))));
   app.post('/api/reset', mailLimiter, async (req, res) => {
     const password = String(req.body.password || '');
@@ -76,6 +82,8 @@ function install(app, ctx) {
     db.prepare('UPDATE users SET pass_hash = ?, email_verified = 1 WHERE id = ?').run(await bcrypt.hash(password, 10), t.user_id);
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(t.user_id); // sign out everywhere
     useToken(t);
+    const who = db.prepare('SELECT name, email FROM users WHERE id = ?').get(t.user_id);
+    if (who && mail.configured()) mail.send({ to: who.email, ...T.passwordChanged({ name: who.name, when: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' (giờ Việt Nam)', resetUrl: baseOf(req) + '/forgot' }) }).catch((e) => console.error('notice mail:', e.message));
     res.json({ ok: true });
   });
 
@@ -102,7 +110,7 @@ function install(app, ctx) {
     const to = clean(req.body.to, 120).toLowerCase() || req.user.email;
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return fail(res, 400, 'Email nhận không hợp lệ');
     try {
-      const info = await mail.send({ to, subject: 'Email thử từ xgaigu', html: mail.layout('Email gửi thử', '<p>Nếu bạn đọc được email này, cấu hình gửi email của xgaigu.com đang hoạt động bình thường. ✅</p>') });
+      const info = await mail.send({ to, ...T.test() });
       res.json({ ok: true, to, response: String(info.response || '').slice(0, 120) });
     } catch (e) { console.error('mail test:', e.message); fail(res, 502, 'Gửi thất bại: ' + e.message); }
   });
@@ -115,6 +123,13 @@ function install(app, ctx) {
     const subject = clean(req.body.subject, 150), body = String(req.body.body || '').replace(/\r/g, '').trim().slice(0, 8000);
     if (subject.length < 3 || body.length < 10) return fail(res, 400, 'Hãy nhập tiêu đề và nội dung email');
     const limit = Math.min(Math.max(parseInt(req.body.limit, 10) || 100, 1), 1000);
+    let cta = null;
+    const ctaLabel = clean(req.body.ctaLabel, 40); let ctaUrl = clean(req.body.ctaUrl, 400);
+    if (ctaLabel || ctaUrl) {
+      if (ctaUrl.startsWith('/')) ctaUrl = baseOf(req) + ctaUrl;
+      if (!ctaLabel || !/^https?:\/\/\S+$/.test(ctaUrl)) return fail(res, 400, 'Nút trong email cần có chữ trên nút và địa chỉ bắt đầu bằng https:// (hoặc /)');
+      cta = { label: ctaLabel, url: ctaUrl };
+    }
     const rows = db.prepare(
       `SELECT id, email, name FROM users WHERE banned = 0 AND marketing_optout = 0 ${req.body.verifiedOnly ? 'AND email_verified = 1' : ''} ORDER BY id LIMIT ?`).all(limit);
     if (!rows.length) return fail(res, 400, 'Không có người nhận nào phù hợp');
@@ -124,11 +139,9 @@ function install(app, ctx) {
     (async () => {
       for (const u of rows) {
         const unsub = `${base}/unsubscribe?u=${u.id}&t=${unsubSig(u.id)}`;
-        const text = body.replace(/\{name\}/g, u.name);
-        const inner = text.split(/\n{2,}/).map((p) => `<p style="line-height:1.6">${mail.esc(p).replace(/\n/g, '<br>')}</p>`).join('');
         try {
-          await mail.send({ to: u.email, subject, headers: { 'List-Unsubscribe': `<${unsub}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
-            html: mail.layout(subject, inner, `Bạn nhận email này vì đã đăng ký tài khoản tại xgaigu.com. <a href="${mail.esc(unsub)}" style="color:#7a6d88">Hủy nhận email quảng bá</a>.`) });
+          const msg = T.campaign({ name: u.name, subject, text: body, cta, unsubscribeUrl: unsub });
+          await mail.send({ to: u.email, ...msg, headers: { 'List-Unsubscribe': `<${unsub}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } });
           db.prepare('UPDATE mail_campaigns SET sent = sent + 1 WHERE id = ?').run(cid);
         } catch (e) { console.error('campaign mail:', e.message); db.prepare('UPDATE mail_campaigns SET failed = failed + 1 WHERE id = ?').run(cid); }
         await new Promise((r) => setTimeout(r, 1500)); // gentle pace: shared mail servers limit messages per hour
@@ -139,7 +152,7 @@ function install(app, ctx) {
     res.json({ ok: true, id: cid, total: rows.length });
   });
 
-  return { requireVerification, configured: mail.configured, sendVerification };
+  return { requireVerification, configured: mail.configured, sendVerification, sendWelcome };
 }
 
 module.exports = { install };

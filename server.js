@@ -209,6 +209,7 @@ app.post('/api/register', authLimiter, wrap(async (req, res) => {
     return res.json({ needVerify: true, email });
   }
   startSession(req, res, Number(info.lastInsertRowid));
+  authMail.sendWelcome(u, req);
   res.json({ user: selfUser(u) });
 }));
 

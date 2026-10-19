@@ -1851,6 +1851,7 @@ async function pageAdmin() {
     const testRes = h('p', { class: 'muted', style: 'font-size:14px;margin-top:8px' });
     const subj = h('input', { placeholder: 'Tiêu đề email', maxlength: 150 }), body = h('textarea', { rows: 8, maxlength: 8000, placeholder: 'Nội dung email. Dùng {name} để chèn tên người nhận. Để trống một dòng giữa các đoạn.' });
     const lim = h('input', { type: 'number', min: 1, max: 1000, value: 100, style: 'width:110px' }), ver = h('input', { type: 'checkbox' });
+    const ctaL = h('input', { placeholder: 'Chữ trên nút (không bắt buộc), VD: Xem ngay', maxlength: 40, style: 'flex:1;min-width:180px' }), ctaU = h('input', { placeholder: 'Địa chỉ của nút, VD: https://xgaigu.com/khu-vuc', maxlength: 400, style: 'flex:2;min-width:220px' });
     const camp = h('div', { style: 'margin-top:12px;display:grid;gap:8px' });
     const drawC = (list) => camp.replaceChildren(...list.map((c) => h('div', { class: 'muted', style: 'font-size:13px' }, '#' + c.id + ' · ' + c.subject + ' — ' + ({ running: 'đang gửi…', done: 'xong', interrupted: 'bị gián đoạn' }[c.status] || c.status) + ' · gửi được ' + c.sent + '/' + c.total + (c.failed ? ' · lỗi ' + c.failed : '') + ' · ' + new Date(c.created_at).toLocaleString('vi-VN'))));
     drawC(ml.campaigns);
@@ -1861,10 +1862,10 @@ async function pageAdmin() {
         h('p', { class: 'muted', style: 'font-size:13px' }, 'Thành viên: ' + ml.counts.total + ' · đã xác nhận: ' + ml.counts.verified + ' · đã hủy nhận email quảng bá: ' + (ml.counts.optout || 0)),
         h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, testTo, h('button', { class: 'btn', type: 'button', onclick: async (ev) => { ev.target.disabled = true; testRes.textContent = 'Đang gửi…'; try { const r = await api('/admin/mail/test', { method: 'POST', body: { to: testTo.value } }); testRes.textContent = '✅ Đã gửi thư thử tới ' + r.to + '. Hãy kiểm tra hộp thư (cả Spam).'; } catch (e) { testRes.textContent = '❌ ' + e.message; } ev.target.disabled = false; } }, 'Gửi email thử')), testRes,
         h('hr', { style: 'border:0;border-top:1px solid var(--line);width:100%' }),
-        h('b', {}, 'Gửi email quảng bá cho thành viên'), subj, body,
+        h('b', {}, 'Gửi email quảng bá cho thành viên'), subj, body, h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, ctaL, ctaU),
         h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, h('label', { class: 'muted', style: 'font-size:14px' }, 'Tối đa '), lim, h('span', { class: 'muted', style: 'font-size:14px' }, 'người nhận'), h('label', { class: 'check' }, ver, h('span', {}, 'Chỉ người đã xác nhận email'))),
         h('p', { class: 'muted', style: 'font-size:13px' }, 'Mỗi email có liên kết "Hủy nhận email quảng bá". Gửi chậm khoảng 1,5 giây/email để tránh bị nhà cung cấp chặn. Hãy hỏi Hostinger giới hạn số email mỗi giờ của gói bạn.'),
-        h('button', { class: 'btn primary', type: 'button', onclick: async (ev) => { if (!confirm('Gửi email này cho tối đa ' + lim.value + ' thành viên?')) return; ev.target.disabled = true; try { const r = await api('/admin/mail/campaign', { method: 'POST', body: { subject: subj.value, body: body.value, limit: lim.value, verifiedOnly: ver.checked } }); toast('Đang gửi cho ' + r.total + ' người…'); const poll = setInterval(async () => { try { const x = await api('/admin/mail'); drawC(x.campaigns); if (!x.campaigns.some((c) => c.status === 'running')) { clearInterval(poll); ev.target.disabled = false; toast('Đã gửi xong'); } } catch { clearInterval(poll); } }, 4000); S.cleanups.push(() => clearInterval(poll)); drawC((await api('/admin/mail')).campaigns); } catch (e) { fail(e); ev.target.disabled = false; } } }, 'Gửi email'), camp));
+        h('button', { class: 'btn primary', type: 'button', onclick: async (ev) => { if (!confirm('Gửi email này cho tối đa ' + lim.value + ' thành viên?')) return; ev.target.disabled = true; try { const r = await api('/admin/mail/campaign', { method: 'POST', body: { subject: subj.value, body: body.value, limit: lim.value, verifiedOnly: ver.checked, ctaLabel: ctaL.value, ctaUrl: ctaU.value } }); toast('Đang gửi cho ' + r.total + ' người…'); const poll = setInterval(async () => { try { const x = await api('/admin/mail'); drawC(x.campaigns); if (!x.campaigns.some((c) => c.status === 'running')) { clearInterval(poll); ev.target.disabled = false; toast('Đã gửi xong'); } } catch { clearInterval(poll); } }, 4000); S.cleanups.push(() => clearInterval(poll)); drawC((await api('/admin/mail')).campaigns); } catch (e) { fail(e); ev.target.disabled = false; } } }, 'Gửi email'), camp));
   })();
   // SEO text of every area (region / province / district)
   const geoSeo = geoPicker();
@@ -1934,6 +1935,7 @@ async function route() {
     if (a === 'golive') return pageGoLive();
     if (a === 'terms') return pageTerms();
     if (a === 'reset') return pageReset(query);
+    if (a === 'forgot-password') { const holder = h('div'); const mm = modal(holder); holder.append(forgotForm(mm)); location.hash = '#/'; return; }
     if (a === 'email-verified') return pageEmailVerified(query);
     if (a === 'admin') return pageAdmin();
     main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Không tìm thấy trang'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/' }, 'Về trang chủ')));
