@@ -627,3 +627,5 @@
 674|Siguiendo
 677|🔥 En auge
 678|🆕 Nuevo
+757|Verificado
+758|Verificado por un administrador

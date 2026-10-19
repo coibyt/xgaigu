@@ -627,3 +627,5 @@
 674|Gefolgt
 677|🔥 Angesagt
 678|🆕 Neu
+757|Verifiziert
+758|Vom Admin verifiziert

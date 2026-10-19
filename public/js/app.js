@@ -812,6 +812,10 @@ const Pref = {
 
 // "Đang hot" / "Mới" badge on a video (automatic, or chosen by an admin)
 const isAdmin = () => !!(S.user && S.user.role === 'admin');
+// "Đã xác minh" seal: bright blue pill with a white check, shown on every verified video
+const SEAL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.6l2.5 1.8 3.1-.2 1.2 2.9 2.8 1.5-.4 3.1 1.6 2.6-1.6 2.7.4 3.1-2.8 1.5-1.2 2.9-3.1-.2L12 22.4l-2.5-1.8-3.1.2-1.2-2.9-2.8-1.5.4-3.1L1.2 12.7l1.6-2.7-.4-3.1 2.8-1.5 1.2-2.9 3.1.2z" fill="#fff"/><path d="M7.9 12.4l2.7 2.7 5.5-5.7" fill="none" stroke="#1d6bff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const vbadge = (small) => h('span', { class: 'vbadge' + (small ? ' sm' : ''), title: 'Video đã được quản trị viên xác minh', html: SEAL + '<b>Đã xác minh</b>' });
+const vflags = (v, small) => (v.verified || v.badge ? h('span', { class: 'vflags' }, v.verified && vbadge(small), v.badge && vtag(v)) : null);
 const vtag = (v) => (v.badge ? h('span', { class: 'vtag ' + v.badge }, v.badge === 'hot' ? '🔥 Đang hot' : '🆕 Mới') : null);
 
 // ---------- feed ----------
@@ -855,7 +859,7 @@ function slide(v) {
     actBtn('', 'Báo cáo', 'flag', null, () => openReport('video', v.id)));
   const el = h('article', { class: 'slide', 'data-id': v.id },
     h('div', { class: 'player' }, media, mute,
-      h('div', { class: 'meta' }, vtag(v),
+      h('div', { class: 'meta' }, vflags(v),
         h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
         (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
         h('button', { class: 'infobtn', type: 'button', onclick: () => openInfo(v), html: icon('info') + 'Xem thông tin' }),
@@ -917,7 +921,7 @@ function vthumb(v) {
   else { media.style.pointerEvents = 'none'; }
   return h('a', { class: 'vcard', href: '#/feed/' + v.id, 'aria-label': 'Xem video của ' + v.user.name },
     media, h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(v.user), v.user.name + (v.user.age ? ', ' + v.user.age : '')), v.caption && h('div', { class: 'cap', translate: 'no' }, v.caption)),
-    vtag(v),
+    vflags(v),
     h('span', { class: 'views', title: isAdmin() ? fmtCount(v.views || 0) + ' lượt xem' : '', html: icon('heart') + v.likes + (isAdmin() ? '<span class="vsep">·</span>' + icon('eye2') + fmtCount(v.views || 0) : '') }),
     v.distanceKm != null && h('span', { class: 'distance', html: icon('pin') + '≈ ' + v.distanceKm + ' km' }));
 }
@@ -1090,7 +1094,7 @@ async function pageUser(id) {
     const media = poster ? h('img', { src: poster, alt: v.caption || 'Video', loading: 'lazy' })
       : (() => { const m = mediaEl(v); if (m instanceof HTMLVideoElement) m.setAttribute('preload', 'metadata'); else m.style.pointerEvents = 'none'; return m; })();
     const c = h('a', { class: 'tcell', href: '#/feed/' + v.id, 'aria-label': 'Xem video' }, media,
-      vtag(v), h('span', { class: 'tviews', html: isAdmin() ? icon('play') + fmtCount(v.views || 0) : icon('heart') + fmtCount(v.likes || 0) }));
+      vflags(v, true), h('span', { class: 'tviews', html: isAdmin() ? icon('play') + fmtCount(v.views || 0) : icon('heart') + fmtCount(v.likes || 0) }));
     if (me) c.append(h('button', { class: 'iconbtn tdel', 'aria-label': 'Sửa video', html: '✎', style: 'font-size:18px', onclick: (e) => { e.preventDefault(); e.stopPropagation(); adminVideoDialog(v.id, () => route(), true); } }));
     if (v.selfHidden) c.append(h('span', { class: 'selfhid' }, 'Đang ẩn'));
     return c;
@@ -1224,7 +1228,7 @@ function openInfo(v) {
     ['Năm sinh', i.birthYear], ['Chiều cao', i.height && i.height + ' cm'], ['Cân nặng', i.weight && i.weight + ' kg'],
     ['Xuất xứ', i.origin], ['Nghề nghiệp', i.occupation], ['Địa chỉ', i.address], ['Thời gian rảnh', i.workTime],
   ].filter((r) => r[1]);
-  const body = h('div', {}, h('h3', {}, v.user.name), (v.caption ? h('p', { class: 'sub', translate: 'no' }, v.caption) : h('p', { class: 'sub' }, 'Thông tin giới thiệu')),
+  const body = h('div', {}, h('h3', {}, v.user.name), v.verified && h('div', { style: 'margin:2px 0 12px' }, vbadge()), (v.caption ? h('p', { class: 'sub', translate: 'no' }, v.caption) : h('p', { class: 'sub' }, 'Thông tin giới thiệu')),
     h('dl', { class: 'info-list' }, rows.map(([k, val]) => h('div', {}, h('dt', {}, k), h('dd', {}, String(val))))),
     i.interests && i.interests.length > 0 && h('div', { class: 'facts', style: 'margin:12px 0' }, i.interests.map((t) => h('span', { class: 'fact tag' }, t))),
     i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
@@ -1711,6 +1715,8 @@ async function adminVideoDialog(id, onChange, own = false) {
   const STATUS = { visible: 'Đang hiển thị', hidden: 'Đã ẩn', banned: 'Bị cấm xuất bản', self: own ? 'Đang ẩn (chỉ mình bạn thấy)' : 'Chủ video tự ẩn' };
   const badgeSel = h('select', { 'aria-label': 'Huy hiệu', style: 'width:auto' }, [['', 'Huy hiệu: tự động'], ['hot', '🔥 Luôn hiện “Đang hot”'], ['new', '🆕 Luôn hiện “Mới”'], ['off', 'Không hiện huy hiệu']].map(([a, b]) => h('option', { value: a, selected: (v.badge || '') === a }, b)));
   badgeSel.addEventListener('change', async () => { try { v = (await api('/admin/videos/' + v.id + '/badge', { method: 'POST', body: { badge: badgeSel.value } })).video; toast('Đã cập nhật huy hiệu'); onChange && onChange(); } catch (e) { fail(e); } });
+  const verChk = h('input', { type: 'checkbox', checked: !!v.verified });
+  verChk.addEventListener('change', async () => { try { v = (await api('/admin/videos/' + v.id + '/verified', { method: 'POST', body: { verified: verChk.checked } })).video; toast(v.verified ? 'Đã gắn huy hiệu ĐÃ XÁC MINH' : 'Đã gỡ huy hiệu xác minh'); onChange && onChange(); } catch (e) { verChk.checked = !verChk.checked; fail(e); } });
   const geo = geoPicker();
   const input = (name, label, val, attrs = {}) => h('label', { class: 'f' }, h('span', {}, label), h('input', { name, value: val == null ? '' : val, ...attrs }));
   const i = v.info || {};
@@ -1746,7 +1752,7 @@ async function adminVideoDialog(id, onChange, own = false) {
       h('button', { class: 'btn sm', type: 'button', onclick: () => setStatus('hidden') }, 'Ẩn video'),
       h('button', { class: 'btn sm live', type: 'button', onclick: () => setStatus('banned') }, 'Cấm xuất bản'),
       h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!confirm('XOÁ vĩnh viễn video này? Không thể khôi phục.')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); toast('Đã xoá video'); m.close(); onChange && onChange(); } catch (e) { fail(e); } } }, 'Xoá')),
-    own ? null : h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), own ? null : note, h('div', { style: 'height:12px' }), f), { wide: true });
+    own ? null : h('label', { class: 'check verify-tick' }, verChk, h('span', {}, h('b', {}, 'Đã xác minh'), ' – hiện huy hiệu xác minh nổi bật trên video này (chỉ admin được chọn)')), own ? null : h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), own ? null : note, h('div', { style: 'height:12px' }), f), { wide: true });
   // fill the area selects once the region list has loaded
   loadGeo().then((g) => {
     const [reg, prov, dist] = geo.el.querySelectorAll('select');
@@ -1828,7 +1834,7 @@ async function pageAdmin() {
     const d = await api('/admin/videos?page=' + vpage + '&status=' + vst.value + '&q=' + encodeURIComponent(vq.value.trim()));
     vInfo.textContent = 'Tổng số video: ' + d.total;
     vBody.replaceChildren(...d.videos.map((x) => h('tr', {},
-      h('td', {}, '#' + x.id),
+      h('td', {}, '#' + x.id, x.verified && h('span', { title: 'Đã xác minh', style: 'color:#38bdf8;margin-left:4px' }, '✔')),
       h('td', {}, x.thumb ? h('img', { src: x.thumb, alt: '', style: 'width:44px;height:58px;object-fit:cover;border-radius:6px;display:block' }) : ''),
       h('td', { translate: 'no', style: 'max-width:220px' }, (x.caption || x.nickname || '(không có nội dung)').slice(0, 80)),
       h('td', { translate: 'no', style: 'word-break:break-all' }, x.owner.email),

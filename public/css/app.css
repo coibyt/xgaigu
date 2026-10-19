@@ -544,3 +544,19 @@ main:focus,main:focus-visible{outline:none}
 .seo-kw{color:var(--muted);font-size:14px}
 
 .linkbtn{background:none;border:0;color:#ff8ab4;text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+
+/* "Đã xác minh" badge */
+.vflags{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
+.vbadge{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:8px;padding:5px 15px 5px 6px;border-radius:999px;color:#fff;font-size:13px;line-height:1;white-space:nowrap;
+  background:linear-gradient(135deg,#19b6ff 0%,#2563ff 55%,#7c3aed 100%);box-shadow:0 0 0 1.5px rgba(255,255,255,.55) inset,0 6px 20px rgba(37,99,255,.6),0 0 22px rgba(25,182,255,.45)}
+.vbadge svg{width:25px;height:25px;flex:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
+.vbadge b{font-weight:800;letter-spacing:.8px;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.vbadge::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-20deg);animation:vshine 3.4s ease-in-out infinite}
+@keyframes vshine{0%,55%{left:-60%}100%{left:130%}}
+.vbadge.sm{gap:4px;padding:3px 9px 3px 3px;font-size:9.5px}.vbadge.sm svg{width:16px;height:16px}
+.vcard .vflags,.tcell .vflags{position:absolute;top:10px;left:10px;z-index:2;display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+.tcell .vflags{top:6px;left:6px}
+.vflags .vtag{position:static}
+.meta .vflags{margin-bottom:10px}
+.verify-tick{padding:12px 14px;border:1px solid rgba(56,189,248,.5);background:rgba(37,99,255,.12);border-radius:12px;margin-bottom:12px}
+@media (prefers-reduced-motion:reduce){.vbadge::after{animation:none;display:none}}
