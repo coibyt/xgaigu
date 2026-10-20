@@ -629,3 +629,6 @@
 678|🆕 Neu
 757|Verifiziert
 758|Vom Admin verifiziert
+819|Video wird geladen…
+820|Erneut versuchen
+821|Langsame Verbindung, lädt noch…

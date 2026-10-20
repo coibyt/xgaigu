@@ -629,3 +629,6 @@
 678|🆕 Baru
 757|Terverifikasi
 758|Diverifikasi oleh admin
+819|Memuat video…
+820|Coba lagi
+821|Koneksi lambat, masih memuat…

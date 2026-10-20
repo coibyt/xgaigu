@@ -560,3 +560,12 @@ main:focus,main:focus-visible{outline:none}
 .meta .vflags{margin-bottom:10px}
 .verify-tick{padding:12px 14px;border:1px solid rgba(56,189,248,.5);background:rgba(37,99,255,.12);border-radius:12px;margin-bottom:12px}
 @media (prefers-reduced-motion:reduce){.vbadge::after{animation:none;display:none}}
+
+/* video loading ring */
+.vload{position:absolute;inset:0;z-index:3;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,.35),rgba(0,0,0,.05) 70%)}
+.vload.on{display:flex}
+.vring{width:58px;height:58px;border-radius:50%;border:4px solid rgba(255,255,255,.18);border-top-color:#ff2e7e;border-right-color:#ff6b4a;animation:rot .85s linear infinite;box-shadow:0 0 28px rgba(255,46,126,.45)}
+.vtext{display:flex;gap:8px;align-items:center;padding:7px 16px;border-radius:999px;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);font-size:14px;font-weight:600;color:#fff}
+.vtext b{font-weight:800;color:#ff8ab4;min-width:0}
+.vretry{pointer-events:auto}
+@media (prefers-reduced-motion:reduce){.vring{animation-duration:2s}}

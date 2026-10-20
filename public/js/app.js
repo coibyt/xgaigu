@@ -570,7 +570,7 @@ function mediaEl(v, { controls = false, lazy = false } = {}) {
   const y = !v.file && ytId(v.url);
   if (y && lazy) return h('iframe', { 'data-yt': y, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video' });
   if (y) return h('iframe', { src: `https://www.youtube-nocookie.com/embed/${y}?playsinline=1&rel=0&modestbranding=1`, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: v.caption || 'Video', loading: 'lazy' });
-  const el = h('video', { playsinline: true, muted: true, preload: 'metadata', poster: v.thumb || null, controls: controls || null, 'aria-label': v.caption || 'Video' });
+  const el = h('video', { playsinline: true, muted: true, preload: lazy ? 'none' : 'metadata', poster: v.thumb || null, controls: controls || null, 'aria-label': v.caption || 'Video' });
   el.muted = true;
   if (/\.m3u8(\?|$)/.test(src) && window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(src); hls.attachMedia(el); }
   else el.src = src;
@@ -605,9 +605,11 @@ function observePlay(el) {
       }
       if (!(v instanceof HTMLVideoElement)) return;
       if (e.isIntersecting && e.intersectionRatio > 0.6) {
-        v.muted = !S.sound; v._sync && v._sync();
+        v._active = true; v.preload = 'auto';
+        { const nx = v.closest('.slide') && v.closest('.slide').nextElementSibling; const nv = nx && nx.querySelector('video'); if (nv && nv.preload !== 'auto') nv.preload = 'auto'; } // start fetching the next video early
+        v.muted = !S.sound; v._sync && v._sync(); v._upd && v._upd();
         v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
-      } else v.pause();
+      } else { v._active = false; v._upd && v._upd(); v.pause(); }
     }), { threshold: [0, 0.6, 1] });
   }
   playObserver.observe(el);
@@ -831,6 +833,39 @@ window.addEventListener('message', (e) => {
   if (d && d.event === 'onStateChange' && d.info === 0) { const f = [...document.querySelectorAll('iframe[data-yt]')].find((x) => x.contentWindow === e.source); if (f) f.dispatchEvent(new Event('ytended')); }
 });
 
+// Loading ring with a percentage, shown on a video that is still loading (so nobody thinks the site is broken).
+function attachLoader(media) {
+  const isVideo = media instanceof HTMLVideoElement;
+  const pct = h('b', {}, ''), msg = h('span', {}, 'Đang tải video…');
+  const ring = h('div', { class: 'vload', role: 'status', 'aria-live': 'polite' }, h('div', { class: 'vring' }), h('div', { class: 'vtext' }, pct, msg));
+  const retry = h('button', { type: 'button', class: 'btn sm vretry', hidden: true, onclick: (e) => { e.stopPropagation(); if (isVideo) { media.load(); media.play().catch(() => {}); } retry.hidden = true; started = performance.now(); upd(); } }, 'Thử lại');
+  ring.append(retry);
+  let started = performance.now(), failed = false;
+  const buffered = () => { try { const b = media.buffered, t = media.currentTime; for (let i = 0; i < b.length; i++) if (t >= b.start(i) - 0.1 && t <= b.end(i) + 0.1) return b.end(i); } catch {} return 0; };
+  const upd = () => {
+    if (!isVideo) return;
+    const waiting = media._active && media.readyState < 3 && !media.ended;
+    ring.classList.toggle('on', !!(waiting || failed));
+    if (failed) { msg.textContent = 'Không tải được video'; pct.textContent = ''; retry.hidden = false; return; }
+    retry.hidden = true;
+    const dur = media.duration, need = Math.min(isFinite(dur) && dur > 0 ? dur : 3, 3);
+    const p = media.readyState >= 1 ? Math.min(99, Math.floor((buffered() - media.currentTime) / need * 100)) : 0;
+    pct.textContent = p > 0 ? p + '%' : '';
+    msg.textContent = performance.now() - started > 10000 ? 'Mạng hơi chậm, vẫn đang tải…' : 'Đang tải video…';
+  };
+  if (isVideo) {
+    media._upd = upd;
+    ['loadstart', 'progress', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'waiting', 'stalled', 'timeupdate', 'seeking', 'seeked'].forEach((ev) => media.addEventListener(ev, () => { if (ev === 'waiting' || ev === 'loadstart') started = performance.now(); failed = false; upd(); }));
+    media.addEventListener('error', () => { failed = true; upd(); });
+    setInterval(() => { if (!media.isConnected) return; if (ring.classList.contains('on')) upd(); }, 1000);
+  } else if (media.dataset.yt) { // YouTube frame: ring until the frame has loaded
+    ring.classList.add('on'); pct.textContent = '';
+    media.addEventListener('load', () => { if (media.src) ring.classList.remove('on'); });
+    new MutationObserver(() => { if (media.src) ring.classList.add('on'); else ring.classList.remove('on'); }).observe(media, { attributes: true, attributeFilter: ['src'] });
+  }
+  return ring;
+}
+
 function slide(v) {
   const media = mediaEl(v, { lazy: true });
   media.dataset.vid = v.id;
@@ -858,7 +893,7 @@ function slide(v) {
     v.file && actBtn('', 'Tải xuống', 'download', null, () => downloadVideo(v)),
     actBtn('', 'Báo cáo', 'flag', null, () => openReport('video', v.id)));
   const el = h('article', { class: 'slide', 'data-id': v.id },
-    h('div', { class: 'player' }, media, mute,
+    h('div', { class: 'player' }, media, attachLoader(media), mute,
       h('div', { class: 'meta' }, vflags(v),
         h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
         (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
@@ -886,7 +921,7 @@ async function pageFeed(startId, home) {
       if (home) videos.forEach((v) => seen.push(v.id));
       if (!videos.length && first && home) { loading = false; main.innerHTML = ''; return pageHome(); }
       if (!videos.length) { done = true; box.append(h('div', { class: 'slide' }, h('div', { class: 'endcap' }, videos.length || !first ? 'Bạn đã xem hết video 🎉' : ''))); if (first) { box.innerHTML = ''; box.append(emptyFeed()); } }
-      else { videos.forEach((v) => box.append(slide(v))); before = videos[videos.length - 1].id; if (videos.length < (home ? 1 : 12)) done = true; }
+      else { videos.forEach((v) => box.append(slide(v))); if (first) box.querySelectorAll('video').forEach((el, i) => { if (i < 2) el.preload = 'auto'; }); before = videos[videos.length - 1].id; if (videos.length < (home ? 1 : 12)) done = true; }
       first = false;
     } catch (e) { toast(e.message, true); }
     loading = false;

@@ -629,3 +629,6 @@
 678|🆕 New
 757|Verified
 758|Verified by an administrator
+819|Loading video…
+820|Retry
+821|Slow connection, still loading…

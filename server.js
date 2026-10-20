@@ -133,6 +133,15 @@ function startSession(req, res, userId) {
 }
 
 // ---------- uploads ----------
+const faststart = require('./src/faststart').create({ ffmpeg: FFMPEG, uploadDir: UPLOAD_DIR });
+// old files: after start-up, one at a time, fix MP4/MOV files whose index is at the end (slow start)
+setTimeout(() => {
+  try {
+    const files = db.prepare("SELECT file FROM videos WHERE file != '' AND (file LIKE '%.mp4' OR file LIKE '%.mov') ORDER BY id DESC LIMIT 400").all();
+    let n = 0; for (const r of files) { const f = path.join(UPLOAD_DIR, path.basename(r.file)); if (faststart.needsFaststart(f)) { faststart.enqueue(r.file); n++; } }
+    if (n) console.log('faststart: ' + n + ' video(s) queued for quick-start optimisation');
+  } catch (e) { console.error('faststart scan:', e.message); }
+}, 45_000).unref();
 const VIDEO_TYPES = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov' };
 const IMAGE_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
 const upload = multer({
@@ -149,7 +158,7 @@ const upload = multer({
 const rmUpload = (name) => { if (name) fs.promises.unlink(path.join(UPLOAD_DIR, path.basename(name))).catch(() => {}); };
 
 app.use('/uploads', express.static(UPLOAD_DIR, {
-  maxAge: '7d', index: false, dotfiles: 'deny',
+  maxAge: '30d', immutable: true, index: false, dotfiles: 'deny',
   setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
 }));
 
@@ -557,6 +566,7 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   let thumb = req.files && req.files.thumb && req.files.thumb[0];
   if (thumb && (!IMAGE_TYPES[thumb.mimetype] || thumb.size > 5 * 1024 * 1024)) { rmUpload(thumb.filename); thumb = null; }
   const dropAll = () => { if (file) rmUpload(file.filename); if (thumb) rmUpload(thumb.filename); };
+  if (file) setTimeout(() => faststart.enqueue('/uploads/' + file.filename), 2000); // optimise for quick start in the background
   if (file && !VIDEO_TYPES[file.mimetype]) { dropAll(); return fail(res, 400, 'Chỉ nhận video MP4/WebM/MOV'); }
   if (!file && !/^https:\/\/\S+$/.test(url)) { dropAll(); return fail(res, 400, 'Hãy chọn file video hoặc dán liên kết https'); }
   const area = readArea(req.body);

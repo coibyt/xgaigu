@@ -629,3 +629,6 @@
 678|🆕 Nuevo
 757|Verificado
 758|Verificado por un administrador
+819|Cargando video…
+820|Reintentar
+821|Conexión lenta, sigue cargando…
