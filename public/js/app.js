@@ -1890,10 +1890,11 @@ async function pageAdmin() {
       const d = await api('/admin/area-seo?' + new URLSearchParams(b));
       seoDef = d.defaults; seoUrl = d.url;
       const s = d.saved || {};
-      sf.title.value = s.title || ''; sf.description.value = s.description || ''; sf.keywords.value = s.keywords || ''; sf.intro.value = s.intro || '';
+      // pre-filled with the ready-made text (real, editable values); saved text wins when the admin has written their own
+      sf.title.value = s.title || d.defaults.title; sf.description.value = s.description || d.defaults.description; sf.keywords.value = s.keywords || d.defaults.keywords; sf.intro.value = s.intro || d.defaults.intro;
       sf.title.placeholder = d.defaults.title; sf.description.placeholder = d.defaults.description; sf.keywords.placeholder = d.defaults.keywords; sf.intro.placeholder = d.defaults.intro;
       uTitle(); uDesc();
-      seoInfo.textContent = d.saved ? 'Khu vực này đang dùng nội dung bạn đã viết.' : 'Khu vực này đang dùng nội dung tự động (hiện mờ trong các ô). Hãy viết nội dung riêng để tăng SEO.';
+      seoInfo.textContent = d.saved ? 'Khu vực này đang dùng nội dung bạn đã viết.' : 'Đang dùng nội dung mẫu có sẵn (đã điền trong các ô). Cần thì sửa trực tiếp rồi bấm Lưu. Nếu bạn không bấm Lưu, trang vẫn dùng mẫu này và số video tự cập nhật.';
       seoView.href = d.url; seoView.hidden = false;
     } catch (e) { fail(e); }
   };

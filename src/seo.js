@@ -60,16 +60,20 @@ function install(app, ctx) {
     const top = [...kids].sort((x, y) => y.n - x.n).filter((x) => x.n > 0).slice(0, 5);
     const safety = 'Mọi thành viên phải từ 18 tuổi trở lên. Hãy gặp gỡ ở nơi công cộng, không chuyển tiền trước cho người lạ và báo cáo ngay nội dung đáng ngờ để xgaigu xử lý.';
     const place = a.level === 'region' ? name : full;
+    const faq = `Câu hỏi thường gặp về ${place}\n` +
+      `• Xem video tại ${place} như thế nào? Mở trang này, chọn khu vực bạn quan tâm rồi bấm vào video để xem toàn màn hình.\n` +
+      `• Làm quen ra sao? Đăng ký tài khoản miễn phí, bấm "Xem thông tin" rồi nhắn tin hoặc đặt lịch hẹn gặp.\n` +
+      `• Có an toàn không? Mọi thành viên từ 18 tuổi trở lên, có nút báo cáo ở mọi nơi và quản trị viên xử lý nội dung vi phạm.`;
     const keywords = [`làm quen ${place}`, `kết bạn ${place}`, `hẹn hò ${place}`, `video ${place}`, `chat ${place}`, `livestream ${place}`, `tìm bạn ${place}`, 'xgaigu'];
     let intro;
     if (a.level === 'region') {
       intro = `${name} gồm ${kids.length} tỉnh/thành phố: ${kids.map((k) => shortName(k.name)).join(', ')}.\n\n` +
         `Trên xgaigu.com bạn có thể xem video giới thiệu của thành viên ở từng tỉnh/thành, nhắn tin làm quen, xem livestream và đặt lịch hẹn gặp có kiểm soát. ` +
-        (total ? `Hiện có ${total} video tại ${name}` + (top.length ? `, nhiều nhất ở ${top.map((t) => `${shortName(t.name)} (${t.n})`).join(', ')}.` : '.') : `Khu vực này đang chờ những video đầu tiên.`) + `\n\n${safety}`;
+        (total ? `Hiện có ${total} video tại ${name}` + (top.length ? `, nhiều nhất ở ${top.map((t) => `${shortName(t.name)} (${t.n})`).join(', ')}.` : '.') : `Khu vực này đang chờ những video đầu tiên.`) + `\n\n${faq}\n\n${safety}`;
     } else if (a.level === 'province') {
       intro = `${name} có ${kids.length} quận/huyện/thị xã được liệt kê trên xgaigu.com.\n\n` +
         `Tại đây bạn có thể xem video giới thiệu của thành viên ở ${name}, làm quen qua tin nhắn và livestream, rồi sắp xếp cuộc hẹn an toàn. ` +
-        (total ? `Hiện có ${total} video tại ${name}` + (top.length ? `, nhiều nhất ở ${top.map((t) => `${t.name} (${t.n})`).join(', ')}.` : '.') : `Hãy là người đầu tiên đăng video tại ${name}.`) + `\n\n${safety}`;
+        (total ? `Hiện có ${total} video tại ${name}` + (top.length ? `, nhiều nhất ở ${top.map((t) => `${t.name} (${t.n})`).join(', ')}.` : '.') : `Hãy là người đầu tiên đăng video tại ${name}.`) + `\n\n${faq}\n\n${safety}`;
     } else {
       intro = `Danh sách video giới thiệu của thành viên tại ${full} trên xgaigu.com.\n\n` +
         (total ? `Hiện có ${total} video tại khu vực này. ` : `Khu vực này chưa có video, hãy là người đầu tiên đăng. `) +
@@ -127,7 +131,7 @@ function install(app, ctx) {
     return html;
   }
 
-  const paragraphs = (t) => String(t).split(/\n{2,}/).map((p) => `<p>${escHtml(p.trim())}</p>`).join('');
+  const paragraphs = (t) => String(t).split(/\n{2,}/).map((p) => `<p>${escHtml(p.trim()).replace(/\n/g, '<br>')}</p>`).join('');
   const crumbsOf = (a) => {
     const out = [{ name: 'Trang chủ', url: '/' }, { name: 'Khu vực', url: '/khu-vuc' }];
     out.push({ name: REGIONS[a.region], url: urlOf({ level: 'region', region: a.region }) });
