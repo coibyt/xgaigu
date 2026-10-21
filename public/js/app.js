@@ -1891,7 +1891,7 @@ async function pageAdmin() {
     let timer;
     const paint = (s) => {
       info.textContent = s.available
-        ? 'Còn ' + s.pending + ' video lớn hơn 2 MB chưa nén (khoảng ' + s.pendingMB + ' MB). Đã nén: ' + s.optimized + ' video. Phiên này: nén xong ' + s.done + ', tiết kiệm ' + s.savedMB + ' MB' + (s.failed ? ', lỗi ' + s.failed : '') + (s.running ? ' · đang chạy, còn ' + s.queued + ' video trong hàng đợi…' : '.')
+        ? 'Còn ' + s.pending + ' video lớn hơn 2 MB chưa nén (khoảng ' + s.pendingMB + ' MB). Đã nén: ' + s.optimized + ' video. Phiên này: nén xong ' + s.done + ', tiết kiệm ' + s.savedMB + ' MB' + (s.skipped ? ', bỏ qua ' + s.skipped + ' video đã đủ nhẹ' : '') + (s.failed ? ', lỗi ' + s.failed : '') + (s.running ? ' · đang chạy, còn ' + s.queued + ' video trong hàng đợi…' : '.')
         : 'Máy chủ này không có ffmpeg nên không nén được video.';
       startB.disabled = !s.available || s.running; stopB.hidden = !s.running;
       if (s.running && !timer) timer = setInterval(async () => { try { paint(await api('/admin/optimize')); } catch {} }, 5000);
@@ -1902,7 +1902,7 @@ async function pageAdmin() {
     stopB.addEventListener('click', async () => { try { await api('/admin/optimize/stop', { method: 'POST' }); toast('Sẽ dừng sau video hiện tại'); } catch (e) { fail(e); } });
     return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Tối ưu video'),
       h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Video mới đăng được nén tự động (độ phân giải tối đa 720p, khoảng 1–2 MB) để tải nhanh. Nút dưới đây nén các video đã đăng trước đó, từng video một ở nền. File gốc chỉ bị thay khi bản nén nhỏ hơn rõ rệt.'),
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Chỉ video lớn hơn 2 MB mới được xem xét; video dưới 2 MB giữ nguyên. Video đã nhẹ (từ 720p trở xuống và dưới khoảng 1,6 Mbit/s, mức tương đương các trang video ngắn khác) cũng giữ nguyên để không mất chất lượng. Video nặng hơn được nén về tối đa 720p, khoảng 1–1,8 Mbit/s, từng video một ở nền. File gốc chỉ bị thay khi bản nén nhỏ hơn rõ rệt.'),
         info, h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'muted', style: 'font-size:14px' }, 'Nén tối đa'), limit, h('span', { class: 'muted', style: 'font-size:14px' }, 'video mỗi lần'), startB, stopB)));
   })();
   // email: confirmation switch, test mail, campaigns
