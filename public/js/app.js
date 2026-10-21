@@ -1883,6 +1883,28 @@ async function pageAdmin() {
   await loadVideos().catch(fail);
   const videosBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Quản lý video'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, vq, vst), vInfo,
     h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', '', 'Nội dung', 'Chủ video', 'Lượt xem', 'Trạng thái', ''].map((x) => h('th', {}, x)))), vBody)), vPager);
+  // video optimisation: shrink big videos so they load fast
+  const optBox = await (async () => {
+    const o = await api('/admin/optimize').catch(() => null); if (!o) return null;
+    const info = h('p', { class: 'muted', style: 'font-size:14px;line-height:1.7' }), limit = h('input', { type: 'number', min: 1, max: 1000, value: 50, style: 'width:100px' });
+    const startB = h('button', { class: 'btn primary', type: 'button' }, 'Nén video cũ'), stopB = h('button', { class: 'btn', type: 'button', hidden: true }, 'Dừng');
+    let timer;
+    const paint = (s) => {
+      info.textContent = s.available
+        ? 'Còn ' + s.pending + ' video lớn hơn 2 MB chưa nén (khoảng ' + s.pendingMB + ' MB). Đã nén: ' + s.optimized + ' video. Phiên này: nén xong ' + s.done + ', tiết kiệm ' + s.savedMB + ' MB' + (s.failed ? ', lỗi ' + s.failed : '') + (s.running ? ' · đang chạy, còn ' + s.queued + ' video trong hàng đợi…' : '.')
+        : 'Máy chủ này không có ffmpeg nên không nén được video.';
+      startB.disabled = !s.available || s.running; stopB.hidden = !s.running;
+      if (s.running && !timer) timer = setInterval(async () => { try { paint(await api('/admin/optimize')); } catch {} }, 5000);
+      if (!s.running && timer) { clearInterval(timer); timer = null; }
+    };
+    paint(o); S.cleanups.push(() => timer && clearInterval(timer));
+    startB.addEventListener('click', async () => { try { const r = await api('/admin/optimize/start', { method: 'POST', body: { limit: limit.value } }); toast('Đã xếp hàng ' + r.queued + ' video'); paint(await api('/admin/optimize')); } catch (e) { fail(e); } });
+    stopB.addEventListener('click', async () => { try { await api('/admin/optimize/stop', { method: 'POST' }); toast('Sẽ dừng sau video hiện tại'); } catch (e) { fail(e); } });
+    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Tối ưu video'),
+      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Video mới đăng được nén tự động (độ phân giải tối đa 720p, khoảng 1–2 MB) để tải nhanh. Nút dưới đây nén các video đã đăng trước đó, từng video một ở nền. File gốc chỉ bị thay khi bản nén nhỏ hơn rõ rệt.'),
+        info, h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'muted', style: 'font-size:14px' }, 'Nén tối đa'), limit, h('span', { class: 'muted', style: 'font-size:14px' }, 'video mỗi lần'), startB, stopB)));
+  })();
   // email: confirmation switch, test mail, campaigns
   const ml = await api('/admin/mail').catch(() => null);
   const mailBox = ml && (() => {
@@ -1943,7 +1965,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, videosBox, seoBox, mailBox, membersBox, statBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, videosBox, optBox, seoBox, mailBox, membersBox, statBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 

@@ -134,6 +134,7 @@ function startSession(req, res, userId) {
 
 // ---------- uploads ----------
 const faststart = require('./src/faststart').create({ ffmpeg: FFMPEG, uploadDir: UPLOAD_DIR });
+const transcode = require('./src/transcode').create({ ffmpeg: FFMPEG, uploadDir: UPLOAD_DIR, db, afterNotSmaller: (stored) => faststart.enqueue(stored) });
 // old files: after start-up, one at a time, fix MP4/MOV files whose index is at the end (slow start)
 setTimeout(() => {
   try {
@@ -566,7 +567,6 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   let thumb = req.files && req.files.thumb && req.files.thumb[0];
   if (thumb && (!IMAGE_TYPES[thumb.mimetype] || thumb.size > 5 * 1024 * 1024)) { rmUpload(thumb.filename); thumb = null; }
   const dropAll = () => { if (file) rmUpload(file.filename); if (thumb) rmUpload(thumb.filename); };
-  if (file) setTimeout(() => faststart.enqueue('/uploads/' + file.filename), 2000); // optimise for quick start in the background
   if (file && !VIDEO_TYPES[file.mimetype]) { dropAll(); return fail(res, 400, 'Chỉ nhận video MP4/WebM/MOV'); }
   if (!file && !/^https:\/\/\S+$/.test(url)) { dropAll(); return fail(res, 400, 'Hãy chọn file video hoặc dán liên kết https'); }
   const area = readArea(req.body);
@@ -579,6 +579,7 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, nickname, lat, lng, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '',
       area.region, area.province, area.district, JSON.stringify(info), phone, nickname, place.lat, place.lng, now());
+  if (file) { const newId = db.prepare('SELECT last_insert_rowid() AS id').get().id; setTimeout(() => transcode.enqueue('/uploads/' + file.filename, newId), 1500); } // shrink for fast loading, in the background
   res.json({ ok: true });
 });
 
@@ -1047,6 +1048,29 @@ app.post('/api/admin/videos/:id(\\d+)/verified', needAdmin, (req, res) => {
   db.prepare('UPDATE videos SET verified = ? WHERE id = ?').run(req.body.verified ? 1 : 0, req.params.id);
   res.json({ ok: true, video: adminVideoRow(req.params.id) });
 });
+// ---------- video optimisation (admin) ----------
+const MB = 1048576;
+function optimizable(limit = 3000) {
+  const rows = db.prepare("SELECT id, file FROM videos WHERE file != '' AND optimized = 0 ORDER BY id DESC LIMIT ?").all(limit);
+  const out = [];
+  for (const r of rows) { try { const size = fs.statSync(path.join(UPLOAD_DIR, path.basename(r.file))).size; if (size > 2 * MB) out.push({ id: r.id, file: r.file, size }); } catch {} }
+  return out;
+}
+app.get('/api/admin/optimize', needAdmin, (_req, res) => {
+  const list = FFMPEG ? optimizable() : [];
+  res.json({ available: !!FFMPEG, pending: list.length, pendingMB: Math.round(list.reduce((n, x) => n + x.size, 0) / MB),
+    optimized: db.prepare('SELECT COUNT(*) AS n FROM videos WHERE optimized = 1').get().n, queued: transcode.pending(),
+    running: transcode.stats.running, done: transcode.stats.done, failed: transcode.stats.failed, skipped: transcode.stats.skipped, savedMB: Math.round(transcode.stats.savedBytes / MB) });
+});
+app.post('/api/admin/optimize/start', needAdmin, (req, res) => {
+  if (!FFMPEG) return fail(res, 400, 'Máy chủ này không có ffmpeg nên không nén được video');
+  const limit = Math.min(Math.max(parseInt(req.body.limit, 10) || 50, 1), 1000);
+  const list = optimizable().slice(0, limit);
+  list.forEach((x) => transcode.enqueue(x.file, x.id));
+  res.json({ ok: true, queued: list.length });
+});
+app.post('/api/admin/optimize/stop', needAdmin, (_req, res) => { transcode.stop(); res.json({ ok: true }); });
+
 app.get('/api/admin/videos', needAdmin, (req, res) => {
   const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
   const st = { visible: 'v.hidden = 0 AND v.locked = 0', hidden: "v.hidden = 1 AND v.locked = 0 AND v.hidden_by <> 'owner'", banned: 'v.locked = 1' }[req.query.status] || '1 = 1';
