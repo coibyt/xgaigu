@@ -522,7 +522,7 @@ const Install = (() => {
     document.body.append(fab);
   };
   if (document.body) mountFab(); else document.addEventListener('DOMContentLoaded', mountFab);
-  return { run, button, standalone };
+  return { run, button, standalone, ios, inAppBrowser, report };
 })();
 
 // ---------- nav ----------
@@ -1808,6 +1808,30 @@ async function adminVideoDialog(id, onChange, own = false) {
   });
 }
 
+// Landing page behind the shared link (xgaigu.com/app): one clear button that installs the app
+function pageInstall() {
+  Install.report('visit');
+  document.title = 'Tải ứng dụng xgaigu – cài về máy chỉ một chạm';
+  const installed = Install.standalone();
+  const android = /android/i.test(navigator.userAgent), here = location.origin + '/app';
+  const step = (n, t) => h('li', { style: 'display:flex;gap:12px;align-items:flex-start;padding:8px 0' }, h('span', { class: 'stepn' }, String(n)), h('span', {}, t));
+  const hint = Install.inAppBrowser()
+    ? h('div', { class: 'card inst-note' }, h('b', {}, '⚠️ Bạn đang mở trong Facebook / Zalo / Messenger'), h('p', { class: 'muted' }, 'Trình duyệt này không cài được ứng dụng. Hãy mở bằng Chrome (Android) hoặc Safari (iPhone) rồi bấm lại nút cài đặt.'),
+      android && h('a', { class: 'btn primary', style: 'margin-top:8px', href: 'intent://' + location.host + '/app#Intent;scheme=https;package=com.android.chrome;end' }, 'Mở bằng Chrome'),
+      h('button', { class: 'btn', type: 'button', style: 'margin-top:8px', onclick: async () => { try { await navigator.clipboard.writeText(here); toast('Đã sao chép liên kết, hãy dán vào trình duyệt'); } catch { toast(here); } } }, 'Sao chép liên kết'))
+    : Install.ios()
+      ? h('div', { class: 'card inst-note' }, h('b', {}, 'Cài trên iPhone / iPad (mở bằng Safari)'), h('ol', { style: 'list-style:none;padding:0;margin:8px 0 0' }, step(1, 'Bấm nút Chia sẻ ⬆️ ở thanh dưới của Safari.'), step(2, 'Chọn “Thêm vào Màn hình chính”.'), step(3, 'Bấm “Thêm”, biểu tượng XG sẽ hiện trên màn hình.')))
+      : h('p', { class: 'muted', style: 'font-size:14px' }, 'Bấm nút trên, chọn “Cài đặt” khi trình duyệt hỏi. Biểu tượng XG sẽ xuất hiện ngay trên màn hình.');
+  main.append(h('div', { class: 'wrap', style: 'padding:36px 0' }, h('div', { class: 'inst-hero' },
+    h('img', { src: '/icons/icon-192.png', alt: 'xgaigu', width: 96, height: 96, style: 'border-radius:24px;box-shadow:0 14px 40px rgba(255,46,126,.45)' }),
+    h('h1', { class: 'title', style: 'margin:18px 0 8px;font-size:30px' }, installed ? 'Bạn đã cài ứng dụng xgaigu ✅' : 'Cài ứng dụng xgaigu'),
+    h('p', { class: 'muted', style: 'max-width:420px;margin:0 auto 22px;line-height:1.6' }, installed ? 'Bạn đang dùng ứng dụng. Mọi cập nhật của website tự có trong ứng dụng.' : 'Một chạm là có ngay trên màn hình điện thoại, không cần CH Play hay App Store. Ứng dụng luôn đồng bộ với website.'),
+    installed ? h('a', { class: 'btn primary lg', href: '#/' }, 'Vào xgaigu')
+      : h('button', { type: 'button', class: 'btn primary lg inst-btn', onclick: () => Install.run(), html: '<span aria-hidden="true">📲</span><span>Cài đặt ứng dụng</span>' }),
+    !installed && h('div', { style: 'margin-top:22px;text-align:left;max-width:440px;margin-inline:auto' }, hint),
+    h('p', { style: 'margin-top:26px' }, h('a', { href: '#/welcome', class: 'muted' }, 'Xem giới thiệu xgaigu')))), footer());
+}
+
 async function pageAdmin() {
   if (!S.user || S.user.role !== 'admin') { location.hash = '#/'; return; }
   const [{ reports }, st, tr] = await Promise.all([api('/admin/reports'), api('/admin/app-stats'), api('/admin/traffic')]);
@@ -1820,7 +1844,7 @@ async function pageAdmin() {
   const dayVal = (day, k) => (st.daily.find((x) => x.day === day && x.kind === k) || {}).n || 0;
   const statBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:16px' }, 'Thống kê ứng dụng'),
     h('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap;margin-bottom:16px' },
-      kv('Lượt bấm “Tải ứng dụng”', st.click), kv('Đã cài về máy', st.install, 'Android/Chrome/Edge: trình duyệt xác nhận cài xong.'), kv('Lượt mở ứng dụng', st.open, 'Mở từ biểu tượng trên màn hình. iPhone không báo “đã cài”, nên xem số này.')),
+      kv('Lượt vào link tải ứng dụng', st.visit, 'Số lần khách mở trang xgaigu.com/app.'), kv('Lượt bấm “Tải ứng dụng”', st.click), kv('Đã cài về máy', st.install, 'Android/Chrome/Edge: trình duyệt xác nhận cài xong.'), kv('Lượt mở ứng dụng', st.open, 'Mở từ biểu tượng trên màn hình. iPhone không báo “đã cài”, nên xem số này.')),
     h('div', { class: 'card', style: 'overflow:auto;margin-bottom:16px' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['Thiết bị', 'Bấm tải', 'Đã cài', 'Đang dùng app'].map((x) => h('th', {}, x)))), h('tbody', {}, devRows))),
     days.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['Ngày (14 ngày gần nhất)', 'Bấm tải', 'Đã cài', 'Mở app'].map((x) => h('th', {}, x)))),
       h('tbody', {}, days.map((d) => h('tr', {}, h('td', {}, d), h('td', {}, String(dayVal(d, 'click'))), h('td', {}, String(dayVal(d, 'install'))), h('td', {}, String(dayVal(d, 'open')))))))) : null);
@@ -1883,6 +1907,38 @@ async function pageAdmin() {
   await loadVideos().catch(fail);
   const videosBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Quản lý video'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, vq, vst), vInfo,
     h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', '', 'Nội dung', 'Chủ video', 'Lượt xem', 'Trạng thái', ''].map((x) => h('th', {}, x)))), vBody)), vPager);
+  // shareable install link + QR code
+  const shareBox = (() => {
+    const link = location.origin + '/app', text = 'Tải ứng dụng xgaigu về máy chỉ một chạm: ';
+    const qrBox = h('div', { style: 'background:#fff;padding:12px;border-radius:14px;width:fit-content;min-height:60px' }, h('span', { style: 'color:#555;font-size:13px' }, 'Đang tạo mã QR…'));
+    let qr = null;
+    const draw = () => { try { qrBox.replaceChildren(); qrBox.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 0, scalable: true }); const s = qrBox.querySelector('svg'); if (s) { s.setAttribute('width', 190); s.setAttribute('height', 190); } } catch { qrBox.textContent = 'Không tạo được mã QR'; } };
+    const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+    sc.onload = () => { try { qr = window.qrcode(0, 'M'); qr.addData(link); qr.make(); draw(); } catch { qrBox.textContent = 'Không tạo được mã QR'; } };
+    sc.onerror = () => { qrBox.textContent = 'Không tải được thư viện mã QR'; };
+    document.head.append(sc);
+    const copy = async () => { try { await navigator.clipboard.writeText(link); toast('Đã sao chép liên kết'); } catch { prompt('Sao chép liên kết này:', link); } };
+    const open = (u) => window.open(u, '_blank', 'noopener');
+    const png = () => {
+      if (!qr) return toast('Mã QR chưa sẵn sàng', true);
+      const n = qr.getModuleCount(), cell = 12, pad = 24, c = document.createElement('canvas'); c.width = c.height = n * cell + pad * 2;
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#000';
+      for (let r = 0; r < n; r++) for (let q = 0; q < n; q++) if (qr.isDark(r, q)) g.fillRect(pad + q * cell, pad + r * cell, cell, cell);
+      c.toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'xgaigu-tai-ung-dung-qr.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); });
+    };
+    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Link tải ứng dụng'),
+      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:14px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Gửi liên kết này cho khách. Khách chỉ cần bấm vào, trang sẽ mở ra với nút “Cài đặt ứng dụng”, bấm thêm một lần là ứng dụng được cài vào máy (iPhone sẽ có hướng dẫn 3 bước).'),
+        h('div', { class: 'row', style: 'gap:8px;flex-wrap:nowrap' }, h('input', { readonly: true, value: link, style: 'flex:1;min-width:0', onclick: (e) => e.target.select() }), h('button', { class: 'btn primary', type: 'button', onclick: copy }, 'Sao chép')),
+        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
+          navigator.share && h('button', { class: 'btn', type: 'button', onclick: () => navigator.share({ title: 'Ứng dụng xgaigu', text, url: link }).catch(() => {}) }, 'Chia sẻ…'),
+          h('button', { class: 'btn', type: 'button', onclick: () => open('https://zalo.me/share?url=' + encodeURIComponent(link)) }, 'Zalo'),
+          h('button', { class: 'btn', type: 'button', onclick: () => open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(link)) }, 'Facebook'),
+          h('button', { class: 'btn', type: 'button', onclick: () => open('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text)) }, 'Telegram'),
+          h('a', { class: 'btn', href: '/app', target: '_blank', rel: 'noopener' }, 'Xem trang tải')),
+        h('div', { class: 'row', style: 'gap:18px;align-items:flex-end;flex-wrap:wrap' }, qrBox, h('div', { style: 'display:grid;gap:8px' }, h('span', { class: 'muted', style: 'font-size:13px' }, 'Mã QR: in ra hoặc đăng lên để khách quét bằng camera.'), h('button', { class: 'btn', type: 'button', onclick: png }, 'Tải mã QR (PNG)'))),
+        h('p', { class: 'muted', style: 'font-size:13px' }, 'Lượt vào link này được đếm trong mục “Thống kê ứng dụng”.')));
+  })();
   // video optimisation: shrink big videos so they load fast
   const optBox = await (async () => {
     const o = await api('/admin/optimize').catch(() => null); if (!o) return null;
@@ -1965,7 +2021,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, videosBox, optBox, seoBox, mailBox, membersBox, statBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, statBox, videosBox, optBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 
@@ -1998,6 +2054,7 @@ async function route() {
     if (a === 'live') return b ? pageStream(b, /host=1/.test(query || '')) : pageLive();
     if (a === 'golive') return pageGoLive();
     if (a === 'terms') return pageTerms();
+    if (a === 'install') return pageInstall();
     if (a === 'reset') return pageReset(query);
     if (a === 'forgot-password') { const holder = h('div'); const mm = modal(holder); holder.append(forgotForm(mm)); location.hash = '#/'; return; }
     if (a === 'email-verified') return pageEmailVerified(query);

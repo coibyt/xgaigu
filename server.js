@@ -948,12 +948,12 @@ app.post('/api/reports', needUser, postLimiter, (req, res) => {
 // ---------- app (PWA) statistics ----------
 // click = pressed "Tải ứng dụng", install = browser confirmed installation, open = app launched from the home screen
 app.post('/api/app-event', postLimiter, (req, res) => {
-  const kind = ['click', 'install', 'open'].includes(req.body.kind) ? req.body.kind : null;
+  const kind = ['click', 'install', 'open', 'visit'].includes(req.body.kind) ? req.body.kind : null;
   const did = String(req.body.did || '').replace(/[^\w-]/g, '').slice(0, 40);
   if (!kind || did.length < 8) return fail(res, 400, 'Sai dữ liệu');
   const ua = String(req.get('user-agent') || '');
   const device = /iphone|ipad|ipod/i.test(ua) ? 'ios' : /android/i.test(ua) ? 'android' : /windows|macintosh|linux|cros/i.test(ua) ? 'desktop' : 'other';
-  const recent = now() - (kind === 'open' ? 6 : kind === 'click' ? 1 : 24 * 365) * 3600_000; // install once per device; open once per 6h; click once per hour
+  const recent = now() - (kind === 'open' ? 6 : kind === 'click' || kind === 'visit' ? 1 : 24 * 365) * 3600_000; // install once per device; open once per 6h; click once per hour
   if (db.prepare('SELECT 1 FROM app_events WHERE did = ? AND kind = ? AND created_at > ?').get(did, kind, recent)) return res.json({ ok: true });
   db.prepare('INSERT INTO app_events (did, kind, device, created_at) VALUES (?,?,?,?)').run(did, kind, device, now());
   res.json({ ok: true });
@@ -966,7 +966,7 @@ app.get('/api/admin/app-stats', needAdmin, (_req, res) => {
   const daily = db.prepare(
     `SELECT date(created_at / 1000, 'unixepoch', '+7 hours') AS day, kind, COUNT(*) AS n FROM app_events
      WHERE created_at > ? GROUP BY day, kind ORDER BY day DESC`).all(t - 14 * DAY);
-  res.json({ click: block('click'), install: block('install'), open: block('open'), byDevice, daily });
+  res.json({ visit: block('visit'), click: block('click'), install: block('install'), open: block('open'), byDevice, daily });
 });
 // ---------- visitor analytics ----------
 // Every open page pings now and then with an anonymous device id; "online now" = pinged in the last ~70 s.

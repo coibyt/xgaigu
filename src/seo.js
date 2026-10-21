@@ -179,6 +179,13 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
 
   const send = (res, html) => res.set('Cache-Control', 'public, max-age=600').type('html').send(html);
   app.get('/khu-vuc', (req, res) => send(res, indexHtml(req)));
+  // The link the admin shares: one tap on it opens a page that installs the app
+  app.get(['/app', '/tai-ung-dung'], (req, res) => {
+    const base = baseOf(req), title = 'Tải ứng dụng xgaigu – cài về máy chỉ một chạm', description = 'Cài ứng dụng xgaigu thẳng vào điện thoại, không cần CH Play hay App Store. Xem video, làm quen, chat và hẹn gặp an toàn. Dành cho người từ 18 tuổi.';
+    const main = '<div class="wrap prose"><h1>Tải ứng dụng xgaigu</h1><p>' + escHtml(description) + '</p><p><a href="/">Vào xgaigu.com</a></p></div>';
+    const ld = { '@context': 'https://schema.org', '@type': 'WebPage', name: title, description, url: base + '/app', inLanguage: 'vi-VN' };
+    send(res, shell(req, { title, description, keywords: 'tải ứng dụng xgaigu, cài app xgaigu, xgaigu', canonical: '/app', ld, route: '/install', main }));
+  });
   app.get(/^\/khu-vuc\/([a-z0-9-]+(?:\/[a-z0-9-]+){0,2})\/?$/, (req, res, next) => {
     const a = byPath.get(req.params[0]);
     if (!a) { res.status(404); return next(); } // unknown area: real 404 status, not a soft 404
@@ -219,7 +226,7 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
   app.get('/sitemap.xml', (req, res) => {
     const base = baseOf(req), rows = counts(), today = new Date().toISOString().slice(0, 10);
     const custom = new Set(db.prepare('SELECT key FROM area_seo').all().map((r) => r.key));
-    const urls = [{ loc: '/', pri: '1.0' }, { loc: '/khu-vuc', pri: '0.9' }];
+    const urls = [{ loc: '/', pri: '1.0' }, { loc: '/app', pri: '0.7' }, { loc: '/khu-vuc', pri: '0.9' }];
     for (const a of byPath.values()) {
       if (a.level === 'district' && !custom.has(keyOf(a)) && !totalOf(a, rows)) continue; // skip empty districts (thin pages)
       urls.push({ loc: urlOf(a), pri: a.level === 'region' ? '0.8' : a.level === 'province' ? '0.7' : '0.5', mod: today });
