@@ -101,7 +101,22 @@ function selfUser(u) {
     showNearby: u.show_nearby !== 0, hasLocation: u.lat != null };
 }
 
+// API keys ("Bearer xg_…") let a member's posting tool upload videos without a password. Only the hash is stored,
+// and a key works only on the few endpoints below — never for messages, settings or creating more keys.
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
+const TOKEN_PATHS = /^\/api\/(me|areas|videos|videos\/\d+\/(edit|visibility))$/;
 function auth(req, _res, next) {
+  const bearer = /^Bearer (xg_[a-f0-9]{48})$/.exec(req.get('authorization') || '');
+  if (bearer) {
+    if (TOKEN_PATHS.test(req.path)) {
+      const row = db.prepare('SELECT u.*, t.id AS token_id FROM api_tokens t JOIN users u ON u.id = t.user_id WHERE t.hash = ?').get(sha256(bearer[1]));
+      if (row && !row.banned) {
+        req.user = row; req.viaToken = true;
+        db.prepare('UPDATE api_tokens SET last_used_at = ? WHERE id = ?').run(now(), row.token_id);
+      }
+    }
+    return next(); // a request with a key never falls back to cookies
+  }
   const token = req.cookies.sid;
   if (token) {
     const row = db.prepare(
@@ -113,7 +128,8 @@ function auth(req, _res, next) {
 }
 app.use(auth);
 const needUser = (req, res, next) => (req.user ? next() : fail(res, 401, 'Vui lòng đăng nhập'));
-const needAdmin = (req, res, next) => (req.user && req.user.role === 'admin' ? next() : fail(res, 403, 'Không có quyền'));
+const needAdmin = (req, res, next) => (req.user && req.user.role === 'admin' && !req.viaToken ? next() : fail(res, 403, 'Không có quyền'));
+const needSession = (req, res, next) => (req.user && !req.viaToken ? next() : fail(res, 401, 'Vui lòng đăng nhập'));
 
 const COOKIE = { httpOnly: true, sameSite: 'lax', secure: PROD, maxAge: 30 * 24 * 3600 * 1000, path: '/' };
 // Session tokens of every account signed in on this browser (httpOnly cookie, max 5) so the user can switch without retyping passwords.
@@ -275,6 +291,23 @@ app.post('/api/me/password', authLimiter, needUser, wrap(async (req, res) => {
 }));
 
 app.get('/api/me', (req, res) => res.json({ user: req.user ? selfUser(req.user) : null }));
+
+// ---------- API keys for the member's own posting tool ----------
+const tokenRow = (t) => ({ id: t.id, name: t.name, hint: t.hint, createdAt: t.created_at, lastUsedAt: t.last_used_at || null });
+app.get('/api/me/tokens', needSession, (req, res) => {
+  res.json({ tokens: db.prepare('SELECT * FROM api_tokens WHERE user_id = ? ORDER BY id DESC').all(req.user.id).map(tokenRow) });
+});
+app.post('/api/me/tokens', needSession, postLimiter, (req, res) => {
+  if (db.prepare('SELECT COUNT(*) AS n FROM api_tokens WHERE user_id = ?').get(req.user.id).n >= 10) return fail(res, 400, 'Tối đa 10 khóa. Hãy xóa bớt khóa cũ.');
+  const token = 'xg_' + crypto.randomBytes(24).toString('hex');
+  const r = db.prepare('INSERT INTO api_tokens (user_id, name, hash, hint, created_at) VALUES (?,?,?,?,?)')
+    .run(req.user.id, clean(req.body.name, 60) || 'Phần mềm đăng bài', sha256(token), token.slice(-4), now());
+  res.json({ token, id: Number(r.lastInsertRowid) }); // shown once; only the hash is kept
+});
+app.delete('/api/me/tokens/:id(\\d+)', needSession, (req, res) => {
+  db.prepare('DELETE FROM api_tokens WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+  res.json({ ok: true });
+});
 
 app.patch('/api/me', needUser, (req, res) => {
   const b = req.body;
@@ -576,11 +609,13 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   const phone = clean(req.body.phone, 20).replace(/[^\d+]/g, '');
   const nickname = clean(req.body.nickname, 40);
   const place = readPlace(req.body);
-  db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, nickname, lat, lng, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  const hidden = ['1', 'true'].includes(String(req.body.hidden)); // posted as a draft only the owner can see
+  const r = db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, nickname, lat, lng, hidden, hidden_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '',
-      area.region, area.province, area.district, JSON.stringify(info), phone, nickname, place.lat, place.lng, now());
-  if (file) { const newId = db.prepare('SELECT last_insert_rowid() AS id').get().id; setTimeout(() => transcode.enqueue('/uploads/' + file.filename, newId), 1500); } // shrink for fast loading, in the background
-  res.json({ ok: true });
+      area.region, area.province, area.district, JSON.stringify(info), phone, nickname, place.lat, place.lng, hidden ? 1 : 0, hidden ? 'owner' : '', now());
+  const newId = Number(r.lastInsertRowid);
+  if (file) setTimeout(() => transcode.enqueue('/uploads/' + file.filename, newId), 1500); // shrink for fast loading, in the background
+  res.json({ ok: true, id: newId, hidden });
 });
 
 app.delete('/api/videos/:id', needUser, (req, res) => {

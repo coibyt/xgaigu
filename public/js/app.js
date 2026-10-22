@@ -87,6 +87,36 @@ function apiUpload(path, body, onProgress) {
 }
 const fmtMB = (b) => (b / 1048576).toFixed(b < 10485760 ? 1 : 0);
 
+// "Khóa API" card on the account page: keys for the member's own posting tool (shown in full only once).
+function apiKeysCard() {
+  const list = h('div', {});
+  const out = h('div', { hidden: true, class: 'card', style: 'padding:12px;margin:12px 0;background:#fff7ed' });
+  const load = async () => {
+    const { tokens } = await api('/me/tokens');
+    list.replaceChildren(...(tokens.length ? tokens.map((t) => h('div', { class: 'row', style: 'justify-content:space-between;margin:6px 0' },
+      h('span', {}, `${t.name} · …${t.hint} · tạo ${new Date(t.createdAt).toLocaleDateString('vi-VN')}` + (t.lastUsedAt ? ` · dùng lần cuối ${timeAgo(t.lastUsedAt)}` : ' · chưa dùng')),
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => {
+        if (!confirm('Xóa khóa này? Phần mềm đang dùng nó sẽ không đăng bài được nữa.')) return;
+        await api('/me/tokens/' + t.id, { method: 'DELETE' }); load();
+      } }, 'Xóa'))) : [h('p', { class: 'muted' }, 'Chưa có khóa nào.')]));
+  };
+  const create = async () => {
+    try {
+      const { token } = await api('/me/tokens', { method: 'POST', body: { name: 'Phần mềm đăng bài' } });
+      const input = h('input', { value: token, readonly: true, style: 'width:100%;font-family:monospace', onclick: (e) => e.target.select() });
+      out.replaceChildren(h('b', {}, 'Khóa mới (chỉ hiện MỘT lần — hãy sao chép ngay):'), input,
+        h('button', { type: 'button', class: 'btn sm', style: 'margin-top:8px', onclick: () => { navigator.clipboard.writeText(token); toast('Đã sao chép'); } }, 'Sao chép'));
+      out.hidden = false; load();
+    } catch (e) { fail(e); }
+  };
+  load().catch(fail);
+  return h('div', { class: 'card', style: 'padding:24px;margin-top:20px' },
+    h('h3', { style: 'margin-bottom:4px' }, 'Khóa API (phần mềm đăng bài)'),
+    h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' },
+      'Dùng cho phần mềm đăng video của bạn, thay cho mật khẩu. Khóa chỉ đăng/xem/ẩn video, không đọc được tin nhắn hay đổi cài đặt. Đừng gửi khóa cho người khác.'),
+    list, out, h('button', { type: 'button', class: 'btn', onclick: create }, 'Tạo khóa mới'));
+}
+
 function toast(msg, bad) {
   const t = h('div', { class: 'toast' + (bad ? ' bad' : '') }, msg);
   $('#toast-root').append(t);
@@ -1232,6 +1262,7 @@ async function pageMe() {
         h('button', { type: 'button', class: 'btn ghost sm', onclick: () => logout(true) }, 'Đăng xuất mọi tài khoản'))),
     h('div', { class: 'card', style: 'padding:24px' }, f),
     pw,
+    apiKeysCard(),
     h('div', { class: 'row', style: 'margin-top:20px' }, u.role === 'admin' && h('a', { class: 'btn', href: '#/admin' }, 'Quản trị'),
       h('button', { type: 'button', class: 'btn', onclick: openAccounts, html: icon('users') + 'Chuyển tài khoản' }),
       h('button', { type: 'button', class: 'btn live', onclick: () => logout(false) }, 'Đăng xuất'))));
@@ -1257,14 +1288,23 @@ function geoPicker(init = {}) {
 
 function openInfo(v) {
   const i = v.info || {};
+  let m;
+  // each part of the area is a link to the page listing the videos of that area (district, province or region)
+  const enc = encodeURIComponent, go = () => { m && m.close(); };
+  const areaLink = (label, href) => h('a', { class: 'area-link', href, onclick: go }, label);
+  const areaParts = [];
+  if (v.region && v.province && v.district) areaParts.push(areaLink(v.district, `#/regions/${v.region}/${enc(v.province)}/${enc(v.district)}`));
+  if (v.region && v.province) areaParts.push(areaLink(v.province, `#/regions/${v.region}/${enc(v.province)}`));
+  if (v.region && REGION_NAMES[v.region]) areaParts.push(areaLink(REGION_NAMES[v.region], '#/regions/' + v.region));
+  const areaNode = areaParts.length ? h('span', {}, areaParts.flatMap((a, k) => (k ? [', ', a] : [a]))) : '';
   const rows = [
-    ['Khu vực', [v.district, v.province, REGION_NAMES[v.region]].filter(Boolean).join(', ')],
+    ['Khu vực', areaNode],
     isAdmin() && ['Lượt xem (thật, chỉ admin thấy)', fmtCount(v.views || 0)],
     ['Năm sinh', i.birthYear], ['Chiều cao', i.height && i.height + ' cm'], ['Cân nặng', i.weight && i.weight + ' kg'],
     ['Xuất xứ', i.origin], ['Nghề nghiệp', i.occupation], ['Địa chỉ', i.address], ['Thời gian rảnh', i.workTime],
   ].filter((r) => r[1]);
   const body = h('div', {}, h('h3', {}, v.user.name), v.verified && h('div', { style: 'margin:2px 0 12px' }, vbadge()), (v.caption ? h('p', { class: 'sub', translate: 'no' }, v.caption) : h('p', { class: 'sub' }, 'Thông tin giới thiệu')),
-    h('dl', { class: 'info-list' }, rows.map(([k, val]) => h('div', {}, h('dt', {}, k), h('dd', {}, String(val))))),
+    h('dl', { class: 'info-list' }, rows.map(([k, val]) => h('div', {}, h('dt', {}, k), h('dd', {}, typeof val === 'object' ? val : String(val))))),
     i.interests && i.interests.length > 0 && h('div', { class: 'facts', style: 'margin:12px 0' }, i.interests.map((t) => h('span', { class: 'fact tag' }, t))),
     i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
     !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
@@ -1273,7 +1313,7 @@ function openInfo(v) {
       S.user && S.user.id === v.user.id && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id, null, true), html: '✎ Sửa / ẩn video của tôi' }),
       v.hasPhone && h('button', { class: 'btn callbtn', onclick: () => openCall({ ...v.user, canCall: true }, v.id), html: icon('phone') + 'Gọi' }),
       h('button', { class: 'btn', onclick: () => openBook(v.user, v.id), html: icon('cal') + 'Hẹn gặp' })));
-  modal(body, { sheet: true });
+  m = modal(body, { sheet: true });
 }
 
 async function pageRegions(reg, prov, dist) {
