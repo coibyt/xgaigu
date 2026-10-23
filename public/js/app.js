@@ -1316,6 +1316,16 @@ function openInfo(v) {
   m = modal(body, { sheet: true });
 }
 
+// One tile of the area / profile grids (cover image, badges, likes)
+function areaTile(v) {
+  const yt = !v.file && ytId(v.url);
+  const poster = v.thumb || (yt ? `https://i.ytimg.com/vi/${yt}/hqdefault.jpg` : '');
+  const media = poster ? h('img', { src: poster, alt: v.caption || 'Video', loading: 'lazy', decoding: 'async' })
+    : (() => { const m = mediaEl(v); if (m instanceof HTMLVideoElement) m.setAttribute('preload', 'metadata'); else m.style.pointerEvents = 'none'; return m; })();
+  return h('a', { class: 'tcell', href: '#/feed/' + v.id, 'aria-label': 'Xem video' }, media, vflags(v, true),
+    h('span', { class: 'tviews', html: isAdmin() ? icon('play') + fmtCount(v.views || 0) : icon('heart') + fmtCount(v.likes || 0) }));
+}
+
 async function pageRegions(reg, prov, dist) {
   if (prov) Pref.bump(prov, 1.5);
   const infoQ = new URLSearchParams({ region: reg || '', province: prov || '', district: dist || '' });
@@ -1348,16 +1358,32 @@ async function pageRegions(reg, prov, dist) {
   } else {
     const p = geo[reg].find((x) => x[0] === prov);
     if (!p) { wrap.append(h('div', { class: 'empty' }, h('h3', {}, 'Không tìm thấy khu vực'))); main.append(wrap); return; }
-    const chips = h('div', { class: 'ed-chips', style: 'margin:14px 0 24px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}` }, 'Tất cả'),
+    const chips = h('div', { class: 'ed-chips chips-scroll', style: 'margin:14px 0 18px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}` }, 'Tất cả'),
       p[1].map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, d, n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
-    const grid = h('div', { class: 'grid g4' }, h('div', { class: 'spin' }));
-    wrap.append(h('h2', { class: 'title' }, dist || prov), chips, grid, seoBox(info));
-    const q = `/videos?limit=48&region=${reg}&province=${enc(prov)}` + (dist ? '&district=' + enc(dist) : '');
-    api(q).then(({ videos }) => {
-      grid.replaceChildren();
-      if (!videos.length) grid.append(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video ở khu vực này'), h('p', {}, 'Hãy là người đầu tiên đăng video tại đây.'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video')));
-      videos.forEach((v) => grid.append(vthumb(v)));
-    }).catch(fail);
+    const grid = h('div', { class: 'tgrid area-grid' });
+    const count = h('span', { class: 'muted', style: 'font-size:14px;margin-left:8px;font-weight:500' });
+    const more = h('button', { class: 'btn', type: 'button', hidden: true, style: 'margin:18px auto 0;display:flex' }, 'Xem thêm video');
+    const first = h('div', { class: 'spin' });
+    wrap.append(h('h2', { class: 'title' }, dist || prov, count), chips, first, grid, more, seoBox(info));
+    // random order, 36 at a time; scrolling loads more until everything was shown once
+    const seen = []; let busy = false, finished = false;
+    const load = async () => {
+      if (busy || finished) return; busy = true;
+      try {
+        const d = await api('/area-videos?limit=36&region=' + reg + '&province=' + enc(prov) + (dist ? '&district=' + enc(dist) : '') + '&seen=' + seen.slice(-1500).join(','));
+        first.remove();
+        if (!seen.length) count.textContent = d.total ? '· ' + d.total + ' video' : '';
+        if (!seen.length && !d.videos.length) grid.replaceWith(h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video ở khu vực này'), h('p', {}, 'Hãy là người đầu tiên đăng video tại đây.'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video')));
+        d.videos.forEach((v) => { seen.push(v.id); grid.append(areaTile(v)); });
+        if (!d.remaining) { finished = true; more.hidden = true; io && io.disconnect(); } else more.hidden = false;
+      } catch (e) { first.remove(); fail(e); }
+      busy = false;
+    };
+    more.addEventListener('click', load);
+    const sentinel = h('div', { style: 'height:1px' }); more.before(sentinel);
+    const io = new IntersectionObserver((en) => { if (en[0].isIntersecting) load().then(() => { if (!finished) { io.unobserve(sentinel); io.observe(sentinel); } }); }, { rootMargin: '700px' });
+    io.observe(sentinel); S.cleanups.push(() => io.disconnect());
+    load();
   }
   main.append(wrap, footer());
 }

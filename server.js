@@ -574,6 +574,23 @@ app.get('/api/suggest', (req, res) => {
   res.json({ suggestions: [...[...nicks.values()].slice(0, 5).map((text) => ({ type: 'nick', text })), ...[...places.values()].slice(0, 5).map((text) => ({ type: 'place', text }))] });
 });
 
+// Videos of one area in random order. The browser sends the ids it already shows, so scrolling never repeats a video.
+app.get('/api/area-videos', (req, res) => {
+  const area = readArea(req.query);
+  if (!area.region) return fail(res, 400, 'Khu vực không hợp lệ');
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 36, 1), 60);
+  const seen = new Set(String(req.query.seen || '').split(',').map(Number).filter(Boolean).slice(0, 2000));
+  const ids = db.prepare(
+    `SELECT v.id FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?)`
+  ).all(area.region, area.province, area.province, area.district, area.district).map((r) => r.id);
+  const left = ids.filter((id) => !seen.has(id));
+  for (let i = left.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [left[i], left[j]] = [left[j], left[i]]; } // Fisher-Yates shuffle
+  const pick = left.slice(0, limit);
+  const byId = new Map(pick.length ? listVideos(req.user, { ids: pick, limit: pick.length }).map((v) => [v.id, v]) : []);
+  res.json({ videos: pick.map((id) => byId.get(id)).filter(Boolean), total: ids.length, remaining: Math.max(0, left.length - pick.length) });
+});
+
 // How many videos each region / province / district has (powers the "Khu vực" browser).
 app.get('/api/areas', (_req, res) => {
   const rows = db.prepare(

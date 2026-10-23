@@ -578,3 +578,10 @@ main:focus,main:focus-visible{outline:none}
 
 .area-link{color:#ff8ab4;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1.5px;font-weight:700}
 .area-link:hover{color:#ffb3cd}
+
+/* area video grid: dense, 3 columns like a profile */
+.area-grid{margin-inline:-16px}
+@media (min-width:721px){.area-grid{margin-inline:0;grid-template-columns:repeat(4,1fr)}}
+
+/* district chips: one swipeable row on phones so the videos start right under the title */
+@media (max-width:760px){.chips-scroll{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:6px;margin-inline:-16px!important;padding-inline:16px;scrollbar-width:none}.chips-scroll::-webkit-scrollbar{display:none}.chips-scroll .chip{flex:none;white-space:nowrap}}
