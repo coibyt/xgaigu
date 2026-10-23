@@ -1309,11 +1309,12 @@ function renderPage(req, res, v) {
   let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
   html = html.replace(/<title>[\s\S]*?<\/title>\s*/, '').replace(/<meta name="description"[^>]*>\s*/, '').replace(/<meta property="og:[^>]*>\s*/g, '');
   html = html.replace(/(\/(?:js\/[\w.-]+\.js|css\/app\.css))"/g, '$1?v=' + ASSET_V + '"');
+  if (!v && req.path === '/') html = html.replace('<main id="main" tabindex="-1"></main>', () => '<main id="main" tabindex="-1">' + seo.homeHtml(req) + '</main>'); // links for crawlers; the app replaces it
   html = html.replace('</head>', tags + '\n</head>');
   res.set('Cache-Control', 'no-cache').type('html').send(html);
 }
 
-require('./src/seo').install(app, { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
+const seo = require('./src/seo').install(app, { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));
 app.get('/', (req, res) => renderPage(req, res, null));
 // installable app (PWA): the worker must never be cached by the browser so updates reach installed apps at once

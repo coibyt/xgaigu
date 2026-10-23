@@ -219,6 +219,20 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
     res.json({ ok: true, url: urlOf(a) });
   });
 
+  // ---------- crawlable home page content ----------
+  function homeHtml(req) {
+    const rows = counts();
+    const vids = listVideos(null, { limit: 24 });
+    return '<div class="wrap prose seo-area">' +
+      '<h1>xgaigu – Video, livestream &amp; hẹn hò an toàn</h1>' +
+      '<p>xgaigu.com là nơi bạn xem video giới thiệu, làm quen qua tin nhắn, xem livestream và đặt lịch hẹn gặp có kiểm soát. Dành cho người từ 18 tuổi trở lên.</p>' +
+      '<p><a href="/khu-vuc">Xem video theo khu vực</a> · <a href="/app">Tải ứng dụng xgaigu</a></p>' +
+      Object.keys(REGIONS).map((r) => '<h2><a href="' + urlOf({ level: 'region', region: r }) + '">' + escHtml(REGIONS[r]) + '</a></h2><ul class="seo-links">' +
+        GEO[r].map(([p]) => { const n = sumWhere(rows, (x) => x.region === r && x.province === p); return '<li><a href="' + urlOf({ level: 'province', region: r, province: p }) + '">' + escHtml(shortName(p)) + '</a>' + (n ? ' (' + n + ' video)' : '') + '</li>'; }).join('') + '</ul>').join('') +
+      (vids.length ? '<h2>Video mới</h2><ul class="seo-links">' + vids.map((v) => '<li><a href="/v/' + v.id + '">' + escHtml(cut(v.caption || 'Video của ' + v.user.name, 80)) + '</a></li>').join('') + '</ul>' : '') +
+      '</div>';
+  }
+
   // ---------- robots.txt and sitemap.xml ----------
   app.get('/robots.txt', (req, res) => {
     res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /uploads/wm/\n\nSitemap: ${baseOf(req)}/sitemap.xml\n`);
@@ -237,6 +251,7 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
       urls.map((u) => `<url><loc>${escHtml(base + u.loc)}</loc>${u.mod ? `<lastmod>${u.mod}</lastmod>` : ''}<priority>${u.pri}</priority></url>`).join('\n') + '\n</urlset>\n';
     res.set('Cache-Control', 'public, max-age=3600').type('application/xml').send(xml);
   });
+  return { homeHtml };
 }
 
 module.exports = { install, REGIONS };
