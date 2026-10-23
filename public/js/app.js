@@ -1286,6 +1286,18 @@ function geoPicker(init = {}) {
   return { el: h('div', { class: 'geo-row' }, reg, prov, dist) };
 }
 
+// "Sở thích": one line with "Xem thêm"; tap to read all of it (it can be very long)
+function interestBlock(raw) {
+  const text = (Array.isArray(raw) ? raw.join(', ') : String(raw || '')).trim();
+  if (!text) return null;
+  const body = h('span', { class: 'int-text clamp', translate: 'no' }, text);
+  const btn = h('button', { type: 'button', class: 'linkbtn int-more', hidden: true }, 'Xem thêm');
+  btn.addEventListener('click', () => { const collapsed = body.classList.toggle('clamp'); btn.textContent = collapsed ? 'Xem thêm' : 'Thu gọn'; });
+  const box = h('div', { class: 'int-box' }, h('b', {}, 'Sở thích: '), body, ' ', btn);
+  requestAnimationFrame(() => setTimeout(() => { btn.hidden = !(body.scrollHeight > body.clientHeight + 1 || text.length > 60 || text.includes('\n')); }, 60));
+  return box;
+}
+
 function openInfo(v) {
   const i = v.info || {};
   let m;
@@ -1305,7 +1317,7 @@ function openInfo(v) {
   ].filter((r) => r[1]);
   const body = h('div', {}, h('h3', {}, v.user.name), v.verified && h('div', { style: 'margin:2px 0 12px' }, vbadge()), (v.caption ? h('p', { class: 'sub', translate: 'no' }, v.caption) : h('p', { class: 'sub' }, 'Thông tin giới thiệu')),
     h('dl', { class: 'info-list' }, rows.map(([k, val]) => h('div', {}, h('dt', {}, k), h('dd', {}, typeof val === 'object' ? val : String(val))))),
-    i.interests && i.interests.length > 0 && h('div', { class: 'facts', style: 'margin:12px 0' }, i.interests.map((t) => h('span', { class: 'fact tag' }, t))),
+    interestBlock(i.interests),
     i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
     !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
     h('div', { class: 'row', style: 'margin-top:14px' },
@@ -1488,7 +1500,7 @@ async function pageUpload() {
     h('div', { class: 'two' }, field('Năm sinh', 'birthYear', { type: 'number', inputmode: 'numeric', value: me.birthYear || '' }), field('Xuất xứ / quê quán', 'origin', { value: me.origin || '', maxlength: 60 })),
     h('div', { class: 'two' }, field('Chiều cao (cm)', 'height', { type: 'number', inputmode: 'numeric', value: me.height || '' }), field('Cân nặng (kg)', 'weight', { type: 'number', inputmode: 'numeric', value: me.weight || '' })),
     field('Nghề nghiệp', 'occupation', { value: me.occupation || '', maxlength: 60 }),
-    field('Sở thích', 'interests', { value: (me.interests || []).join(', '), maxlength: 240, placeholder: 'du lịch, cà phê, yoga' }),
+    field('Sở thích', 'interests', { value: (me.interests || []).join(', '), rows: 3, maxlength: 8000, placeholder: 'VD: du lịch, cà phê, yoga… Bạn có thể viết dài thoải mái (tới khoảng 1000 từ).' }, 'textarea'),
     h('div', { class: 'f' }, h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Địa chỉ'), addrPicker.el,
       h('small', { class: 'muted', style: 'display:block;margin-top:2px' }, 'Chọn một gợi ý để video hiện ở mục "Quanh đây" của khách ở gần bạn.')),
     field('Thời gian rảnh', 'workTime', { value: me.availability || '', maxlength: 120, placeholder: 'VD: Tối các ngày trong tuần' }),
@@ -1828,7 +1840,7 @@ async function adminVideoDialog(id, onChange, own = false) {
     h('div', { class: 'two' }, input('birthYear', 'Năm sinh', i.birthYear, { inputmode: 'numeric' }), input('occupation', 'Nghề nghiệp', i.occupation, { maxlength: 60 })),
     h('div', { class: 'two' }, input('height', 'Chiều cao (cm)', i.height, { inputmode: 'numeric' }), input('weight', 'Cân nặng (kg)', i.weight, { inputmode: 'numeric' })),
     input('origin', 'Xuất xứ', i.origin, { maxlength: 60 }), input('address', 'Địa chỉ', i.address, { maxlength: 200 }), input('workTime', 'Thời gian rảnh', i.workTime, { maxlength: 120 }),
-    input('interests', 'Sở thích (cách nhau bằng dấu phẩy)', (i.interests || []).join(', ')),
+    h('label', { class: 'f' }, h('span', {}, 'Sở thích'), h('textarea', { name: 'interests', rows: 3, maxlength: 8000 }, Array.isArray(i.interests) ? i.interests.join(', ') : (i.interests || ''))),
     h('label', { class: 'f' }, h('span', {}, 'Điều không muốn'), h('textarea', { name: 'boundaries', rows: 2, maxlength: 300 }, i.boundaries || '')),
     h('button', { class: 'btn primary', type: 'submit', style: 'width:100%' }, 'Lưu chỉnh sửa'));
   const statusLine = h('p', { class: 'sub' });

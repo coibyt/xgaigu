@@ -585,3 +585,9 @@ main:focus,main:focus-visible{outline:none}
 
 /* district chips: one swipeable row on phones so the videos start right under the title */
 @media (max-width:760px){.chips-scroll{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:6px;margin-inline:-16px!important;padding-inline:16px;scrollbar-width:none}.chips-scroll::-webkit-scrollbar{display:none}.chips-scroll .chip{flex:none;white-space:nowrap}}
+
+/* interests: one line, expandable */
+.int-box{margin:12px 0;font-size:15px;line-height:1.6}
+.int-text{white-space:pre-line;word-break:break-word}
+.int-text.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden;white-space:normal}
+.int-more{font-weight:700;white-space:nowrap}

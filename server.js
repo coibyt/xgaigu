@@ -448,12 +448,12 @@ function readArea(b) {
 function readInfo(b) {
   const int = (v, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
   const by = int(b.birthYear, currentYear() - 100, currentYear() - 18);
-  const rawInterests = Array.isArray(b.interests) ? b.interests : String(b.interests || '').split(/[,\n]/);
+  const interestsText = clean(Array.isArray(b.interests) ? b.interests.join(', ') : String(b.interests || '').replace(/\r/g, ''), 8000);
   return {
     birthYear: by, height: int(b.height, 120, 230), weight: int(b.weight, 30, 200),
     origin: clean(b.origin, 60), occupation: clean(b.occupation, 60), address: clean(b.address, 200),
     workTime: clean(b.workTime, 120), boundaries: clean(b.boundaries, 300),
-    interests: [...new Set(rawInterests.map((t) => clean(t, 24).replace(/\|/g, '')).filter(Boolean))].slice(0, 10),
+    interests: interestsText,
   };
 }
 
