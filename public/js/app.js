@@ -1321,13 +1321,15 @@ function geoPicker(init = {}) {
 
 // "Sở thích": one line with "Xem thêm"; tap to read all of it (it can be very long)
 function interestBlock(raw) {
-  const text = (Array.isArray(raw) ? raw.join(', ') : String(raw || '')).trim();
+  const text = (Array.isArray(raw) ? raw.join(', ') : String(raw || '')).replace(/\r/g, '').trim();
   if (!text) return null;
-  const body = h('span', { class: 'int-text clamp', translate: 'no' }, text);
-  const btn = h('button', { type: 'button', class: 'linkbtn int-more', hidden: true }, 'Xem thêm');
-  btn.addEventListener('click', () => { const collapsed = body.classList.toggle('clamp'); btn.textContent = collapsed ? 'Xem thêm' : 'Thu gọn'; });
-  const box = h('div', { class: 'int-box' }, h('b', {}, 'Sở thích: '), body, ' ', btn);
-  requestAnimationFrame(() => setTimeout(() => { btn.hidden = !(body.scrollHeight > body.clientHeight + 1 || text.length > 60 || text.includes('\n')); }, 60));
+  const lines = text.split('\n'), moreLines = lines.slice(1).some((l) => l.trim());
+  const short = h('span', { class: 'int-short', translate: 'no' }, lines[0] + (moreLines ? ' …' : ''));
+  const full = h('span', { class: 'int-full', translate: 'no', hidden: true }, text); // pre-line: every line break stays
+  const btn = h('button', { type: 'button', class: 'linkbtn int-more', hidden: !moreLines }, 'Xem thêm');
+  btn.addEventListener('click', () => { const open = full.hidden; full.hidden = !open; short.hidden = open; btn.textContent = open ? 'Thu gọn' : 'Xem thêm'; });
+  const box = h('div', { class: 'int-box' }, h('b', {}, 'Sở thích'), h('div', {}, short, full), btn);
+  requestAnimationFrame(() => setTimeout(() => { if (btn.hidden && short.scrollWidth > short.clientWidth + 1) btn.hidden = false; }, 60));
   return box;
 }
 

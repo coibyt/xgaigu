@@ -598,3 +598,10 @@ main:focus,main:focus-visible{outline:none}
 .tk-tabs button{flex:1;display:flex;justify-content:center;align-items:center;gap:8px;padding:12px;font:inherit;font-weight:700;background:none;border:0;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tk-tabs button.on{color:var(--text);border-bottom-color:var(--text)}
 .tk-tabs button svg{width:18px;height:18px}
+
+/* interests: first line collapsed, every line when expanded */
+.int-box b{display:block;margin-bottom:2px}
+.int-short{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.int-full{display:block;white-space:pre-line;word-break:break-word}
+.int-short[hidden],.int-full[hidden]{display:none}
+.int-more{display:block;margin-top:2px}
