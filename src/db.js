@@ -153,6 +153,13 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   created_at INTEGER NOT NULL,
   last_used_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS saves (
+  user_id INTEGER NOT NULL,
+  video_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, video_id)
+);
+CREATE INDEX IF NOT EXISTS idx_saves_video ON saves(video_id);
 CREATE TABLE IF NOT EXISTS reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reporter_id INTEGER NOT NULL,

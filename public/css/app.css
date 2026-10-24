@@ -591,3 +591,10 @@ main:focus,main:focus-visible{outline:none}
 .int-text{white-space:pre-line;word-break:break-word}
 .int-text.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden;white-space:normal}
 .int-more{font-weight:700;white-space:nowrap}
+
+/* save (bookmark) button */
+.rail .act.save.saved .iconbtn{background:linear-gradient(135deg,#ffcc33,#ff9f1c);border-color:transparent;color:#2a1700}
+.rail .act.save.saved svg{fill:currentColor}
+.tk-tabs button{flex:1;display:flex;justify-content:center;align-items:center;gap:8px;padding:12px;font:inherit;font-weight:700;background:none;border:0;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tk-tabs button.on{color:var(--text);border-bottom-color:var(--text)}
+.tk-tabs button svg{width:18px;height:18px}

@@ -472,6 +472,12 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
   ).all(viewer ? viewer.id : 0, Date.now() - DAY_MS, viewer && ((userId != null && userId === viewer.id) || id != null) ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null,
     ids ? ',' + ids.join(',') + ',' : null, ids ? ',' + ids.join(',') + ',' : null, id ?? null, id ?? null,
     region || null, region || null, province || null, province || null, district || null, district || null, limit);
+  const saveCount = new Map(), savedByMe = new Set();
+  if (rows.length) {
+    const marks = rows.map(() => '?').join(','), vids = rows.map((r) => r.id);
+    for (const x of db.prepare('SELECT video_id, COUNT(*) AS n FROM saves WHERE video_id IN (' + marks + ') GROUP BY video_id').all(...vids)) saveCount.set(x.video_id, x.n);
+    if (viewer) for (const x of db.prepare('SELECT video_id FROM saves WHERE user_id = ? AND video_id IN (' + marks + ')').all(viewer.id, ...vids)) savedByMe.add(x.video_id);
+  }
   return rows.map((r) => {
     let info = {}; try { info = r.info ? JSON.parse(r.info) : {}; } catch {}
     return {
@@ -480,7 +486,7 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
       // the real view count is for admins only; everybody else sees no view numbers at all
       ...(viewer && viewer.role === 'admin' ? { views: r.views || 0, heat: r.heat } : {}),
-      verified: !!r.verified, selfHidden: r.hidden === 1, badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes, comments: r.comments, liked: !!r.liked,
+      saves: saveCount.get(r.id) || 0, saved: savedByMe.has(r.id), verified: !!r.verified, selfHidden: r.hidden === 1, badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes, comments: r.comments, liked: !!r.liked,
       // On a video only the uploader's chosen nickname is shown, not the account name.
       user: { id: r.user_id, name: r.nickname || r.u_name, avatar: r.u_avatar, city: r.u_city,
         age: currentYear() - (Number(info.birthYear) || r.u_by), canCall: !!(r.u_sp && r.u_phone) },
@@ -662,6 +668,24 @@ app.post('/api/videos/:id(\\d+)/view', (req, res) => {
     }
   }
   res.json({ ok: true });
+});
+
+// Save / unsave a video (private bookmark list shown on the member's own profile)
+app.post('/api/videos/:id(\\d+)/save', needUser, postLimiter, (req, res) => {
+  const id = Number(req.params.id);
+  if (!db.prepare('SELECT 1 FROM videos v JOIN users u ON u.id = v.user_id WHERE v.id = ? AND v.hidden = 0 AND u.banned = 0').get(id)) return fail(res, 404, 'Không tìm thấy video');
+  const had = db.prepare('DELETE FROM saves WHERE user_id = ? AND video_id = ?').run(req.user.id, id).changes;
+  if (!had) db.prepare('INSERT INTO saves (user_id, video_id, created_at) VALUES (?,?,?)').run(req.user.id, id, now());
+  res.json({ saved: !had, saves: db.prepare('SELECT COUNT(*) AS n FROM saves WHERE video_id = ?').get(id).n });
+});
+app.get('/api/me/saved', needUser, (req, res) => {
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0), limit = 36;
+  const ids = db.prepare(
+    `SELECT s.video_id AS id FROM saves s JOIN videos v ON v.id = s.video_id JOIN users u ON u.id = v.user_id
+     WHERE s.user_id = ? AND v.hidden = 0 AND u.banned = 0 ORDER BY s.created_at DESC LIMIT ? OFFSET ?`).all(req.user.id, limit + 1, offset).map((r) => r.id);
+  const page = ids.slice(0, limit);
+  const byId = new Map(page.length ? listVideos(req.user, { ids: page, limit: page.length }).map((v) => [v.id, v]) : []);
+  res.json({ videos: page.map((id) => byId.get(id)).filter(Boolean), more: ids.length > limit, next: offset + limit });
 });
 
 app.post('/api/videos/:id/like', needUser, (req, res) => {

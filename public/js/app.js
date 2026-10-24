@@ -15,6 +15,7 @@ const P = {
   search: 'M21 21l-4.3-4.3M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
   eye2: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
+  bookmark: 'M6 3h12a1 1 0 0 1 1 1v17l-7-4.2L5 21V4a1 1 0 0 1 1-1z',
   msg: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
   phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
   cal: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
@@ -914,8 +915,16 @@ function slide(v) {
   } else { mute.hidden = true; if (media.dataset.yt) observePlay(media); }
   const like = actBtn('like' + (v.liked ? ' liked' : ''), 'Thích', 'heart', v.likes, () => toggleLike(v, like));
   const cm = actBtn('', 'Bình luận', 'msg', v.comments, () => openComments(v, cm.querySelector('.n')));
+  const saveBtn = actBtn('save' + (v.saved ? ' saved' : ''), 'Lưu', 'bookmark', v.saves || 0, async () => {
+    if (!(await needLogin())) return;
+    try {
+      const r = await api('/videos/' + v.id + '/save', { method: 'POST' });
+      v.saved = r.saved; v.saves = r.saves; saveBtn.classList.toggle('saved', r.saved); saveBtn.querySelector('span.n').textContent = r.saves;
+      toast(r.saved ? 'Đã lưu video. Xem lại trong Hồ sơ → Đã lưu' : 'Đã bỏ lưu');
+    } catch (e) { fail(e); }
+  });
   const rail = h('div', { class: 'rail' },
-    like, cm,
+    like, cm, saveBtn,
     actBtn('chat', 'Nhắn tin', 'send', null, () => startChat(v.user)),
     actBtn('call', 'Gọi', 'phone', null, () => openCall({ ...v.user, canCall: v.hasPhone }, v.id)),
     actBtn('book', 'Hẹn gặp', 'cal', null, () => openBook(v.user, v.id)),
@@ -1164,9 +1173,33 @@ async function pageUser(id) {
     if (v.selfHidden) c.append(h('span', { class: 'selfhid' }, 'Đang ẩn'));
     return c;
   };
-  const w = h('div', { class: 'wrap tk' }, head,
-    h('div', { class: 'tk-tabs' }, h('span', { class: 'on', html: icon('video') + '<span>Video (' + stats.videos + ')</span>' })),
-    videos.length ? h('div', { class: 'tgrid' }, videos.map(cell)) : h('div', { class: 'card empty' }, h('p', {}, 'Chưa có video.')));
+  const videosNodes = [videos.length ? h('div', { class: 'tgrid' }, videos.map(cell)) : h('div', { class: 'card empty' }, h('p', {}, 'Chưa có video.'))];
+  const panel = h('div', {}, ...videosNodes);
+  let tabsEl = h('div', { class: 'tk-tabs' }, h('span', { class: 'on', html: icon('video') + '<span>Video (' + stats.videos + ')</span>' }));
+  if (me) { // only the owner sees the "Đã lưu" tab: saved videos are private
+    const bV = h('button', { type: 'button', class: 'on', html: icon('video') + '<span>Video (' + stats.videos + ')</span>' });
+    const bS = h('button', { type: 'button', 'aria-label': 'Đã lưu', html: icon('bookmark') + '<span>Đã lưu</span>' });
+    tabsEl = h('div', { class: 'tk-tabs' }, bV, bS);
+    bV.addEventListener('click', () => { bV.classList.add('on'); bS.classList.remove('on'); panel.replaceChildren(...videosNodes); });
+    bS.addEventListener('click', async () => {
+      bS.classList.add('on'); bV.classList.remove('on'); panel.replaceChildren(h('div', { class: 'spin' }));
+      const note = h('p', { class: 'muted', style: 'font-size:13px;text-align:center;margin:12px 0' }, 'Chỉ mình bạn thấy danh sách này.');
+      const grid = h('div', { class: 'tgrid' }), more = h('button', { class: 'btn', type: 'button', hidden: true, style: 'margin:16px auto;display:flex' }, 'Xem thêm');
+      let offset = 0;
+      const load = async () => {
+        try {
+          const d = await api('/me/saved?offset=' + offset);
+          d.videos.forEach((v) => grid.append(areaTile(v)));
+          offset = d.next; more.hidden = !d.more;
+          if (!grid.children.length) panel.replaceChildren(note, h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('bookmark') }), h('h3', {}, 'Chưa lưu video nào'), h('p', {}, 'Khi xem video, bấm biểu tượng dấu trang để lưu lại và xem sau tại đây.')));
+        } catch (e) { fail(e); }
+      };
+      more.addEventListener('click', load);
+      panel.replaceChildren(note, grid, more);
+      await load();
+    });
+  }
+  const w = h('div', { class: 'wrap tk' }, head, tabsEl, panel);
   main.append(w, footer());
   // members with many videos: keep loading older ones while scrolling, until all are shown
   const grid = w.querySelector('.tgrid');
