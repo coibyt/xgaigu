@@ -47,9 +47,10 @@ function install(app, ctx) {
      WHERE v.hidden = 0 AND u.banned = 0 AND v.region != '' GROUP BY v.region, v.province, v.district`).all();
   const sumWhere = (rows, f) => rows.filter(f).reduce((n, x) => n + x.n, 0);
 
+  const byCount = (list) => list.sort((x, y) => y.n - x.n); // most videos first (stable: equal counts keep their normal order)
   function children(a, rows) {
-    if (a.level === 'region') return GEO[a.region].map(([p]) => ({ name: p, url: urlOf({ level: 'province', region: a.region, province: p }), n: sumWhere(rows, (x) => x.region === a.region && x.province === p) }));
-    if (a.level === 'province') return GEO[a.region].find((p) => p[0] === a.province)[1].map((d) => ({ name: d, url: urlOf({ level: 'district', region: a.region, province: a.province, district: d }), n: sumWhere(rows, (x) => x.province === a.province && x.district === d) }));
+    if (a.level === 'region') return byCount(GEO[a.region].map(([p]) => ({ name: p, url: urlOf({ level: 'province', region: a.region, province: p }), n: sumWhere(rows, (x) => x.region === a.region && x.province === p) })));
+    if (a.level === 'province') return byCount(GEO[a.region].find((p) => p[0] === a.province)[1].map((d) => ({ name: d, url: urlOf({ level: 'district', region: a.region, province: a.province, district: d }), n: sumWhere(rows, (x) => x.province === a.province && x.district === d) })));
     return [];
   }
   const totalOf = (a, rows) => sumWhere(rows, (x) => x.region === a.region && (!a.province || x.province === a.province) && (!a.district || x.district === a.district));
@@ -169,7 +170,7 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
 <nav class="crumbs"><a href="/">Trang chủ</a> › <span>Khu vực</span></nav>
 <h1>Làm quen & hẹn hò theo khu vực – Miền Bắc, Miền Trung, Miền Nam</h1>
 <p>Chọn khu vực để xem video giới thiệu, nhắn tin làm quen, xem livestream và hẹn gặp an toàn trên xgaigu.com. Dành cho người từ 18 tuổi trở lên.</p>
-<ul class="seo-links">${Object.keys(REGIONS).map((r) => `<li><a href="${urlOf({ level: 'region', region: r })}">${REGIONS[r]}</a> – ${GEO[r].length} tỉnh/thành, ${sumWhere(rows, (x) => x.region === r)} video</li>`).join('')}</ul>
+<ul class="seo-links">${Object.keys(REGIONS).sort((a, b) => sumWhere(rows, (x) => x.region === b) - sumWhere(rows, (x) => x.region === a)).map((r) => `<li><a href="${urlOf({ level: 'region', region: r })}">${REGIONS[r]}</a> – ${GEO[r].length} tỉnh/thành, ${sumWhere(rows, (x) => x.region === r)} video</li>`).join('')}</ul>
 </div>`;
     const title = 'Làm quen & hẹn hò theo khu vực – Bắc, Trung, Nam | xgaigu';
     const description = 'Chọn khu vực Miền Bắc, Miền Trung, Miền Nam để xem video giới thiệu, làm quen, chat và hẹn gặp an toàn trên xgaigu.com. Dành cho người từ 18 tuổi.';
@@ -227,8 +228,8 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
       '<h1>xgaigu – Video, livestream &amp; hẹn hò an toàn</h1>' +
       '<p>xgaigu.com là nơi bạn xem video giới thiệu, làm quen qua tin nhắn, xem livestream và đặt lịch hẹn gặp có kiểm soát. Dành cho người từ 18 tuổi trở lên.</p>' +
       '<p><a href="/khu-vuc">Xem video theo khu vực</a> · <a href="/app">Tải ứng dụng xgaigu</a></p>' +
-      Object.keys(REGIONS).map((r) => '<h2><a href="' + urlOf({ level: 'region', region: r }) + '">' + escHtml(REGIONS[r]) + '</a></h2><ul class="seo-links">' +
-        GEO[r].map(([p]) => { const n = sumWhere(rows, (x) => x.region === r && x.province === p); return '<li><a href="' + urlOf({ level: 'province', region: r, province: p }) + '">' + escHtml(shortName(p)) + '</a>' + (n ? ' (' + n + ' video)' : '') + '</li>'; }).join('') + '</ul>').join('') +
+      Object.keys(REGIONS).sort((a, b) => sumWhere(rows, (x) => x.region === b) - sumWhere(rows, (x) => x.region === a)).map((r) => '<h2><a href="' + urlOf({ level: 'region', region: r }) + '">' + escHtml(REGIONS[r]) + '</a></h2><ul class="seo-links">' +
+        [...GEO[r]].sort((a, b) => sumWhere(rows, (x) => x.region === r && x.province === b[0]) - sumWhere(rows, (x) => x.region === r && x.province === a[0])).map(([p]) => { const n = sumWhere(rows, (x) => x.region === r && x.province === p); return '<li><a href="' + urlOf({ level: 'province', region: r, province: p }) + '">' + escHtml(shortName(p)) + '</a>' + (n ? ' (' + n + ' video)' : '') + '</li>'; }).join('') + '</ul>').join('') +
       (vids.length ? '<h2>Video mới</h2><ul class="seo-links">' + vids.map((v) => '<li><a href="/v/' + v.id + '">' + escHtml(cut(v.caption || 'Video của ' + v.user.name, 80)) + '</a></li>').join('') + '</ul>' : '') +
       '</div>';
   }

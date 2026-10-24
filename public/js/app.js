@@ -1388,14 +1388,14 @@ async function pageRegions(reg, prov, dist) {
   const wrap = h('div', { class: 'wrap', style: 'padding:28px 0' }, h('p', { class: 'crumbs' }, crumb));
   if (!reg || !geo[reg]) {
     wrap.append(h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Chọn khu vực'),
-      h('div', { class: 'grid g3' }, Object.keys(REGION_NAMES).map((k) => h('a', { class: 'card region-card ' + k, href: '#/regions/' + k },
+      h('div', { class: 'grid g3' }, Object.keys(REGION_NAMES).sort((a, b) => sum((x) => x.region === b) - sum((x) => x.region === a)).map((k) => h('a', { class: 'card region-card ' + k, href: '#/regions/' + k },
         h('h3', {}, REGION_NAMES[k]), h('p', { class: 'muted' }, geo[k].length + ' tỉnh / thành phố'), h('span', { class: 'status st-accepted' }, sum((x) => x.region === k) + ' video')))));
   } else if (!prov) {
     const filter = h('input', { placeholder: 'Tìm tỉnh / thành phố…', 'aria-label': 'Tìm tỉnh' });
     const grid = h('div', { class: 'grid g4 prov-grid' });
     const draw = () => {
       const q = filter.value.trim().toLowerCase(); grid.replaceChildren();
-      geo[reg].filter((p) => p[0].toLowerCase().includes(q)).forEach(([name, ds]) => {
+      [...geo[reg]].filter((p) => p[0].toLowerCase().includes(q)).sort((a, b) => sum((x) => x.region === reg && x.province === b[0]) - sum((x) => x.region === reg && x.province === a[0])).forEach(([name, ds]) => {
         const n = sum((x) => x.region === reg && x.province === name);
         grid.append(h('a', { class: 'card prov-card' + (n ? ' has' : ''), href: `#/regions/${reg}/${enc(name)}` }, h('b', {}, name), h('span', { class: 'muted' }, ds.length + ' quận/huyện'), n > 0 && h('span', { class: 'badge', style: 'margin:0' }, n)));
       });
@@ -1406,7 +1406,7 @@ async function pageRegions(reg, prov, dist) {
     const p = geo[reg].find((x) => x[0] === prov);
     if (!p) { wrap.append(h('div', { class: 'empty' }, h('h3', {}, 'Không tìm thấy khu vực'))); main.append(wrap); return; }
     const chips = h('div', { class: 'ed-chips chips-scroll', style: 'margin:14px 0 18px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}` }, 'Tất cả'),
-      p[1].map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, d, n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
+      [...p[1]].sort((a, b) => sum((x) => x.province === prov && x.district === b) - sum((x) => x.province === prov && x.district === a)).map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, d, n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
     const grid = h('div', { class: 'tgrid area-grid' });
     const count = h('span', { class: 'muted', style: 'font-size:14px;margin-left:8px;font-weight:500' });
     const more = h('button', { class: 'btn', type: 'button', hidden: true, style: 'margin:18px auto 0;display:flex' }, 'Xem thêm video');
