@@ -222,7 +222,8 @@ async function loadCatalog() {
   for (let i = tracks.length - 1; i >= 0; i--) if (tracks[i].url) tracks.splice(i, 1);
   try { // songs uploaded by the site's admins (with vocals), shown first
     const d = await (await fetch('/api/music', { cache: 'no-cache' })).json();
-    const list = (d && Array.isArray(d.tracks) ? d.tracks : []).slice().reverse();
+    const list = (d && Array.isArray(d.tracks) ? d.tracks : []).slice();
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; } // random order every time the library opens
     for (const t of list) if (t && t.url && t.title) tracks.unshift({ id: 'lib-' + t.id, style: 'lib-' + (t.style || 'Nhạc có lời'), styleName: '🎤 ' + (t.style || 'Nhạc có lời'), title: t.title, meta: t.artist || 'Bài hát', url: t.url });
   } catch {}
   try {
