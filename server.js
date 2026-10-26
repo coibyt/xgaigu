@@ -1192,19 +1192,28 @@ app.delete('/api/admin/music/:id(\\d+)', needAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- site settings shown to everybody (Telegram group link) ----------
+// ---------- site settings shown to everybody (up to 5 Telegram group links) ----------
 const getConf = (k) => { const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(k); return r ? r.value : ''; };
-app.get('/api/site-config', (_req, res) => res.set('Cache-Control', 'no-cache').json({ telegram: getConf('telegram_url') }));
+const telegramLinks = () => {
+  let list = []; try { list = JSON.parse(getConf('telegram_urls') || '[]'); } catch {}
+  if (!list.length && getConf('telegram_url')) list = [getConf('telegram_url')]; // the single link saved by the earlier version
+  return list.filter(Boolean).slice(0, 5);
+};
+app.get('/api/site-config', (_req, res) => { const t = telegramLinks(); res.set('Cache-Control', 'no-cache').json({ telegrams: t, telegram: t[0] || '' }); });
 app.put('/api/admin/site-config', needAdmin, (req, res) => {
-  let tg = clean(req.body.telegram, 300);
-  if (tg && !/^https?:\/\//i.test(tg)) tg = 'https://' + tg;
-  if (tg) {
-    let host = ''; try { host = new URL(tg).hostname.toLowerCase(); } catch {}
-    if (!/^(www\.)?(t\.me|telegram\.me|telegram\.dog)$/.test(host)) return fail(res, 400, 'Link nhóm Telegram phải có dạng https://t.me/...');
-    tg = tg.replace(/^http:/i, 'https:');
+  const raw = Array.isArray(req.body.telegrams) ? req.body.telegrams : [req.body.telegram];
+  const out = [];
+  for (let [i, v] of raw.slice(0, 5).entries()) {
+    v = clean(v, 300);
+    if (!v) continue;
+    if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+    let host = ''; try { host = new URL(v).hostname.toLowerCase(); } catch {}
+    if (!/^(www\.)?(t\.me|telegram\.me|telegram\.dog)$/.test(host)) return fail(res, 400, 'Ô số ' + (i + 1) + ': link nhóm Telegram phải có dạng https://t.me/...');
+    out.push(v.replace(/^http:/i, 'https:'));
   }
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('telegram_url', tg);
-  res.json({ ok: true, telegram: tg });
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('telegram_urls', JSON.stringify(out));
+  db.prepare('DELETE FROM settings WHERE key = ?').run('telegram_url');
+  res.json({ ok: true, telegrams: out });
 });
 
 app.get('/api/admin/videos', needAdmin, (req, res) => {

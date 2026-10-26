@@ -1358,7 +1358,8 @@ function openInfo(v) {
     interestBlock(i.interests),
     i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
     !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
-    S.conf && S.conf.telegram && h('a', { class: 'btn tgbtn', href: S.conf.telegram, target: '_blank', rel: 'noopener', html: TG_ICON + '<span>Vào nhóm Telegram</span>' }),
+    (() => { const list = (S.conf && S.conf.telegrams) || []; if (!list.length) return null; const link = list[Math.floor(Math.random() * list.length)]; // a different group at random each time
+      return h('a', { class: 'btn tgbtn', href: link, target: '_blank', rel: 'noopener', html: TG_ICON + '<span>Vào nhóm Telegram</span>' }); })(),
     h('div', { class: 'row', style: 'margin-top:14px' },
       S.user && S.user.role === 'admin' && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id), html: icon('flag') + 'Quản lý video (admin)' }),
       S.user && S.user.id === v.user.id && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id, null, true), html: '✎ Sửa / ẩn video của tôi' }),
@@ -2093,15 +2094,23 @@ async function pageAdmin() {
         h('p', { class: 'muted', style: 'font-size:14px' }, 'Bài hát tải lên đây hiện ngay đầu thư viện nhạc trong trình chỉnh sửa video, để thành viên chọn chèn vào video. Chỉ tải lên bài bạn có quyền sử dụng; nhạc có bản quyền có thể khiến video bị khiếu nại.'),
         fileIn, h('div', { class: 'two' }, title, artist), style, h('div', { class: 'row', style: 'gap:10px;align-items:center' }, upBtn, prog), info, list));
   })();
-  // Telegram group link shown in every video's info sheet
+  // up to 5 Telegram group links; the info sheet shows one of them at random
   const tgBox = (() => {
-    const inp = h('input', { type: 'url', placeholder: 'https://t.me/ten_nhom_cua_ban', value: (S.conf && S.conf.telegram) || '', style: 'flex:1;min-width:220px' });
-    api('/site-config').then((c) => { inp.value = c.telegram || ''; }).catch(() => {});
-    const save = async (val) => { try { const r = await api('/admin/site-config', { method: 'PUT', body: { telegram: val } }); S.conf = { ...(S.conf || {}), telegram: r.telegram }; inp.value = r.telegram; toast(r.telegram ? 'Đã lưu link nhóm Telegram' : 'Đã tắt nút Telegram'); } catch (e) { fail(e); } };
+    const inputs = [1, 2, 3, 4, 5].map((n) => h('input', { type: 'url', placeholder: 'Nhóm ' + n + ': https://t.me/ten_nhom', style: 'width:100%' }));
+    const fill = (list) => inputs.forEach((inp, i) => { inp.value = list[i] || ''; });
+    api('/site-config').then((c) => fill(c.telegrams || [])).catch(() => {});
+    const save = async () => {
+      try {
+        const r = await api('/admin/site-config', { method: 'PUT', body: { telegrams: inputs.map((x) => x.value.trim()) } });
+        S.conf = { ...(S.conf || {}), telegrams: r.telegrams, telegram: r.telegrams[0] || '' }; fill(r.telegrams);
+        toast(r.telegrams.length ? 'Đã lưu ' + r.telegrams.length + ' nhóm Telegram' : 'Đã ẩn nút Telegram');
+      } catch (e) { fail(e); }
+    };
     return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Nhóm Telegram'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Dán link nhóm Telegram. Khi có link, nút "Vào nhóm Telegram" sẽ hiện trong mục "Xem thông tin" của mọi video. Xoá trống rồi bấm Lưu để ẩn nút.'),
-        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, inp, h('button', { class: 'btn primary', type: 'button', onclick: () => save(inp.value.trim()) }, 'Lưu'), h('button', { class: 'btn', type: 'button', onclick: () => { inp.value = ''; save(''); } }, 'Ẩn nút'))));
+      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:10px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Điền tối đa 5 link nhóm Telegram. Mỗi lần khách mở "Xem thông tin", nút "Vào nhóm Telegram" sẽ dẫn tới một trong các nhóm này, chọn ngẫu nhiên, để chia đều khách giữa các nhóm. Để trống ô nào thì bỏ qua ô đó; để trống hết rồi Lưu thì nút bị ẩn.'),
+        ...inputs,
+        h('div', { class: 'row', style: 'gap:8px' }, h('button', { class: 'btn primary', type: 'button', onclick: save }, 'Lưu'), h('button', { class: 'btn', type: 'button', onclick: () => { fill([]); save(); } }, 'Xoá hết'))));
   })();
   // video optimisation: shrink big videos so they load fast
   const optBox = await (async () => {
