@@ -64,6 +64,7 @@ app.use('/api', apiLimiter);
 const now = () => Date.now();
 // Recent activity (view = 1 point, like or comment = 3 points) decides which videos are "hot". Only the last 3 days are kept.
 const DAY_MS = 86400_000, HOT_MIN = Number(process.env.HOT_MIN) || 12;
+const VERIFIED_BOOST = Number(process.env.VERIFIED_BOOST) || 10; // how much more often verified videos are suggested
 const act = (videoId, kind) => { try { db.prepare('INSERT INTO video_activity (video_id, kind, at) VALUES (?,?,?)').run(videoId, kind, Date.now()); } catch {} };
 setInterval(() => { try { db.prepare('DELETE FROM video_activity WHERE at < ?').run(Date.now() - 3 * DAY_MS); } catch {} }, 3600_000).unref();
 // badge: admin choice first ("hot" / "new" / "off" = none), otherwise automatic
@@ -524,12 +525,13 @@ app.get('/api/feed', (req, res) => {
   }
   const top = Math.max(0, ...score.values());
   const pool = db.prepare(
-    `SELECT v.id, v.province, v.badge, v.created_at FROM videos v JOIN users u ON u.id = v.user_id WHERE v.hidden = 0 AND u.banned = 0 ORDER BY v.id DESC LIMIT 1500`).all();
+    `SELECT v.id, v.province, v.badge, v.created_at, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.hidden = 0 AND u.banned = 0 ORDER BY (v.verified OR u.verified) DESC, v.id DESC LIMIT 2000`).all(); // verified videos are always in the pool, then the newest
   const heatOf = new Map(db.prepare("SELECT video_id, SUM(CASE kind WHEN 'view' THEN 1 ELSE 3 END) AS h FROM video_activity WHERE at > ? GROUP BY video_id").all(Date.now() - DAY_MS).map((x) => [x.video_id, x.h]));
   const picked = pool.filter((r) => !seen.has(r.id)).map((r) => {
     const interest = top ? (score.get(pk(r.province)) || 0) / top : 0; // 0..1
     const b = badgeOf(r.badge, heatOf.get(r.id) || 0, r.created_at);
-    const w = (1 + 7 * interest) * (b === 'new' ? 8 : b === 'hot' ? 5 : 1); // favourite regions up to 8x; new videos 8x and hot videos 5x so they surface first
+    const w = (1 + 7 * interest) * (b === 'new' ? 8 : b === 'hot' ? 5 : 1) * (r.ver ? VERIFIED_BOOST : 1); // favourite regions up to 8x; new 8x, hot 5x; verified videos far ahead of the rest
     return { id: r.id, key: -Math.log(1 - Math.random()) / w };
   }).sort((a, b) => a.key - b.key).slice(0, limit).map((r) => r.id);
   if (!picked.length) return res.json({ videos: [] });
@@ -586,12 +588,13 @@ app.get('/api/area-videos', (req, res) => {
   if (!area.region) return fail(res, 400, 'Khu vực không hợp lệ');
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 36, 1), 60);
   const seen = new Set(String(req.query.seen || '').split(',').map(Number).filter(Boolean).slice(0, 2000));
-  const ids = db.prepare(
-    `SELECT v.id FROM videos v JOIN users u ON u.id = v.user_id
+  const rows = db.prepare(
+    `SELECT v.id, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
      WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?)`
-  ).all(area.region, area.province, area.province, area.district, area.district).map((r) => r.id);
-  const left = ids.filter((id) => !seen.has(id));
-  for (let i = left.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [left[i], left[j]] = [left[j], left[i]]; } // Fisher-Yates shuffle
+  ).all(area.region, area.province, area.province, area.district, area.district);
+  const ids = rows.map((r) => r.id);
+  // random order, but verified videos are much more likely to come first (weighted random sampling)
+  const left = rows.filter((r) => !seen.has(r.id)).map((r) => ({ id: r.id, key: -Math.log(1 - Math.random()) / (r.ver ? VERIFIED_BOOST : 1) })).sort((a, b) => a.key - b.key).map((r) => r.id);
   const pick = left.slice(0, limit);
   const byId = new Map(pick.length ? listVideos(req.user, { ids: pick, limit: pick.length }).map((v) => [v.id, v]) : []);
   res.json({ videos: pick.map((id) => byId.get(id)).filter(Boolean), total: ids.length, remaining: Math.max(0, left.length - pick.length) });
