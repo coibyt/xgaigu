@@ -93,7 +93,7 @@ function publicUser(u) {
     city: u.city, address: u.address || '', bio: u.bio, nickname: u.nickname || '', height: u.height || null,
     weight: u.weight || null, origin: u.origin || '', availability: u.availability || '', boundaries: u.boundaries || '',
     occupation: u.occupation || '', interests: u.interests ? u.interests.split('|') : [], lookingFor: u.looking_for || '', allowCalls: u.allow_calls !== 0, avatar: u.avatar, canCall: !!(u.show_phone && u.phone),
-    role: u.role, createdAt: u.created_at,
+    role: u.role, verified: !!u.verified, createdAt: u.created_at,
   };
 }
 function selfUser(u) {
@@ -460,7 +460,7 @@ function readInfo(b) {
 function listVideos(viewer, { userId, before, limit = 12, id, ids, region, province, district } = {}) {
   const rows = db.prepare(
     `SELECT v.*, u.name AS u_name, u.avatar AS u_avatar, u.city AS u_city, u.birth_year AS u_by,
-       u.show_phone AS u_sp, u.phone AS u_phone,
+       u.show_phone AS u_sp, u.phone AS u_phone, u.verified AS u_verified,
        (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id) AS likes,
        (SELECT COUNT(*) FROM comments c WHERE c.video_id = v.id) AS comments,
        (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id AND l.user_id = ?) AS liked,
@@ -486,7 +486,7 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
       // the real view count is for admins only; everybody else sees no view numbers at all
       ...(viewer && viewer.role === 'admin' ? { views: r.views || 0, heat: r.heat } : {}),
-      saves: saveCount.get(r.id) || 0, saved: savedByMe.has(r.id), verified: !!r.verified, selfHidden: r.hidden === 1, badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes, comments: r.comments, liked: !!r.liked,
+      saves: saveCount.get(r.id) || 0, saved: savedByMe.has(r.id), verified: !!(r.verified || r.u_verified), accountVerified: !!r.u_verified, selfHidden: r.hidden === 1, badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes, comments: r.comments, liked: !!r.liked,
       // On a video only the uploader's chosen nickname is shown, not the account name.
       user: { id: r.user_id, name: r.nickname || r.u_name, avatar: r.u_avatar, city: r.u_city,
         age: currentYear() - (Number(info.birthYear) || r.u_by), canCall: !!(r.u_sp && r.u_phone) },
@@ -1077,7 +1077,7 @@ app.get('/api/admin/users', needAdmin, (req, res) => {
   const where = "(lower(u.email) LIKE ? OR lower(u.name) LIKE ?)";
   const total = db.prepare('SELECT COUNT(*) AS n FROM users u WHERE ' + where).get(q, q).n;
   const users = db.prepare(
-    `SELECT u.id, u.email, u.name, u.role, u.banned, u.created_at,
+    `SELECT u.id, u.email, u.name, u.role, u.banned, u.verified, u.created_at,
        (SELECT COUNT(*) FROM videos v WHERE v.user_id = u.id AND v.hidden = 0) AS videos,
        (SELECT COUNT(*) FROM likes l JOIN videos v ON v.id = l.video_id WHERE v.user_id = u.id) AS likes,
        (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers
@@ -1109,13 +1109,13 @@ app.post('/api/admin/reports/:id/resolve', needAdmin, (req, res) => {
 // Video moderation: status is "visible", "hidden" (admin hid it, can be shown again) or "banned" (cấm xuất bản, with a reason).
 const adminVideoRow = (id) => {
   const r = db.prepare(
-    `SELECT v.*, u.email AS u_email, u.name AS u_name,
+    `SELECT v.*, u.email AS u_email, u.name AS u_name, u.verified AS u_verified,
        (SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id) AS likes, (SELECT COUNT(*) FROM comments c WHERE c.video_id = v.id) AS comments
      FROM videos v JOIN users u ON u.id = v.user_id WHERE v.id = ?`).get(id);
   if (!r) return null;
   let info = {}; try { info = JSON.parse(r.info || '{}'); } catch {}
   return { id: r.id, caption: r.caption, nickname: r.nickname, phone: r.v_phone, file: r.file, url: r.url, thumb: r.thumb, region: r.region, province: r.province, district: r.district,
-    info, views: r.views || 0, badge: r.badge || '', verified: !!r.verified, likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? (r.hidden_by === 'owner' ? 'self' : 'hidden') : 'visible', note: r.mod_note || '',
+    info, views: r.views || 0, badge: r.badge || '', verified: !!r.verified, accountVerified: !!r.u_verified, likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? (r.hidden_by === 'owner' ? 'self' : 'hidden') : 'visible', note: r.mod_note || '',
     owner: { id: r.user_id, email: r.u_email, name: r.u_name } };
 };
 // "Đã xác minh": only admins can grant or remove it (members have no endpoint that touches this column).
@@ -1147,6 +1147,12 @@ app.post('/api/admin/optimize/start', needAdmin, (req, res) => {
 });
 app.post('/api/admin/optimize/stop', needAdmin, (_req, res) => { transcode.stop(); res.json({ ok: true }); });
 
+// Verify a whole account: all its videos (past and future) show "Đã xác minh". Only admins can do this.
+app.post('/api/admin/users/:id(\\d+)/verified', needAdmin, (req, res) => {
+  if (!db.prepare('SELECT 1 FROM users WHERE id = ?').get(req.params.id)) return fail(res, 404, 'Không tìm thấy thành viên');
+  db.prepare('UPDATE users SET verified = ? WHERE id = ?').run(req.body.verified ? 1 : 0, req.params.id);
+  res.json({ ok: true, verified: !!req.body.verified, videos: db.prepare('SELECT COUNT(*) AS n FROM videos WHERE user_id = ? AND hidden = 0').get(req.params.id).n });
+});
 app.get('/api/admin/videos', needAdmin, (req, res) => {
   const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
   const st = { visible: 'v.hidden = 0 AND v.locked = 0', hidden: "v.hidden = 1 AND v.locked = 0 AND v.hidden_by <> 'owner'", banned: 'v.locked = 1' }[req.query.status] || '1 = 1';

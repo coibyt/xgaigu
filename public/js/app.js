@@ -1148,6 +1148,7 @@ async function pageUser(id) {
   const head = h('div', { class: 'tk-head' },
     avatar(user, 'xl'),
     h('h2', { class: 'tk-name' }, user.name + (user.age ? ', ' + user.age : '')),
+    user.verified && vbadge(),
     h('div', { class: 'tk-handle', translate: 'no' }, user.nickname ? '@' + user.nickname : ''),
     h('div', { class: 'tk-stats' }, stat(stats.followers, 'Theo dõi'), stat(stats.videos, 'Video'), stat(stats.likes, 'Lượt thích'), isAdmin() && stats.views != null && stat(stats.views, 'Lượt xem')),
     h('div', { class: 'tk-actions' }, !me
@@ -1900,7 +1901,7 @@ async function adminVideoDialog(id, onChange, own = false) {
       h('button', { class: 'btn sm', type: 'button', onclick: () => setStatus('hidden') }, 'Ẩn video'),
       h('button', { class: 'btn sm live', type: 'button', onclick: () => setStatus('banned') }, 'Cấm xuất bản'),
       h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!confirm('XOÁ vĩnh viễn video này? Không thể khôi phục.')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); toast('Đã xoá video'); m.close(); onChange && onChange(); } catch (e) { fail(e); } } }, 'Xoá')),
-    own ? null : h('label', { class: 'check verify-tick' }, verChk, h('span', {}, h('b', {}, 'Đã xác minh'), ' – hiện huy hiệu xác minh nổi bật trên video này (chỉ admin được chọn)')), own ? null : h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), own ? null : note, h('div', { style: 'height:12px' }), f), { wide: true });
+    own ? null : h('label', { class: 'check verify-tick' }, verChk, h('span', {}, h('b', {}, 'Đã xác minh'), ' – hiện huy hiệu xác minh nổi bật trên video này (chỉ admin được chọn)' + (v.accountVerified ? '. Lưu ý: tài khoản chủ video đã được xác minh nên mọi video của họ đều có huy hiệu.' : ''))), own ? null : h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), own ? null : note, h('div', { style: 'height:12px' }), f), { wide: true });
   // fill the area selects once the region list has loaded
   loadGeo().then((g) => {
     const [reg, prov, dist] = geo.el.querySelectorAll('select');
@@ -1989,13 +1990,15 @@ async function pageAdmin() {
     memInfo.textContent = 'Tổng số thành viên: ' + d.total;
     memBody.replaceChildren(...d.users.map((u) => h('tr', {}, h('td', {}, String(u.id)), h('td', { translate: 'no', style: 'word-break:break-all' }, u.email), h('td', { translate: 'no' }, u.name + (u.role === 'admin' ? ' (admin)' : '')),
       h('td', {}, String(u.videos)), h('td', {}, String(u.followers)), h('td', {}, String(u.likes)), h('td', {}, new Date(u.created_at).toLocaleDateString('vi-VN')),
+      h('td', { style: 'text-align:center' }, h('input', { type: 'checkbox', checked: !!u.verified, title: 'Xác minh tài khoản: mọi video của thành viên này sẽ có huy hiệu Đã xác minh',
+        onchange: async (e) => { const on = e.target.checked; try { const r = await api('/admin/users/' + u.id + '/verified', { method: 'POST', body: { verified: on } }); toast(on ? 'Đã xác minh tài khoản, ' + r.videos + ' video có huy hiệu' : 'Đã gỡ xác minh tài khoản'); } catch (er) { e.target.checked = !on; fail(er); } } })),
       h('td', {}, u.banned ? h('span', { class: 'muted' }, 'Đã khoá') : u.role === 'admin' ? '' : h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá tài khoản ' + u.email + '?')) { await api('/admin/users/' + u.id + '/ban', { method: 'POST' }); loadMembers(); } } }, 'Khoá')))));
     pager.replaceChildren(page > 0 && h('button', { class: 'btn sm', onclick: () => { page--; loadMembers(); } }, '← Trước'), (page + 1) * d.size < d.total && h('button', { class: 'btn sm', onclick: () => { page++; loadMembers(); } }, 'Sau →'));
   };
   qIn.addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(() => { page = 0; loadMembers().catch(fail); }, 300); });
   await loadMembers().catch(fail);
   const membersBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thành viên đã đăng ký'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, qIn, sortSel), memInfo,
-    h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Email', 'Tên', 'Video', 'Theo dõi', 'Lượt thích', 'Ngày đăng ký', ''].map((x) => h('th', {}, x)))), memBody)), pager);
+    h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Email', 'Tên', 'Video', 'Theo dõi', 'Lượt thích', 'Ngày đăng ký', 'Đã xác minh', ''].map((x) => h('th', {}, x)))), memBody)), pager);
   // video moderation list
   const vBody = h('tbody', {}), vInfo = h('div', { class: 'muted', style: 'margin:10px 0;font-size:14px' }), vPager = h('div', { class: 'row', style: 'gap:8px;margin-top:12px' });
   const vq = h('input', { type: 'search', placeholder: 'Tìm theo nội dung, biệt danh, email chủ video hoặc số ID…', style: 'flex:1;min-width:200px' });

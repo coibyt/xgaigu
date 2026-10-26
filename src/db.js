@@ -190,6 +190,7 @@ for (const [col, ddl] of [
   ['allow_calls', 'allow_calls INTEGER DEFAULT 1'],
   ['email_verified', 'email_verified INTEGER DEFAULT 1'],
   ['marketing_optout', 'marketing_optout INTEGER DEFAULT 0'],
+  ['verified', 'verified INTEGER DEFAULT 0'],
 ]) if (!userCols.includes(col)) db.exec('ALTER TABLE users ADD COLUMN ' + ddl);
 
 const videoCols = db.prepare('PRAGMA table_info(videos)').all().map((c) => c.name);
