@@ -1334,6 +1334,8 @@ function interestBlock(raw) {
   return box;
 }
 
+const TG_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M21.4 3.6 2.9 10.8c-1.3.5-1.3 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.2-15c.3-1.3-.5-1.9-1.6-1.4zM8.7 13.4l9.6-6c.5-.3.9-.1.5.2l-8.2 7.4-.3 3.4-1.6-5z"/></svg>';
+
 function openInfo(v) {
   const i = v.info || {};
   let m;
@@ -1356,6 +1358,7 @@ function openInfo(v) {
     interestBlock(i.interests),
     i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
     !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
+    S.conf && S.conf.telegram && h('a', { class: 'btn tgbtn', href: S.conf.telegram, target: '_blank', rel: 'noopener', html: TG_ICON + '<span>Vào nhóm Telegram</span>' }),
     h('div', { class: 'row', style: 'margin-top:14px' },
       S.user && S.user.role === 'admin' && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id), html: icon('flag') + 'Quản lý video (admin)' }),
       S.user && S.user.id === v.user.id && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id, null, true), html: '✎ Sửa / ẩn video của tôi' }),
@@ -2090,6 +2093,16 @@ async function pageAdmin() {
         h('p', { class: 'muted', style: 'font-size:14px' }, 'Bài hát tải lên đây hiện ngay đầu thư viện nhạc trong trình chỉnh sửa video, để thành viên chọn chèn vào video. Chỉ tải lên bài bạn có quyền sử dụng; nhạc có bản quyền có thể khiến video bị khiếu nại.'),
         fileIn, h('div', { class: 'two' }, title, artist), style, h('div', { class: 'row', style: 'gap:10px;align-items:center' }, upBtn, prog), info, list));
   })();
+  // Telegram group link shown in every video's info sheet
+  const tgBox = (() => {
+    const inp = h('input', { type: 'url', placeholder: 'https://t.me/ten_nhom_cua_ban', value: (S.conf && S.conf.telegram) || '', style: 'flex:1;min-width:220px' });
+    api('/site-config').then((c) => { inp.value = c.telegram || ''; }).catch(() => {});
+    const save = async (val) => { try { const r = await api('/admin/site-config', { method: 'PUT', body: { telegram: val } }); S.conf = { ...(S.conf || {}), telegram: r.telegram }; inp.value = r.telegram; toast(r.telegram ? 'Đã lưu link nhóm Telegram' : 'Đã tắt nút Telegram'); } catch (e) { fail(e); } };
+    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Nhóm Telegram'),
+      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Dán link nhóm Telegram. Khi có link, nút "Vào nhóm Telegram" sẽ hiện trong mục "Xem thông tin" của mọi video. Xoá trống rồi bấm Lưu để ẩn nút.'),
+        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, inp, h('button', { class: 'btn primary', type: 'button', onclick: () => save(inp.value.trim()) }, 'Lưu'), h('button', { class: 'btn', type: 'button', onclick: () => { inp.value = ''; save(''); } }, 'Ẩn nút'))));
+  })();
   // video optimisation: shrink big videos so they load fast
   const optBox = await (async () => {
     const o = await api('/admin/optimize').catch(() => null); if (!o) return null;
@@ -2172,7 +2185,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, statBox, videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, tgBox, statBox, videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 
@@ -2233,6 +2246,7 @@ window.XG = { h, toast, icon };
   }
   { const m = location.pathname.match(/^\/v\/(\d+)\/?$/); if (m) history.replaceState(null, '', '/#/feed/' + m[1]); } // opened from a shared link
   try { S.user = (await api('/me')).user; } catch {}
+  api('/site-config').then((c) => { S.conf = c || {}; }).catch(() => { S.conf = {}; });
   connectEvents();
   window.addEventListener('hashchange', () => { route(); ping(true); });
   route();

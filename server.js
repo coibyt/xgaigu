@@ -1192,6 +1192,21 @@ app.delete('/api/admin/music/:id(\\d+)', needAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- site settings shown to everybody (Telegram group link) ----------
+const getConf = (k) => { const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(k); return r ? r.value : ''; };
+app.get('/api/site-config', (_req, res) => res.set('Cache-Control', 'no-cache').json({ telegram: getConf('telegram_url') }));
+app.put('/api/admin/site-config', needAdmin, (req, res) => {
+  let tg = clean(req.body.telegram, 300);
+  if (tg && !/^https?:\/\//i.test(tg)) tg = 'https://' + tg;
+  if (tg) {
+    let host = ''; try { host = new URL(tg).hostname.toLowerCase(); } catch {}
+    if (!/^(www\.)?(t\.me|telegram\.me|telegram\.dog)$/.test(host)) return fail(res, 400, 'Link nhóm Telegram phải có dạng https://t.me/...');
+    tg = tg.replace(/^http:/i, 'https:');
+  }
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('telegram_url', tg);
+  res.json({ ok: true, telegram: tg });
+});
+
 app.get('/api/admin/videos', needAdmin, (req, res) => {
   const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
   const st = { visible: 'v.hidden = 0 AND v.locked = 0', hidden: "v.hidden = 1 AND v.locked = 0 AND v.hidden_by <> 'owner'", banned: 'v.locked = 1' }[req.query.status] || '1 = 1';

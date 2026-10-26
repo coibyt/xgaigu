@@ -605,3 +605,7 @@ main:focus,main:focus-visible{outline:none}
 .int-full{display:block;white-space:pre-line;word-break:break-word}
 .int-short[hidden],.int-full[hidden]{display:none}
 .int-more{display:block;margin-top:2px}
+
+/* Telegram group button in the info sheet */
+.btn.tgbtn{display:flex;justify-content:center;width:100%;margin:14px 0 4px;background:linear-gradient(135deg,#2aabee,#229ed9);border-color:transparent;color:#fff;font-weight:800;box-shadow:0 8px 22px rgba(34,158,217,.45)}
+.btn.tgbtn:hover{filter:brightness(1.08)}
