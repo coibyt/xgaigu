@@ -168,6 +168,13 @@ CREATE TABLE IF NOT EXISTS music_tracks (
   file TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS tg_clicks (
+  url TEXT NOT NULL,
+  did TEXT NOT NULL,
+  day TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tg_clicks ON tg_clicks(url, day);
 CREATE TABLE IF NOT EXISTS reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reporter_id INTEGER NOT NULL,

@@ -1220,6 +1220,22 @@ const telegramLinks = () => {
   return list.filter(Boolean).slice(0, 5);
 };
 app.get('/api/site-config', (_req, res) => { const t = telegramLinks(); res.set('Cache-Control', 'no-cache').json({ telegrams: t, telegram: t[0] || '' }); });
+// a visitor tapped "Vào nhóm Telegram": count it for that link (only links currently configured)
+const tgLimiter = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: true, legacyHeaders: false });
+app.post('/api/tg-click', tgLimiter, (req, res) => {
+  const url = String(req.body.url || '');
+  if (!telegramLinks().includes(url)) return res.json({ ok: true });
+  const did = String(req.body.did || '').replace(/[^\w-]/g, '').slice(0, 40) || 'anon';
+  db.prepare('INSERT INTO tg_clicks (url, did, day, created_at) VALUES (?,?,?,?)').run(url, did, vnDay(), now());
+  res.json({ ok: true });
+});
+app.get('/api/admin/tg-stats', needAdmin, (_req, res) => {
+  const today = vnDay(), week = vnDay(now() - 6 * 86400_000);
+  const q = (url, from) => db.prepare('SELECT COUNT(*) AS clicks, COUNT(DISTINCT did) AS people FROM tg_clicks WHERE url = ? AND day >= ?').get(url, from);
+  const current = telegramLinks();
+  const older = db.prepare('SELECT DISTINCT url FROM tg_clicks').all().map((r) => r.url).filter((u) => !current.includes(u));
+  res.json({ today, links: [...current.map((u) => ({ url: u, active: true })), ...older.map((u) => ({ url: u, active: false }))].map((l) => ({ ...l, today: q(l.url, today), week: q(l.url, week), total: q(l.url, '0000') })) });
+});
 app.put('/api/admin/site-config', needAdmin, (req, res) => {
   const raw = Array.isArray(req.body.telegrams) ? req.body.telegrams : [req.body.telegram];
   const out = [];

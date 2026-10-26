@@ -1336,6 +1336,12 @@ function interestBlock(raw) {
 
 const TG_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M21.4 3.6 2.9 10.8c-1.3.5-1.3 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.2-15c.3-1.3-.5-1.9-1.6-1.4zM8.7 13.4l9.6-6c.5-.3.9-.1.5.2l-8.2 7.4-.3 3.4-1.6-5z"/></svg>';
 
+// count a tap on a Telegram group link (anonymous device id, same as the visitor statistics)
+function trackTg(url) {
+  let did = ''; try { did = localStorage.getItem('xg_did') || ''; } catch {}
+  try { fetch('/api/tg-click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, did }), keepalive: true }).catch(() => {}); } catch {}
+}
+
 function openInfo(v) {
   const i = v.info || {};
   let m;
@@ -1359,7 +1365,7 @@ function openInfo(v) {
     i.boundaries && h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, h('b', {}, 'Điều không muốn: '), i.boundaries),
     !rows.length && !i.boundaries && h('p', { class: 'muted' }, 'Người đăng chưa điền thêm thông tin.'),
     (() => { const list = (S.conf && S.conf.telegrams) || []; if (!list.length) return null; const link = list[Math.floor(Math.random() * list.length)]; // a different group at random each time
-      return h('a', { class: 'btn tgbtn', href: link, target: '_blank', rel: 'noopener', html: TG_ICON + '<span>Vào nhóm Telegram</span>' }); })(),
+      return h('a', { class: 'btn tgbtn', href: link, target: '_blank', rel: 'noopener', onclick: () => trackTg(link), html: TG_ICON + '<span>Vào nhóm Telegram</span>' }); })(),
     h('div', { class: 'row', style: 'margin-top:14px' },
       S.user && S.user.role === 'admin' && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id), html: icon('flag') + 'Quản lý video (admin)' }),
       S.user && S.user.id === v.user.id && h('button', { class: 'btn sm', type: 'button', onclick: () => adminVideoDialog(v.id, null, true), html: '✎ Sửa / ẩn video của tôi' }),
@@ -2120,6 +2126,21 @@ async function pageAdmin() {
           h('button', { class: 'btn', type: 'button', onclick: () => save({ verifiedShare: 60, newBoost: 8, hotBoost: 5, regionBoost: 7 }) }, 'Về mặc định'))));
   })();
   // up to 5 Telegram group links; the info sheet shows one of them at random
+  const statsBody = h('tbody', {}), statsNote = h('p', { class: 'muted', style: 'font-size:13px' });
+  const loadTgStats = async () => {
+    try {
+      const d = await api('/admin/tg-stats');
+      const cell = (x) => h('td', { style: 'white-space:nowrap' }, h('b', {}, String(x.clicks)), h('span', { class: 'muted', style: 'font-size:12px' }, ' lượt · ' + x.people + ' người'));
+      statsBody.replaceChildren(...(d.links.length ? d.links.map((l, i) => h('tr', {},
+        h('td', { style: 'max-width:230px;word-break:break-all' }, (l.active ? 'Nhóm ' + (i + 1) + ': ' : '(link cũ) ') , h('a', { href: l.url, target: '_blank', rel: 'noopener', style: 'color:#7cc7ff' }, l.url.replace(/^https:\/\//, ''))),
+        cell(l.today), cell(l.week), cell(l.total))) : [h('tr', {}, h('td', { colspan: 4, class: 'muted' }, 'Chưa có lượt bấm nào.'))]));
+      statsNote.textContent = 'Hôm nay là ' + d.today.split('-').reverse().join('/') + ' (giờ Việt Nam). "Người" = số thiết bị khác nhau đã bấm.';
+    } catch (e) { fail(e); }
+  };
+  const statsWrap = h('div', { style: 'margin-top:8px;display:grid;gap:8px' },
+    h('div', { class: 'row', style: 'justify-content:space-between;align-items:center' }, h('b', {}, 'Lượt bấm vào từng nhóm'), h('button', { class: 'btn sm', type: 'button', onclick: loadTgStats }, 'Làm mới')),
+    h('div', { style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['Link nhóm', 'Hôm nay', '7 ngày', 'Tổng'].map((x) => h('th', {}, x)))), statsBody)), statsNote);
+  loadTgStats();
   const tgBox = (() => {
     const inputs = [1, 2, 3, 4, 5].map((n) => h('input', { type: 'url', placeholder: 'Nhóm ' + n + ': https://t.me/ten_nhom', style: 'width:100%' }));
     const fill = (list) => inputs.forEach((inp, i) => { inp.value = list[i] || ''; });
@@ -2135,7 +2156,8 @@ async function pageAdmin() {
       h('div', { class: 'card', style: 'padding:18px;display:grid;gap:10px' },
         h('p', { class: 'muted', style: 'font-size:14px' }, 'Điền tối đa 5 link nhóm Telegram. Mỗi lần khách mở "Xem thông tin", nút "Vào nhóm Telegram" sẽ dẫn tới một trong các nhóm này, chọn ngẫu nhiên, để chia đều khách giữa các nhóm. Để trống ô nào thì bỏ qua ô đó; để trống hết rồi Lưu thì nút bị ẩn.'),
         ...inputs,
-        h('div', { class: 'row', style: 'gap:8px' }, h('button', { class: 'btn primary', type: 'button', onclick: save }, 'Lưu'), h('button', { class: 'btn', type: 'button', onclick: () => { fill([]); save(); } }, 'Xoá hết'))));
+        h('div', { class: 'row', style: 'gap:8px' }, h('button', { class: 'btn primary', type: 'button', onclick: save }, 'Lưu'), h('button', { class: 'btn', type: 'button', onclick: () => { fill([]); save(); } }, 'Xoá hết')),
+        statsWrap));
   })();
   // video optimisation: shrink big videos so they load fast
   const optBox = await (async () => {
