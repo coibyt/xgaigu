@@ -546,9 +546,11 @@ app.get('/api/feed', (req, res) => {
     for (const r of rc) score.set(pk(r.p), (score.get(pk(r.p)) || 0) + r.n * 2);
   }
   const top = Math.max(0, ...score.values());
-  const pool = db.prepare(
+  // candidates: up to 2000 of each group (verified / not verified), so both are always available for the admin's mix
+  const poolSql = (ver) => db.prepare(
     `SELECT v.id, v.province, v.badge, v.created_at, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
-     WHERE v.hidden = 0 AND u.banned = 0 ORDER BY (v.verified OR u.verified) DESC, v.id DESC LIMIT 2000`).all(); // verified videos are always in the pool, then the newest
+     WHERE v.hidden = 0 AND u.banned = 0 AND (v.verified OR u.verified) = ? ORDER BY v.id DESC LIMIT 2000`).all(ver);
+  const pool = [...poolSql(1), ...poolSql(0)];
   const heatOf = new Map(db.prepare("SELECT video_id, SUM(CASE kind WHEN 'view' THEN 1 ELSE 3 END) AS h FROM video_activity WHERE at > ? GROUP BY video_id").all(Date.now() - DAY_MS).map((x) => [x.video_id, x.h]));
   const fc = feedConf();
   const ranked = pool.filter((r) => !seen.has(r.id)).map((r) => {
