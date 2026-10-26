@@ -160,6 +160,14 @@ CREATE TABLE IF NOT EXISTS saves (
   PRIMARY KEY (user_id, video_id)
 );
 CREATE INDEX IF NOT EXISTS idx_saves_video ON saves(video_id);
+CREATE TABLE IF NOT EXISTS music_tracks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  artist TEXT DEFAULT '',
+  style TEXT DEFAULT '',
+  file TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reporter_id INTEGER NOT NULL,

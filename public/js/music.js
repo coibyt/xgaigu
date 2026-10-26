@@ -218,6 +218,13 @@ function toWav(buf) {
 const tracks = buildTracks();
 // Optional extra tracks: real royalty-free files listed in /data/music.json  [{ "id", "title", "style", "meta", "url" }]
 async function loadCatalog() {
+  // drop songs loaded earlier so calling this again never duplicates them
+  for (let i = tracks.length - 1; i >= 0; i--) if (tracks[i].url) tracks.splice(i, 1);
+  try { // songs uploaded by the site's admins (with vocals), shown first
+    const d = await (await fetch('/api/music', { cache: 'no-cache' })).json();
+    const list = (d && Array.isArray(d.tracks) ? d.tracks : []).slice().reverse();
+    for (const t of list) if (t && t.url && t.title) tracks.unshift({ id: 'lib-' + t.id, style: 'lib-' + (t.style || 'Nhạc có lời'), styleName: '🎤 ' + (t.style || 'Nhạc có lời'), title: t.title, meta: t.artist || 'Bài hát', url: t.url });
+  } catch {}
   try {
     const list = await (await fetch('/data/music.json', { cache: 'no-cache' })).json();
     if (Array.isArray(list)) for (const t of list) if (t && /^\/|^https:\/\//.test(t.url || '') && t.title) tracks.unshift({ id: 'file-' + (t.id || t.title), style: t.style || 'file', styleName: t.style || 'Nhạc có sẵn', title: t.title, meta: t.meta || '', url: t.url });

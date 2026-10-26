@@ -2055,6 +2055,41 @@ async function pageAdmin() {
         h('div', { class: 'row', style: 'gap:18px;align-items:flex-end;flex-wrap:wrap' }, qrBox, h('div', { style: 'display:grid;gap:8px' }, h('span', { class: 'muted', style: 'font-size:13px' }, 'Mã QR: in ra hoặc đăng lên để khách quét bằng camera.'), h('button', { class: 'btn', type: 'button', onclick: png }, 'Tải mã QR (PNG)'))),
         h('p', { class: 'muted', style: 'font-size:13px' }, 'Lượt vào link này được đếm trong mục “Thống kê ứng dụng”.')));
   })();
+  // music library: songs uploaded by admins for the video editor
+  const musicBox = (() => {
+    const list = h('div', { style: 'display:grid;gap:8px' }), info = h('p', { class: 'muted', style: 'font-size:13px' });
+    const fileIn = h('input', { type: 'file', accept: 'audio/*,.mp3,.m4a,.aac,.wav,.ogg' });
+    const title = h('input', { placeholder: 'Tên bài hát (để trống = lấy theo tên file)', maxlength: 120 }), artist = h('input', { placeholder: 'Ca sĩ / nghệ sĩ (không bắt buộc)', maxlength: 80 });
+    const style = h('input', { placeholder: 'Thể loại, VD: Nhạc có lời, Remix, Bolero, Nhạc Hoa…', maxlength: 40, value: 'Nhạc có lời' });
+    const prog = h('div', { class: 'muted', style: 'font-size:13px' }), upBtn = h('button', { class: 'btn primary', type: 'button' }, 'Tải bài hát lên');
+    const load = async () => {
+      try {
+        const { tracks } = await api('/music');
+        info.textContent = tracks.length + ' bài hát trong thư viện';
+        list.replaceChildren(...tracks.map((t) => h('div', { class: 'card', style: 'padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
+          h('div', { style: 'flex:1;min-width:160px' }, h('b', { translate: 'no' }, t.title), h('div', { class: 'muted', style: 'font-size:13px' }, [t.artist, t.style].filter(Boolean).join(' · '))),
+          h('audio', { controls: true, preload: 'none', src: t.url, style: 'height:36px;max-width:100%' }),
+          h('button', { class: 'btn sm', type: 'button', onclick: async () => { const nt = prompt('Tên bài hát', t.title); if (nt == null) return; const na = prompt('Ca sĩ / nghệ sĩ', t.artist) ?? t.artist; const ns = prompt('Thể loại', t.style) ?? t.style; try { await api('/admin/music/' + t.id, { method: 'PUT', body: { title: nt, artist: na, style: ns } }); load(); } catch (e) { fail(e); } } }, 'Sửa'),
+          h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!confirm('Xoá bài "' + t.title + '" khỏi thư viện?')) return; try { await api('/admin/music/' + t.id, { method: 'DELETE' }); toast('Đã xoá'); load(); } catch (e) { fail(e); } } }, 'Xoá'))));
+      } catch (e) { fail(e); }
+    };
+    upBtn.addEventListener('click', async () => {
+      const f = fileIn.files[0]; if (!f) return toast('Hãy chọn file nhạc', true);
+      if (f.size > 30 * 1024 * 1024) return toast('File quá lớn (tối đa 30 MB)', true);
+      const fd = new FormData(); fd.append('file', f); fd.append('title', title.value); fd.append('artist', artist.value); fd.append('style', style.value);
+      upBtn.disabled = true;
+      try {
+        await apiUpload('/admin/music', fd, (a, b) => { prog.textContent = 'Đang tải lên… ' + Math.round(a / b * 100) + '%'; }).promise;
+        prog.textContent = ''; toast('Đã thêm bài hát vào thư viện'); fileIn.value = ''; title.value = ''; artist.value = ''; load();
+      } catch (e) { prog.textContent = ''; fail(e); }
+      upBtn.disabled = false;
+    });
+    load();
+    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thư viện nhạc có lời'),
+      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Bài hát tải lên đây hiện ngay đầu thư viện nhạc trong trình chỉnh sửa video, để thành viên chọn chèn vào video. Chỉ tải lên bài bạn có quyền sử dụng; nhạc có bản quyền có thể khiến video bị khiếu nại.'),
+        fileIn, h('div', { class: 'two' }, title, artist), style, h('div', { class: 'row', style: 'gap:10px;align-items:center' }, upBtn, prog), info, list));
+  })();
   // video optimisation: shrink big videos so they load fast
   const optBox = await (async () => {
     const o = await api('/admin/optimize').catch(() => null); if (!o) return null;
@@ -2137,7 +2172,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, statBox, videosBox, optBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, statBox, videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 

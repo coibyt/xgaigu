@@ -173,6 +173,13 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024, files: 2 },
   fileFilter: (_req, file, cb) => cb(null, !!(VIDEO_TYPES[file.mimetype] || IMAGE_TYPES[file.mimetype])),
 });
+// songs uploaded by admins for the editor's music library
+const AUDIO_TYPES = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/aac': '.aac', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/wave': '.wav', 'audio/ogg': '.ogg', 'audio/webm': '.weba' };
+const audioUpload = multer({
+  storage: multer.diskStorage({ destination: UPLOAD_DIR, filename: (_req, file, cb) => cb(null, 'music-' + crypto.randomBytes(12).toString('hex') + (AUDIO_TYPES[file.mimetype] || '.mp3')) }),
+  limits: { fileSize: 30 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => cb(null, !!AUDIO_TYPES[file.mimetype]),
+});
 const rmUpload = (name) => { if (name) fs.promises.unlink(path.join(UPLOAD_DIR, path.basename(name))).catch(() => {}); };
 
 app.use('/uploads', express.static(UPLOAD_DIR, {
@@ -1156,6 +1163,35 @@ app.post('/api/admin/users/:id(\\d+)/verified', needAdmin, (req, res) => {
   db.prepare('UPDATE users SET verified = ? WHERE id = ?').run(req.body.verified ? 1 : 0, req.params.id);
   res.json({ ok: true, verified: !!req.body.verified, videos: db.prepare('SELECT COUNT(*) AS n FROM videos WHERE user_id = ? AND hidden = 0').get(req.params.id).n });
 });
+// ---------- music library (songs uploaded by admins) ----------
+const musicRow = (r) => ({ id: r.id, title: r.title, artist: r.artist || '', style: r.style || 'Nhạc có lời', url: r.file, createdAt: r.created_at });
+app.get('/api/music', (_req, res) => {
+  res.set('Cache-Control', 'no-cache').json({ tracks: db.prepare('SELECT * FROM music_tracks ORDER BY id DESC').all().map(musicRow) });
+});
+app.post('/api/admin/music', needAdmin, audioUpload.single('file'), (req, res) => {
+  const f = req.file;
+  if (!f) return fail(res, 400, 'Hãy chọn một file nhạc (MP3, M4A, AAC, WAV, OGG), tối đa 30 MB');
+  const fileName = Buffer.from(f.originalname, 'latin1').toString('utf8'); // multer hands over UTF-8 names as latin1
+  const title = clean(req.body.title, 120) || clean(fileName.replace(/\.[^.]+$/, ''), 120);
+  if (!title) { rmUpload(f.filename); return fail(res, 400, 'Hãy nhập tên bài hát'); }
+  const r = db.prepare('INSERT INTO music_tracks (title, artist, style, file, created_at) VALUES (?,?,?,?,?)')
+    .run(title, clean(req.body.artist, 80), clean(req.body.style, 40) || 'Nhạc có lời', '/uploads/' + f.filename, now());
+  res.json({ ok: true, track: musicRow(db.prepare('SELECT * FROM music_tracks WHERE id = ?').get(r.lastInsertRowid)) });
+});
+app.put('/api/admin/music/:id(\\d+)', needAdmin, (req, res) => {
+  const t = db.prepare('SELECT * FROM music_tracks WHERE id = ?').get(req.params.id);
+  if (!t) return fail(res, 404, 'Không tìm thấy bài hát');
+  db.prepare('UPDATE music_tracks SET title = ?, artist = ?, style = ? WHERE id = ?').run(clean(req.body.title, 120) || t.title, clean(req.body.artist, 80), clean(req.body.style, 40) || 'Nhạc có lời', t.id);
+  res.json({ ok: true, track: musicRow(db.prepare('SELECT * FROM music_tracks WHERE id = ?').get(t.id)) });
+});
+app.delete('/api/admin/music/:id(\\d+)', needAdmin, (req, res) => {
+  const t = db.prepare('SELECT * FROM music_tracks WHERE id = ?').get(req.params.id);
+  if (!t) return fail(res, 404, 'Không tìm thấy bài hát');
+  db.prepare('DELETE FROM music_tracks WHERE id = ?').run(t.id);
+  rmUpload(t.file); // videos already made with this song keep their own copy of the audio
+  res.json({ ok: true });
+});
+
 app.get('/api/admin/videos', needAdmin, (req, res) => {
   const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
   const st = { visible: 'v.hidden = 0 AND v.locked = 0', hidden: "v.hidden = 1 AND v.locked = 0 AND v.hidden_by <> 'owner'", banned: 'v.locked = 1' }[req.query.status] || '1 = 1';
