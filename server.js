@@ -64,7 +64,22 @@ app.use('/api', apiLimiter);
 const now = () => Date.now();
 // Recent activity (view = 1 point, like or comment = 3 points) decides which videos are "hot". Only the last 3 days are kept.
 const DAY_MS = 86400_000, HOT_MIN = Number(process.env.HOT_MIN) || 12;
-const VERIFIED_BOOST = Number(process.env.VERIFIED_BOOST) || 10; // how much more often verified videos are suggested
+// Recommendation settings (admin page → "Đề xuất video"). verifiedShare = % of suggested videos that carry the verified badge.
+const FEED_DEFAULT = { verifiedShare: 60, newBoost: 8, hotBoost: 5, regionBoost: 7 };
+const feedConf = () => {
+  let c = {}; try { c = JSON.parse((db.prepare('SELECT value FROM settings WHERE key = ?').get('feed_conf') || {}).value || '{}'); } catch {}
+  return { ...FEED_DEFAULT, ...c };
+};
+// Builds one page: about verifiedShare % from the verified list and the rest from the others (each list already in weighted-random order),
+// topping up from the other list when one runs out, then mixes the two so they alternate naturally.
+function mixByShare(verified, others, limit, share) {
+  let nV = Math.round(limit * share / 100), nO = limit - nV;
+  if (verified.length < nV) { nO += nV - verified.length; nV = verified.length; }
+  if (others.length < nO) { nV = Math.min(verified.length, nV + (nO - others.length)); nO = others.length; }
+  const out = [...verified.slice(0, nV), ...others.slice(0, nO)];
+  for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+  return out;
+}
 const act = (videoId, kind) => { try { db.prepare('INSERT INTO video_activity (video_id, kind, at) VALUES (?,?,?)').run(videoId, kind, Date.now()); } catch {} };
 setInterval(() => { try { db.prepare('DELETE FROM video_activity WHERE at < ?').run(Date.now() - 3 * DAY_MS); } catch {} }, 3600_000).unref();
 // badge: admin choice first ("hot" / "new" / "off" = none), otherwise automatic
@@ -535,12 +550,14 @@ app.get('/api/feed', (req, res) => {
     `SELECT v.id, v.province, v.badge, v.created_at, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
      WHERE v.hidden = 0 AND u.banned = 0 ORDER BY (v.verified OR u.verified) DESC, v.id DESC LIMIT 2000`).all(); // verified videos are always in the pool, then the newest
   const heatOf = new Map(db.prepare("SELECT video_id, SUM(CASE kind WHEN 'view' THEN 1 ELSE 3 END) AS h FROM video_activity WHERE at > ? GROUP BY video_id").all(Date.now() - DAY_MS).map((x) => [x.video_id, x.h]));
-  const picked = pool.filter((r) => !seen.has(r.id)).map((r) => {
+  const fc = feedConf();
+  const ranked = pool.filter((r) => !seen.has(r.id)).map((r) => {
     const interest = top ? (score.get(pk(r.province)) || 0) / top : 0; // 0..1
     const b = badgeOf(r.badge, heatOf.get(r.id) || 0, r.created_at);
-    const w = (1 + 7 * interest) * (b === 'new' ? 8 : b === 'hot' ? 5 : 1) * (r.ver ? VERIFIED_BOOST : 1); // favourite regions up to 8x; new 8x, hot 5x; verified videos far ahead of the rest
-    return { id: r.id, key: -Math.log(1 - Math.random()) / w };
-  }).sort((a, b) => a.key - b.key).slice(0, limit).map((r) => r.id);
+    const w = (1 + fc.regionBoost * interest) * (b === 'new' ? fc.newBoost : b === 'hot' ? fc.hotBoost : 1); // boosts set by the admin
+    return { id: r.id, ver: !!r.ver, key: -Math.log(1 - Math.random()) / w };
+  }).sort((a, b) => a.key - b.key);
+  const picked = mixByShare(ranked.filter((r) => r.ver).map((r) => r.id), ranked.filter((r) => !r.ver).map((r) => r.id), limit, fc.verifiedShare);
   if (!picked.length) return res.json({ videos: [] });
   const byId = new Map(listVideos(req.user, { ids: picked, limit: picked.length }).map((v) => [v.id, v]));
   res.json({ videos: picked.map((id) => byId.get(id)).filter(Boolean) });
@@ -600,9 +617,10 @@ app.get('/api/area-videos', (req, res) => {
      WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?)`
   ).all(area.region, area.province, area.province, area.district, area.district);
   const ids = rows.map((r) => r.id);
-  // random order, but verified videos are much more likely to come first (weighted random sampling)
-  const left = rows.filter((r) => !seen.has(r.id)).map((r) => ({ id: r.id, key: -Math.log(1 - Math.random()) / (r.ver ? VERIFIED_BOOST : 1) })).sort((a, b) => a.key - b.key).map((r) => r.id);
-  const pick = left.slice(0, limit);
+  // random order with the admin's verified / unverified mix
+  const shuffled = rows.filter((r) => !seen.has(r.id)).map((r) => ({ id: r.id, ver: !!r.ver, key: Math.random() })).sort((a, b) => a.key - b.key);
+  const left = shuffled.map((r) => r.id);
+  const pick = mixByShare(shuffled.filter((r) => r.ver).map((r) => r.id), shuffled.filter((r) => !r.ver).map((r) => r.id), limit, feedConf().verifiedShare);
   const byId = new Map(pick.length ? listVideos(req.user, { ids: pick, limit: pick.length }).map((v) => [v.id, v]) : []);
   res.json({ videos: pick.map((id) => byId.get(id)).filter(Boolean), total: ids.length, remaining: Math.max(0, left.length - pick.length) });
 });
@@ -1216,6 +1234,17 @@ app.put('/api/admin/site-config', needAdmin, (req, res) => {
   res.json({ ok: true, telegrams: out });
 });
 
+app.get('/api/admin/feed-conf', needAdmin, (_req, res) => {
+  const counts = db.prepare('SELECT SUM(CASE WHEN (v.verified OR u.verified) THEN 1 ELSE 0 END) AS ver, COUNT(*) AS total FROM videos v JOIN users u ON u.id = v.user_id WHERE v.hidden = 0 AND u.banned = 0').get();
+  res.json({ conf: feedConf(), defaults: FEED_DEFAULT, verifiedVideos: counts.ver || 0, totalVideos: counts.total || 0 });
+});
+app.put('/api/admin/feed-conf', needAdmin, (req, res) => {
+  const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : d; };
+  const b = req.body || {};
+  const conf = { verifiedShare: num(b.verifiedShare, 0, 100, 60), newBoost: num(b.newBoost, 1, 20, 8), hotBoost: num(b.hotBoost, 1, 20, 5), regionBoost: num(b.regionBoost, 0, 20, 7) };
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('feed_conf', JSON.stringify(conf));
+  res.json({ ok: true, conf });
+});
 app.get('/api/admin/videos', needAdmin, (req, res) => {
   const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
   const st = { visible: 'v.hidden = 0 AND v.locked = 0', hidden: "v.hidden = 1 AND v.locked = 0 AND v.hidden_by <> 'owner'", banned: 'v.locked = 1' }[req.query.status] || '1 = 1';

@@ -2094,6 +2094,31 @@ async function pageAdmin() {
         h('p', { class: 'muted', style: 'font-size:14px' }, 'Bài hát tải lên đây hiện ngay đầu thư viện nhạc trong trình chỉnh sửa video, để thành viên chọn chèn vào video. Chỉ tải lên bài bạn có quyền sử dụng; nhạc có bản quyền có thể khiến video bị khiếu nại.'),
         fileIn, h('div', { class: 'two' }, title, artist), style, h('div', { class: 'row', style: 'gap:10px;align-items:center' }, upBtn, prog), info, list));
   })();
+  // recommendation mix: how much verified / new / hot / favourite-region videos are suggested
+  const feedBox = (() => {
+    const share = h('input', { type: 'range', min: 0, max: 100, step: 5, value: 60, style: 'flex:1' }), shareOut = h('b', { style: 'min-width:150px' });
+    const num = (v) => h('input', { type: 'number', min: 0, max: 20, value: v, style: 'width:90px' });
+    const newB = num(8), hotB = num(5), regB = num(7);
+    const stat = h('p', { class: 'muted', style: 'font-size:13px' });
+    const paint = () => { shareOut.textContent = share.value + '% đã xác minh · ' + (100 - share.value) + '% chưa xác minh'; };
+    share.addEventListener('input', paint);
+    const fill = (c) => { share.value = c.verifiedShare; newB.value = c.newBoost; hotB.value = c.hotBoost; regB.value = c.regionBoost; paint(); };
+    api('/admin/feed-conf').then((d) => { fill(d.conf); stat.textContent = 'Hiện có ' + d.verifiedVideos + ' / ' + d.totalVideos + ' video đã xác minh. Nếu một nhóm hết video, website tự lấy thêm từ nhóm còn lại.'; }).catch(() => {});
+    const save = async (body) => { try { const r = await api('/admin/feed-conf', { method: 'PUT', body }); fill(r.conf); toast('Đã lưu cách đề xuất video'); } catch (e) { fail(e); } };
+    const row = (label, el, hint) => h('label', { class: 'row', style: 'gap:10px;align-items:center;flex-wrap:wrap' }, h('span', { style: 'min-width:230px' }, label), el, hint && h('span', { class: 'muted', style: 'font-size:12px' }, hint));
+    paint();
+    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Đề xuất video'),
+      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:14px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Quyết định loại video nào khách được xem nhiều hơn ở trang chủ ("Dành cho bạn") và các trang khu vực. Thứ tự vẫn ngẫu nhiên, chỉ thay đổi tỉ lệ.'),
+        row('Tỉ lệ video đã xác minh', h('div', { class: 'row', style: 'gap:10px;flex:1;min-width:220px;align-items:center' }, share, shareOut)),
+        row('Ưu tiên video mới đăng (24 giờ)', newB, '1 = không ưu tiên, càng lớn càng hay xuất hiện'),
+        row('Ưu tiên video đang hot', hotB, '1 = không ưu tiên'),
+        row('Ưu tiên khu vực khách quan tâm', regB, '0 = không ưu tiên'),
+        stat,
+        h('div', { class: 'row', style: 'gap:8px' },
+          h('button', { class: 'btn primary', type: 'button', onclick: () => save({ verifiedShare: share.value, newBoost: newB.value, hotBoost: hotB.value, regionBoost: regB.value }) }, 'Lưu'),
+          h('button', { class: 'btn', type: 'button', onclick: () => save({ verifiedShare: 60, newBoost: 8, hotBoost: 5, regionBoost: 7 }) }, 'Về mặc định'))));
+  })();
   // up to 5 Telegram group links; the info sheet shows one of them at random
   const tgBox = (() => {
     const inputs = [1, 2, 3, 4, 5].map((n) => h('input', { type: 'url', placeholder: 'Nhóm ' + n + ': https://t.me/ten_nhom', style: 'width:100%' }));
@@ -2194,7 +2219,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, tgBox, statBox, videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, tgBox, statBox, videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 
