@@ -1219,7 +1219,15 @@ const telegramLinks = () => {
   if (!list.length && getConf('telegram_url')) list = [getConf('telegram_url')]; // the single link saved by the earlier version
   return list.filter(Boolean).slice(0, 5);
 };
-app.get('/api/site-config', (_req, res) => { const t = telegramLinks(); res.set('Cache-Control', 'no-cache').json({ telegrams: t, telegram: t[0] || '' }); });
+app.get('/api/site-config', (_req, res) => { const t = telegramLinks(); res.set('Cache-Control', 'no-cache').json({ telegrams: t, telegram: t[0] || '', partner: getConf('partner_url') }); });
+// link to another website shown as "Xem Video Hẹn Hò" in the info sheet
+app.put('/api/admin/partner', needAdmin, (req, res) => {
+  let u = clean(req.body.url, 500);
+  if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+  if (u) { try { const x = new URL(u); if (!/^https?:$/.test(x.protocol) || !x.hostname.includes('.')) throw 0; } catch { return fail(res, 400, 'Link website không hợp lệ'); } }
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('partner_url', u);
+  res.json({ ok: true, url: u });
+});
 // a visitor tapped "Vào nhóm Telegram": count it for that link (only links currently configured)
 const tgLimiter = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: true, legacyHeaders: false });
 app.post('/api/tg-click', tgLimiter, (req, res) => {

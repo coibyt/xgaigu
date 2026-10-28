@@ -609,3 +609,10 @@ main:focus,main:focus-visible{outline:none}
 /* Telegram group button in the info sheet */
 .btn.tgbtn{display:flex;justify-content:center;width:100%;margin:14px 0 4px;background:linear-gradient(135deg,#2aabee,#229ed9);border-color:transparent;color:#fff;font-weight:800;box-shadow:0 8px 22px rgba(34,158,217,.45)}
 .btn.tgbtn:hover{filter:brightness(1.08)}
+
+/* "Xem Video Hẹn Hò" button (link to another website) */
+.btn.partnerbtn{display:flex;justify-content:center;gap:10px;width:100%;margin:10px 0 4px;min-height:52px;font-size:17px;font-weight:800;color:#fff;border-color:transparent;
+  background:linear-gradient(135deg,#ff2e7e,#ff6b4a 55%,#ffb33a);box-shadow:0 10px 28px rgba(255,46,126,.5);animation:partnerglow 2.2s ease-in-out infinite}
+.btn.partnerbtn:hover{filter:brightness(1.08)}
+@keyframes partnerglow{50%{box-shadow:0 10px 36px rgba(255,107,74,.85);transform:scale(1.02)}}
+@media (prefers-reduced-motion:reduce){.btn.partnerbtn{animation:none}}
