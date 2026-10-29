@@ -221,6 +221,31 @@ setInterval(() => {
   for (const room of rooms.values()) for (const c of room.clients.values()) c.res.write(': ping\n\n');
 }, 20_000).unref();
 
+// ---------- live hearts: everybody watching a video sees the hearts others send ----------
+const heartWatchers = new Map(); // video id -> Set of open streams
+app.get('/api/videos/:id(\\d+)/live', (req, res) => {
+  const id = Number(req.params.id);
+  sse(res);
+  const set = heartWatchers.get(id) || new Set();
+  if (set.size >= 500) { send(res, 'full', {}); return res.end(); }
+  set.add(res); heartWatchers.set(id, set);
+  send(res, 'hello', { ok: true });
+  req.on('close', () => { set.delete(res); if (!set.size) heartWatchers.delete(id); });
+});
+const heartLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false });
+app.post('/api/videos/:id(\\d+)/heart', heartLimiter, (req, res) => {
+  const id = Number(req.params.id);
+  const n = Math.min(Math.max(parseInt(req.body.n, 10) || 1, 1), 50); // taps are sent in small batches
+  const v = db.prepare('SELECT v.id, v.province FROM videos v JOIN users u ON u.id = v.user_id WHERE v.id = ? AND v.hidden = 0 AND u.banned = 0').get(id);
+  if (!v) return fail(res, 404, 'Không tìm thấy video');
+  db.prepare('UPDATE videos SET hearts = hearts + ? WHERE id = ?').run(n, id);
+  act(id, 'like');
+  const total = db.prepare('SELECT (SELECT COUNT(*) FROM likes WHERE video_id = ?) + hearts AS n FROM videos WHERE id = ?').get(id, id).n;
+  const cid = String(req.body.cid || '').slice(0, 40);
+  for (const s of heartWatchers.get(id) || []) send(s, 'heart', { n, total, cid });
+  res.json({ ok: true, likes: total });
+});
+
 app.get('/api/events', needUser, (req, res) => {
   sse(res);
   const set = userStreams.get(req.user.id) || new Set();
@@ -435,7 +460,7 @@ app.get('/api/users/:id', (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id = ? AND banned = 0').get(req.params.id);
   if (!u) return fail(res, 404, 'Không tìm thấy người dùng');
   const stats = db.prepare(
-    `SELECT COUNT(*) AS videos, COALESCE(SUM(v.views), 0) AS views, COALESCE(SUM((SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id)), 0) AS likes
+    `SELECT COUNT(*) AS videos, COALESCE(SUM(v.views), 0) AS views, COALESCE(SUM((SELECT COUNT(*) FROM likes l WHERE l.video_id = v.id) + v.hearts), 0) AS likes
      FROM videos v WHERE v.user_id = ? AND v.hidden = 0`).get(u.id);
   if (!(req.user && req.user.role === 'admin')) delete stats.views;
   stats.followers = db.prepare('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?').get(u.id).n;
@@ -509,7 +534,7 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
       // the real view count is for admins only; everybody else sees no view numbers at all
       ...(viewer && viewer.role === 'admin' ? { views: r.views || 0, heat: r.heat } : {}),
-      saves: saveCount.get(r.id) || 0, saved: savedByMe.has(r.id), verified: !!(r.verified || r.u_verified), accountVerified: !!r.u_verified, selfHidden: r.hidden === 1, badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes, comments: r.comments, liked: !!r.liked,
+      saves: saveCount.get(r.id) || 0, saved: savedByMe.has(r.id), verified: !!(r.verified || r.u_verified), accountVerified: !!r.u_verified, selfHidden: r.hidden === 1, badge: badgeOf(r.badge, r.heat, r.created_at), likes: r.likes + (r.hearts || 0), comments: r.comments, liked: !!r.liked,
       // On a video only the uploader's chosen nickname is shown, not the account name.
       user: { id: r.user_id, name: r.nickname || r.u_name, avatar: r.u_avatar, city: r.u_city,
         age: currentYear() - (Number(info.birthYear) || r.u_by), canCall: !!(r.u_sp && r.u_phone) },

@@ -630,13 +630,14 @@ function observePlay(el) {
       }
       if (v instanceof HTMLIFrameElement) {
         const id = v.dataset.yt, on = e.isIntersecting && e.intersectionRatio > 0.6;
+        if (on) Hearts.watch(v.dataset.vid, v.closest('.slide'));
         if (on && !v.src) v.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=${S.sound ? 0 : 1}&enablejsapi=1&playsinline=1&rel=0&modestbranding=1`;
         else if (!on && v.src) v.removeAttribute('src');
         return;
       }
       if (!(v instanceof HTMLVideoElement)) return;
       if (e.isIntersecting && e.intersectionRatio > 0.6) {
-        v._active = true; v.preload = 'auto';
+        v._active = true; v.preload = 'auto'; Hearts.watch(v.dataset.vid, v.closest('.slide'));
         { const nx = v.closest('.slide') && v.closest('.slide').nextElementSibling; const nv = nx && nx.querySelector('video'); if (nv && nv.preload !== 'auto') nv.preload = 'auto'; } // start fetching the next video early
         v.muted = !S.sound; v._sync && v._sync(); v._upd && v._upd();
         v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
@@ -851,6 +852,61 @@ const vbadge = (small) => h('span', { class: 'vbadge' + (small ? ' sm' : ''), ti
 const vflags = (v, small) => (v.verified || v.badge ? h('span', { class: 'vflags' }, v.verified && vbadge(small), v.badge && vtag(v)) : null);
 const vtag = (v) => (v.badge ? h('span', { class: 'vtag ' + v.badge }, v.badge === 'hot' ? '🔥 Đang hot' : '🆕 Mới') : null);
 
+// ---------- hearts (every tap counts, everyone watching sees them float up) ----------
+const Hearts = (() => {
+  const cid = Math.random().toString(36).slice(2, 12); // this tab; our own hearts are already drawn locally
+  let es = null, watchingId = null, watchingSlide = null;
+  const pending = new Map(); // video id -> { n, timer, v, btn }
+  const COLORS = ['#ff2e7e', '#ff6b4a', '#ff8ab4', '#ffb33a', '#e11d48', '#ff4fa3'];
+  function fly(slideEl, count = 1) {
+    const layer = slideEl && slideEl.querySelector('.heart-layer'); if (!layer) return;
+    for (let i = 0; i < Math.min(count, 15); i++) {
+      const el = document.createElement('span');
+      el.className = 'fly-heart';
+      el.style.setProperty('--dx', (Math.random() * 90 - 45).toFixed(0) + 'px');
+      el.style.setProperty('--rot', (Math.random() * 50 - 25).toFixed(0) + 'deg');
+      el.style.setProperty('--dur', (1.6 + Math.random() * 1.1).toFixed(2) + 's');
+      el.style.animationDelay = (i * 0.09).toFixed(2) + 's';
+      el.style.color = COLORS[Math.floor(Math.random() * COLORS.length)];
+      el.innerHTML = '<svg viewBox="0 0 24 24" width="30" height="30"><path fill="currentColor" d="M12 21s-7.5-4.6-10-9.3C.4 8.5 2.3 4.5 6 4.5c2.2 0 3.6 1.2 4.4 2.4h3.2c.8-1.2 2.2-2.4 4.4-2.4 3.7 0 5.6 4 4 7.2C19.5 16.4 12 21 12 21z"/></svg>';
+      el.addEventListener('animationend', () => el.remove());
+      layer.append(el);
+    }
+  }
+  function setCount(btn, total) { const n = btn && btn.querySelector('span.n'); if (n) n.textContent = fmtCount(total); }
+  function tap(v, btn) {
+    v.likes = (v.likes || 0) + 1;
+    btn.classList.add('liked'); setCount(btn, v.likes);
+    btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
+    fly(btn.closest('.slide'), 1);
+    watch(v.id, btn.closest('.slide')); // make sure we hear the others' hearts on this video
+    if (!v._prefBumped) { v._prefBumped = true; Pref.bump(v.province, 3); }
+    const p = pending.get(v.id) || { n: 0, timer: null, v, btn };
+    p.n++; clearTimeout(p.timer);
+    p.timer = setTimeout(async () => { // send the taps in one small batch
+      pending.delete(v.id);
+      try { const r = await api('/videos/' + v.id + '/heart', { method: 'POST', body: { n: p.n, cid } }); v.likes = Math.max(v.likes, r.likes); setCount(btn, v.likes); } catch {}
+    }, 450);
+    pending.set(v.id, p);
+  }
+  function watch(id, slideEl) {
+    if (!id || String(id) === String(watchingId)) return;
+    if (es) { es.close(); es = null; }
+    watchingId = id; watchingSlide = slideEl;
+    try {
+      es = new EventSource('/api/videos/' + id + '/live');
+      es.addEventListener('heart', (ev) => {
+        const d = JSON.parse(ev.data); if (d.cid === cid) return;
+        fly(watchingSlide, d.n);
+        const btn = watchingSlide && watchingSlide.querySelector('.act.like'); if (btn && d.total) setCount(btn, d.total);
+      });
+      es.onerror = () => {}; // the browser reconnects by itself
+    } catch {}
+  }
+  window.addEventListener('hashchange', () => { if (es) { es.close(); es = null; watchingId = null; } });
+  return { tap, watch };
+})();
+
 // ---------- feed ----------
 function actBtn(cls, label, ic, count, onclick) {
   const b = h('button', { class: 'act ' + cls + (count == null ? '' : ' cnt'), onclick, 'aria-label': label }, h('span', { class: 'iconbtn', html: icon(ic) }), h('span', { class: 'n' }, count == null ? label : count));
@@ -911,9 +967,10 @@ function slide(v) {
   if (media instanceof HTMLVideoElement) {
     media._sync = () => { mute.innerHTML = media.muted ? icon('mute') + '<span>Chạm để bật tiếng</span>' : icon('vol'); mute.classList.toggle('on', !media.muted); };
     observePlay(media);
+    media.addEventListener('dblclick', (e) => { e.preventDefault(); Hearts.tap(v, like); }); // double-tap the video = heart
     media.addEventListener('click', () => { if (performance.now() - (S.unmutedAt || 0) < 500) return; media.paused ? media.play() : media.pause(); });
   } else { mute.hidden = true; if (media.dataset.yt) observePlay(media); }
-  const like = actBtn('like' + (v.liked ? ' liked' : ''), 'Thích', 'heart', v.likes, () => toggleLike(v, like));
+  const like = actBtn('like' + (v.liked ? ' liked' : ''), 'Thả tim', 'heart', v.likes, () => Hearts.tap(v, like));
   const cm = actBtn('', 'Bình luận', 'msg', v.comments, () => openComments(v, cm.querySelector('.n')));
   const saveBtn = actBtn('save' + (v.saved ? ' saved' : ''), 'Lưu', 'bookmark', v.saves || 0, async () => {
     if (!(await needLogin())) return;
@@ -932,7 +989,7 @@ function slide(v) {
     v.file && actBtn('', 'Tải xuống', 'download', null, () => downloadVideo(v)),
     actBtn('', 'Báo cáo', 'flag', null, () => openReport('video', v.id)));
   const el = h('article', { class: 'slide', 'data-id': v.id },
-    h('div', { class: 'player' }, media, attachLoader(media), mute,
+    h('div', { class: 'player' }, media, attachLoader(media), h('div', { class: 'heart-layer', 'aria-hidden': 'true' }), mute,
       h('div', { class: 'meta' }, vflags(v),
         h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
         (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
@@ -997,6 +1054,7 @@ async function pageFeed(startId, home) {
     try { const { video } = await api('/videos/' + startId); if (box.querySelector('.empty')) box.innerHTML = ''; box.prepend(slide(video)); } catch {}
   }
   if (startId) { const t = box.querySelector(`[data-id="${startId}"]`); if (t) { t.scrollIntoView(); setTimeout(() => t.scrollIntoView(), 250); } }
+  { const t = startId ? box.querySelector(`[data-id="${startId}"]`) : box.querySelector('.slide[data-id]'); if (t) Hearts.watch(t.dataset.id, t); } // live hearts of the first video right away
   box.addEventListener('scroll', () => { if (box.scrollTop + box.clientHeight * 2 > box.scrollHeight) more(); }, { passive: true });
   box.addEventListener('keydown', () => {});
 }

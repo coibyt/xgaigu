@@ -225,6 +225,7 @@ for (const [col, ddl] of [
   ['hidden_by', "hidden_by TEXT DEFAULT ''"],
   ['verified', 'verified INTEGER DEFAULT 0'],
   ['optimized', 'optimized INTEGER DEFAULT 0'],
+  ['hearts', 'hearts INTEGER DEFAULT 0'],
   ['mod_note', "mod_note TEXT DEFAULT ''"],
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 

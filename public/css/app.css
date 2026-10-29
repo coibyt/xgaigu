@@ -630,3 +630,12 @@ main:focus,main:focus-visible{outline:none}
 /* district chips: every district listed (wrapped, no sideways scrolling), compact on phones */
 .chips-wrap{flex-wrap:wrap}
 @media (max-width:760px){.chips-wrap{gap:6px}.chips-wrap .chip{padding:6px 11px;font-size:13px}.chips-wrap .chip .badge{font-size:11px;padding:1px 6px}}
+
+/* flying hearts */
+.heart-layer{position:absolute;right:6px;bottom:90px;width:110px;height:72%;pointer-events:none;z-index:4;overflow:visible}
+.fly-heart{position:absolute;bottom:0;right:22px;opacity:0;filter:drop-shadow(0 3px 6px rgba(0,0,0,.35));animation:heartfly var(--dur,2s) ease-out forwards}
+@keyframes heartfly{0%{transform:translate(0,0) scale(.4) rotate(0);opacity:0}12%{opacity:1;transform:translate(calc(var(--dx)*.2),-30px) scale(1.15) rotate(var(--rot))}
+  100%{transform:translate(var(--dx),-340px) scale(.85) rotate(calc(var(--rot)*-1));opacity:0}}
+.rail .act.like.pop .iconbtn{animation:heartpop .35s ease}
+@keyframes heartpop{40%{transform:scale(1.28)}}
+@media (prefers-reduced-motion:reduce){.fly-heart{animation-duration:.01s}}
