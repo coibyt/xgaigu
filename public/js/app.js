@@ -1423,7 +1423,7 @@ async function pageRegions(reg, prov, dist) {
   } else {
     const p = geo[reg].find((x) => x[0] === prov);
     if (!p) { wrap.append(h('div', { class: 'empty' }, h('h3', {}, 'Không tìm thấy khu vực'))); main.append(wrap); return; }
-    const chips = h('div', { class: 'ed-chips chips-scroll', style: 'margin:14px 0 18px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}` }, 'Tất cả'),
+    const chips = h('div', { class: 'ed-chips chips-wrap', style: 'margin:14px 0 18px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}` }, 'Tất cả'),
       [...p[1]].sort((a, b) => sum((x) => x.province === prov && x.district === b) - sum((x) => x.province === prov && x.district === a)).map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, d, n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
     const grid = h('div', { class: 'tgrid area-grid' });
     const count = h('span', { class: 'muted', style: 'font-size:14px;margin-left:8px;font-weight:500' });

@@ -626,3 +626,7 @@ main:focus,main:focus-visible{outline:none}
 .pg.nav{font-size:20px;line-height:1}
 .pg-dots{align-self:center;color:var(--muted);padding:0 2px}
 .pg-info{font-size:13px}
+
+/* district chips: every district listed (wrapped, no sideways scrolling), compact on phones */
+.chips-wrap{flex-wrap:wrap}
+@media (max-width:760px){.chips-wrap{gap:6px}.chips-wrap .chip{padding:6px 11px;font-size:13px}.chips-wrap .chip .badge{font-size:11px;padding:1px 6px}}
