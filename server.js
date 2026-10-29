@@ -609,22 +609,52 @@ app.get('/api/suggest', (req, res) => {
 });
 
 // Videos of one area in random order. The browser sends the ids it already shows, so scrolling never repeats a video.
+// Videos per page on area pages and profiles (admin setting, default 15)
+const pageSize = () => { const r = db.prepare('SELECT value FROM settings WHERE key = ?').get('page_size'); const n = r ? Number(r.value) : 15; return n >= 3 && n <= 60 ? n : 15; };
+const seededRandom = (seed) => { let a = (Number(seed) >>> 0) || 1; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+
+// Videos of one area, one numbered page at a time. The order is random per visit (the browser sends a seed) but stays the same while
+// the visitor moves between pages, and every page follows the admin's verified / not-verified mix.
 app.get('/api/area-videos', (req, res) => {
   const area = readArea(req.query);
   if (!area.region) return fail(res, 400, 'Khu vực không hợp lệ');
-  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 36, 1), 60);
-  const seen = new Set(String(req.query.seen || '').split(',').map(Number).filter(Boolean).slice(0, 2000));
+  const size = pageSize(), rnd = seededRandom(req.query.seed || Date.now());
   const rows = db.prepare(
     `SELECT v.id, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
-     WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?)`
+     WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) ORDER BY v.id`
   ).all(area.region, area.province, area.province, area.district, area.district);
-  const ids = rows.map((r) => r.id);
-  // random order with the admin's verified / unverified mix
-  const shuffled = rows.filter((r) => !seen.has(r.id)).map((r) => ({ id: r.id, ver: !!r.ver, key: Math.random() })).sort((a, b) => a.key - b.key);
-  const left = shuffled.map((r) => r.id);
-  const pick = mixByShare(shuffled.filter((r) => r.ver).map((r) => r.id), shuffled.filter((r) => !r.ver).map((r) => r.id), limit, feedConf().verifiedShare);
+  const shuffle = (list) => { for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; } return list; };
+  const ver = shuffle(rows.filter((r) => r.ver).map((r) => r.id)), oth = shuffle(rows.filter((r) => !r.ver).map((r) => r.id));
+  const share = feedConf().verifiedShare, order = [];
+  while (ver.length || oth.length) { // build page after page with the admin's mix
+    let nV = Math.round(size * share / 100), nO = size - nV;
+    if (ver.length < nV) { nO += nV - ver.length; nV = ver.length; }
+    if (oth.length < nO) { nV = Math.min(ver.length, nV + nO - oth.length); nO = oth.length; }
+    order.push(...shuffle([...ver.splice(0, nV), ...oth.splice(0, nO)]));
+  }
+  const pages = Math.max(1, Math.ceil(order.length / size)), page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+  const pick = order.slice((page - 1) * size, page * size);
   const byId = new Map(pick.length ? listVideos(req.user, { ids: pick, limit: pick.length }).map((v) => [v.id, v]) : []);
-  res.json({ videos: pick.map((id) => byId.get(id)).filter(Boolean), total: ids.length, remaining: Math.max(0, left.length - pick.length) });
+  res.json({ videos: pick.map((id) => byId.get(id)).filter(Boolean), total: order.length, page, pages, pageSize: size });
+});
+
+// A member's videos, newest first, one numbered page at a time (the owner also sees the videos they hid)
+app.get('/api/users/:id(\\d+)/videos-page', (req, res) => {
+  const uid = Number(req.params.id);
+  if (!db.prepare('SELECT 1 FROM users WHERE id = ? AND banned = 0').get(uid)) return fail(res, 404, 'Không tìm thấy người dùng');
+  const own = req.user && req.user.id === uid ? uid : 0, size = pageSize();
+  const where = "v.user_id = ? AND (v.hidden = 0 OR (v.hidden_by = 'owner' AND v.locked = 0 AND v.user_id = ?))";
+  const total = db.prepare('SELECT COUNT(*) AS n FROM videos v WHERE ' + where).get(uid, own).n;
+  const pages = Math.max(1, Math.ceil(total / size)), page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+  const ids = db.prepare('SELECT v.id FROM videos v WHERE ' + where + ' ORDER BY v.id DESC LIMIT ? OFFSET ?').all(uid, own, size, (page - 1) * size).map((r) => r.id);
+  const byId = new Map(ids.length ? listVideos(req.user, { ids, limit: ids.length }).map((v) => [v.id, v]) : []);
+  res.json({ videos: ids.map((id) => byId.get(id)).filter(Boolean), total, page, pages, pageSize: size });
+});
+app.put('/api/admin/page-size', needAdmin, (req, res) => {
+  const n = Math.round(Number(req.body.pageSize));
+  if (!(n >= 3 && n <= 60)) return fail(res, 400, 'Số video mỗi trang phải từ 3 đến 60');
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('page_size', String(n));
+  res.json({ ok: true, pageSize: n });
 });
 
 // How many videos each region / province / district has (powers the "Khu vực" browser).
@@ -1219,7 +1249,7 @@ const telegramLinks = () => {
   if (!list.length && getConf('telegram_url')) list = [getConf('telegram_url')]; // the single link saved by the earlier version
   return list.filter(Boolean).slice(0, 5);
 };
-app.get('/api/site-config', (_req, res) => { const t = telegramLinks(); res.set('Cache-Control', 'no-cache').json({ telegrams: t, telegram: t[0] || '', partner: getConf('partner_url') }); });
+app.get('/api/site-config', (_req, res) => { const t = telegramLinks(); res.set('Cache-Control', 'no-cache').json({ telegrams: t, telegram: t[0] || '', partner: getConf('partner_url'), pageSize: pageSize() }); });
 // link to another website shown as "Xem Video Hẹn Hò" in the info sheet
 app.put('/api/admin/partner', needAdmin, (req, res) => {
   let u = clean(req.body.url, 500);

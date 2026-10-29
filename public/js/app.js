@@ -1174,7 +1174,19 @@ async function pageUser(id) {
     if (v.selfHidden) c.append(h('span', { class: 'selfhid' }, 'Đang ẩn'));
     return c;
   };
-  const videosNodes = [videos.length ? h('div', { class: 'tgrid' }, videos.map(cell)) : h('div', { class: 'card empty' }, h('p', {}, 'Chưa có video.'))];
+  // the member's videos, one numbered page at a time
+  const userGrid = h('div', { class: 'tgrid' }), userPager = h('div', { class: 'pager' });
+  const goUser = async (p) => {
+    userGrid.replaceChildren(h('div', { class: 'spin', style: 'grid-column:1/-1' }));
+    try {
+      const d = await api('/users/' + user.id + '/videos-page?page=' + p);
+      if (!d.total) userGrid.replaceChildren(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('p', {}, 'Chưa có video.')));
+      else userGrid.replaceChildren(...d.videos.map(cell));
+      renderPager(userPager, d.page, d.pages, (x) => { goUser(x); userGrid.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    } catch (e) { userGrid.replaceChildren(); fail(e); }
+  };
+  const videosNodes = [userGrid, userPager];
+  goUser(1);
   const panel = h('div', {}, ...videosNodes);
   let tabsEl = h('div', { class: 'tk-tabs' }, h('span', { class: 'on', html: icon('video') + '<span>Video (' + stats.videos + ')</span>' }));
   if (me) { // only the owner sees the "Đã lưu" tab: saved videos are private
@@ -1202,27 +1214,7 @@ async function pageUser(id) {
   }
   const w = h('div', { class: 'wrap tk' }, head, tabsEl, panel);
   main.append(w, footer());
-  // members with many videos: keep loading older ones while scrolling, until all are shown
-  const grid = w.querySelector('.tgrid');
-  if (grid && videos.length >= 60) {
-    let last = videos[videos.length - 1].id, busy = false, finished = false;
-    const sentinel = h('div', { style: 'height:1px' });
-    grid.after(sentinel);
-    const io = new IntersectionObserver(async (en) => {
-      if (!en[0].isIntersecting || busy || finished) return;
-      busy = true;
-      try {
-        const r = await api('/users/' + user.id + '/videos?before=' + last);
-        r.videos.forEach((v) => grid.append(cell(v)));
-        if (r.videos.length) last = r.videos[r.videos.length - 1].id;
-        if (r.videos.length < 60) { finished = true; io.disconnect(); sentinel.remove(); }
-      } catch {}
-      busy = false;
-      if (!finished) { io.unobserve(sentinel); io.observe(sentinel); } // re-check in case the sentinel is still on screen
-    }, { rootMargin: '600px' });
-    io.observe(sentinel);
-    S.cleanups.push(() => io.disconnect());
-  }
+
 }
 
 async function pageMe() {
@@ -1375,6 +1367,20 @@ function openInfo(v) {
   m = modal(body, { sheet: true });
 }
 
+// Numbered page buttons: ‹ 1 … 4 5 [6] 7 8 … 20 ›
+function renderPager(el, page, pages, onGo) {
+  el.replaceChildren();
+  if (pages <= 1) return;
+  const btn = (label, p, cls = '') => h('button', { type: 'button', class: 'pg ' + cls, disabled: p < 1 || p > pages || p === page, 'aria-label': 'Trang ' + p, onclick: () => onGo(p) }, label);
+  let a = Math.max(1, page - 2), b = Math.min(pages, a + 4); a = Math.max(1, b - 4);
+  const items = [btn('‹', page - 1, 'nav')];
+  if (a > 1) items.push(btn('1', 1), a > 2 && h('span', { class: 'pg-dots' }, '…'));
+  for (let i = a; i <= b; i++) items.push(btn(String(i), i, i === page ? 'on' : ''));
+  if (b < pages) items.push(b < pages - 1 && h('span', { class: 'pg-dots' }, '…'), btn(String(pages), pages));
+  items.push(btn('›', page + 1, 'nav'));
+  el.append(h('div', { class: 'pg-row' }, items.filter(Boolean)), h('div', { class: 'pg-info muted' }, 'Trang ' + page + ' / ' + pages));
+}
+
 // One tile of the area / profile grids (cover image, badges, likes)
 function areaTile(v) {
   const yt = !v.file && ytId(v.url);
@@ -1421,28 +1427,22 @@ async function pageRegions(reg, prov, dist) {
       [...p[1]].sort((a, b) => sum((x) => x.province === prov && x.district === b) - sum((x) => x.province === prov && x.district === a)).map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, d, n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
     const grid = h('div', { class: 'tgrid area-grid' });
     const count = h('span', { class: 'muted', style: 'font-size:14px;margin-left:8px;font-weight:500' });
-    const more = h('button', { class: 'btn', type: 'button', hidden: true, style: 'margin:18px auto 0;display:flex' }, 'Xem thêm video');
+    const pagerEl = h('div', { class: 'pager' });
     const first = h('div', { class: 'spin' });
-    wrap.append(h('h2', { class: 'title' }, dist || prov, count), chips, first, grid, more, seoBox(info));
-    // random order, 36 at a time; scrolling loads more until everything was shown once
-    const seen = []; let busy = false, finished = false;
-    const load = async () => {
-      if (busy || finished) return; busy = true;
+    wrap.append(h('h2', { class: 'title' }, dist || prov, count), chips, first, grid, pagerEl, seoBox(info));
+    const seed = Math.floor(Math.random() * 1e9); // new random order on each visit, kept while moving between pages
+    const go = async (page) => {
+      grid.replaceChildren(h('div', { class: 'spin', style: 'grid-column:1/-1' }));
       try {
-        const d = await api('/area-videos?limit=36&region=' + reg + '&province=' + enc(prov) + (dist ? '&district=' + enc(dist) : '') + '&seen=' + seen.slice(-1500).join(','));
+        const d = await api('/area-videos?page=' + page + '&seed=' + seed + '&region=' + reg + '&province=' + enc(prov) + (dist ? '&district=' + enc(dist) : ''));
         first.remove();
-        if (!seen.length) count.textContent = d.total ? '· ' + d.total + ' video' : '';
-        if (!seen.length && !d.videos.length) grid.replaceWith(h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video ở khu vực này'), h('p', {}, 'Hãy là người đầu tiên đăng video tại đây.'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video')));
-        d.videos.forEach((v) => { seen.push(v.id); grid.append(areaTile(v)); });
-        if (!d.remaining) { finished = true; more.hidden = true; io && io.disconnect(); } else more.hidden = false;
-      } catch (e) { first.remove(); fail(e); }
-      busy = false;
+        count.textContent = d.total ? '· ' + d.total + ' video' : '';
+        if (!d.total) grid.replaceChildren(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video ở khu vực này'), h('p', {}, 'Hãy là người đầu tiên đăng video tại đây.'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video')));
+        else grid.replaceChildren(...d.videos.map(areaTile));
+        renderPager(pagerEl, d.page, d.pages, (p) => { go(p); wrap.querySelector('h2.title').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      } catch (e) { first.remove(); grid.replaceChildren(); fail(e); }
     };
-    more.addEventListener('click', load);
-    const sentinel = h('div', { style: 'height:1px' }); more.before(sentinel);
-    const io = new IntersectionObserver((en) => { if (en[0].isIntersecting) load().then(() => { if (!finished) { io.unobserve(sentinel); io.observe(sentinel); } }); }, { rootMargin: '700px' });
-    io.observe(sentinel); S.cleanups.push(() => io.disconnect());
-    load();
+    go(1);
   }
   main.append(wrap, footer());
 }
@@ -2126,6 +2126,16 @@ async function pageAdmin() {
           h('button', { class: 'btn primary', type: 'button', onclick: () => save({ verifiedShare: share.value, newBoost: newB.value, hotBoost: hotB.value, regionBoost: regB.value }) }, 'Lưu'),
           h('button', { class: 'btn', type: 'button', onclick: () => save({ verifiedShare: 60, newBoost: 8, hotBoost: 5, regionBoost: 7 }) }, 'Về mặc định'))));
   })();
+  // how many videos per page on area pages and profiles
+  const pageBox = (() => {
+    const inp = h('input', { type: 'number', min: 3, max: 60, value: 15, style: 'width:110px' });
+    api('/site-config').then((c) => { inp.value = c.pageSize || 15; }).catch(() => {});
+    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Số video mỗi trang'),
+      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Số video hiện trên mỗi trang ở các trang khu vực và trang hồ sơ thành viên. Nhiều hơn số này thì có nút chuyển sang trang tiếp theo. Ít video mỗi trang giúp trang tải nhanh hơn.'),
+        h('div', { class: 'row', style: 'gap:10px;align-items:center;flex-wrap:wrap' }, inp, h('span', { class: 'muted' }, 'video / trang (từ 3 đến 60)'),
+          h('button', { class: 'btn primary', type: 'button', onclick: async () => { try { const r = await api('/admin/page-size', { method: 'PUT', body: { pageSize: inp.value } }); inp.value = r.pageSize; toast('Đã lưu: ' + r.pageSize + ' video mỗi trang'); } catch (e) { fail(e); } } }, 'Lưu'))));
+  })();
   // link to another website ("Xem Video Hẹn Hò" button in every info sheet)
   const partnerBox = (() => {
     const inp = h('input', { type: 'url', placeholder: 'https://ten-website-khac.com', style: 'flex:1;min-width:220px' });
@@ -2252,7 +2262,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, tgBox, partnerBox, statBox, videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 

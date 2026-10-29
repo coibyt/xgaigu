@@ -616,3 +616,13 @@ main:focus,main:focus-visible{outline:none}
 .btn.partnerbtn:hover{filter:brightness(1.08)}
 @keyframes partnerglow{50%{box-shadow:0 10px 36px rgba(255,107,74,.85);transform:scale(1.02)}}
 @media (prefers-reduced-motion:reduce){.btn.partnerbtn{animation:none}}
+
+/* numbered pages */
+.pager{margin:18px 0 6px;display:grid;gap:8px;justify-items:center}
+.pg-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.pg{min-width:42px;height:42px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+.pg.on{background:var(--grad);border-color:transparent;color:#fff;opacity:1}
+.pg:disabled:not(.on){opacity:.35;cursor:default}
+.pg.nav{font-size:20px;line-height:1}
+.pg-dots{align-self:center;color:var(--muted);padding:0 2px}
+.pg-info{font-size:13px}
