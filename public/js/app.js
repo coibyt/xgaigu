@@ -953,9 +953,29 @@ async function pageFeed(startId, home) {
   main.append(h('div', { class: 'feedwrap' }, box, feedTabs('foryou')));
   let before = null, done = false, loading = false, first = true;
   const seen = []; // home feed: ids already shown, so the random order never repeats a video
+  // opened from an area page: play the rest of that area first (same order as its grid), then random videos from everywhere
+  const ctx = startId && S.feedCtx && String(S.feedCtx.startId) === String(startId) ? S.feedCtx : null;
+  let queue = null;
+  if (ctx) {
+    try {
+      const q = new URLSearchParams({ region: ctx.region, province: ctx.province, district: ctx.district, seed: ctx.seed });
+      const { ids } = await api('/area-order?' + q);
+      const pos = ids.indexOf(Number(startId));
+      queue = pos >= 0 ? [...ids.slice(pos + 1), ...ids.slice(0, pos)] : ids.filter((x) => x !== Number(startId));
+      seen.push(Number(startId));
+    } catch { queue = null; }
+  }
   const more = async () => {
     if (loading || done) return; loading = true;
     try {
+      if (queue && queue.length) { // next videos of the same area
+        const batch = queue.splice(0, 8);
+        const { videos } = await api('/videos-by-ids?ids=' + batch.join(','));
+        videos.forEach((v) => { seen.push(v.id); box.append(slide(v)); });
+        if (first) box.querySelectorAll('video').forEach((el, i) => { if (i < 2) el.preload = 'auto'; });
+        first = false; loading = false; return;
+      }
+      if (queue) home = true; // the area is finished: continue with random videos from everywhere (never repeating)
       const { videos } = home ? await api('/feed?limit=12&seen=' + seen.slice(-500).join(',') + '&pref=' + encodeURIComponent(Pref.param())) : await api('/videos' + (before ? '?before=' + before : ''));
       if (home) videos.forEach((v) => seen.push(v.id));
       if (!videos.length && first && home) { loading = false; main.innerHTML = ''; return pageHome(); }
@@ -1438,7 +1458,7 @@ async function pageRegions(reg, prov, dist) {
         first.remove();
         count.textContent = d.total ? '· ' + d.total + ' video' : '';
         if (!d.total) grid.replaceChildren(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video ở khu vực này'), h('p', {}, 'Hãy là người đầu tiên đăng video tại đây.'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video')));
-        else grid.replaceChildren(...d.videos.map(areaTile));
+        else grid.replaceChildren(...d.videos.map((v) => { const t = areaTile(v); t.addEventListener('click', () => { S.feedCtx = { region: reg, province: prov, district: dist || '', seed, startId: v.id }; }); return t; }));
         renderPager(pagerEl, d.page, d.pages, (p) => { go(p); wrap.querySelector('h2.title').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
       } catch (e) { first.remove(); grid.replaceChildren(); fail(e); }
     };

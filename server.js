@@ -615,6 +615,36 @@ const seededRandom = (seed) => { let a = (Number(seed) >>> 0) || 1; return () =>
 
 // Videos of one area, one numbered page at a time. The order is random per visit (the browser sends a seed) but stays the same while
 // the visitor moves between pages, and every page follows the admin's verified / not-verified mix.
+// Full ordered id list of an area for a given seed (the same order the grid pages show)
+function areaOrder(area, seed) {
+  const size = pageSize(), rnd = seededRandom(seed || Date.now());
+  const rows = db.prepare(
+    `SELECT v.id, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) ORDER BY v.id`
+  ).all(area.region, area.province, area.province, area.district, area.district);
+  const shuffle = (list) => { for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; } return list; };
+  const ver = shuffle(rows.filter((r) => r.ver).map((r) => r.id)), oth = shuffle(rows.filter((r) => !r.ver).map((r) => r.id));
+  const share = feedConf().verifiedShare, order = [];
+  while (ver.length || oth.length) {
+    let nV = Math.round(size * share / 100), nO = size - nV;
+    if (ver.length < nV) { nO += nV - ver.length; nV = ver.length; }
+    if (oth.length < nO) { nV = Math.min(ver.length, nV + nO - oth.length); nO = oth.length; }
+    order.push(...shuffle([...ver.splice(0, nV), ...oth.splice(0, nO)]));
+  }
+  return order;
+}
+app.get('/api/area-order', (req, res) => {
+  const area = readArea(req.query);
+  if (!area.region) return fail(res, 400, 'Khu vực không hợp lệ');
+  res.json({ ids: areaOrder(area, req.query.seed) });
+});
+// a batch of videos by id, in the order asked (used to continue an area while watching)
+app.get('/api/videos-by-ids', (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map(Number).filter((n) => n > 0).slice(0, 24);
+  const byId = new Map(ids.length ? listVideos(req.user, { ids, limit: ids.length }).map((v) => [v.id, v]) : []);
+  res.json({ videos: ids.map((id) => byId.get(id)).filter(Boolean) });
+});
+
 app.get('/api/area-videos', (req, res) => {
   const area = readArea(req.query);
   if (!area.region) return fail(res, 400, 'Khu vực không hợp lệ');
