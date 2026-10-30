@@ -218,7 +218,6 @@ function pushUser(userId, event, data) {
 }
 setInterval(() => {
   for (const set of userStreams.values()) for (const r of set) r.write(': ping\n\n');
-  for (const room of rooms.values()) for (const c of room.clients.values()) c.res.write(': ping\n\n');
 }, 20_000).unref();
 
 // ---------- live hearts: everybody watching a video sees the hearts others send ----------
@@ -994,102 +993,6 @@ app.post('/api/bookings/:id/:action', needUser, (req, res) => {
   res.json({ booking: upd });
 });
 
-// ---------- livestream ----------
-const rooms = new Map(); // streamId -> { clients: Map<clientId,{res,userId,host}>, chat: [] }
-function roomOf(id) {
-  if (!rooms.has(id)) rooms.set(id, { clients: new Map(), chat: [] });
-  return rooms.get(id);
-}
-const viewerCount = (room) => [...room.clients.values()].filter((c) => !c.host).length;
-function broadcast(room, event, data) { for (const c of room.clients.values()) send(c.res, event, data); }
-
-const mapStream = (s, u) => ({
-  id: s.id, title: s.title, kind: s.kind, source: s.kind === 'webrtc' ? '' : s.source,
-  live: !!s.live, startedAt: s.started_at,
-  viewers: rooms.has(s.id) ? viewerCount(rooms.get(s.id)) : 0,
-  host: publicUser(u),
-});
-
-app.get('/api/streams', (_req, res) => {
-  const rows = db.prepare(
-    `SELECT s.*, u.id AS uid FROM streams s JOIN users u ON u.id = s.user_id
-     WHERE s.live = 1 AND u.banned = 0 ORDER BY s.id DESC LIMIT 50`
-  ).all();
-  res.json({ streams: rows.map((s) => mapStream(s, db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id))) });
-});
-
-app.post('/api/streams', needUser, postLimiter, (req, res) => {
-  const title = clean(req.body.title, 80);
-  const kind = ['webrtc', 'hls', 'youtube'].includes(req.body.kind) ? req.body.kind : 'webrtc';
-  let source = clean(req.body.source, 500);
-  if (title.length < 3) return fail(res, 400, 'Vui lòng nhập tiêu đề buổi live');
-  if (kind !== 'webrtc') {
-    if (!/^https:\/\/\S+$/.test(source)) return fail(res, 400, 'Liên kết phải bắt đầu bằng https://');
-    if (kind === 'youtube') {
-      const m = source.match(/(?:youtu\.be\/|v=|\/live\/|\/embed\/)([\w-]{11})/);
-      if (!m) return fail(res, 400, 'Liên kết YouTube không hợp lệ');
-      source = m[1];
-    }
-  } else source = '';
-  db.prepare('UPDATE streams SET live = 0, ended_at = ? WHERE user_id = ? AND live = 1').run(now(), req.user.id);
-  const info = db.prepare('INSERT INTO streams (user_id, title, kind, source, started_at) VALUES (?,?,?,?,?)')
-    .run(req.user.id, title, kind, source, now());
-  res.json({ id: Number(info.lastInsertRowid) });
-});
-
-app.get('/api/streams/:id', (req, res) => {
-  const s = db.prepare('SELECT * FROM streams WHERE id = ?').get(req.params.id);
-  if (!s) return fail(res, 404, 'Không tìm thấy buổi live');
-  res.json({ stream: mapStream(s, db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id)) });
-});
-
-app.post('/api/streams/:id/end', needUser, (req, res) => {
-  const s = db.prepare('SELECT * FROM streams WHERE id = ?').get(req.params.id);
-  if (!s || (s.user_id !== req.user.id && req.user.role !== 'admin')) return fail(res, 403, 'Không có quyền');
-  db.prepare('UPDATE streams SET live = 0, ended_at = ? WHERE id = ?').run(now(), s.id);
-  const room = rooms.get(s.id);
-  if (room) { broadcast(room, 'ended', {}); }
-  res.json({ ok: true });
-});
-
-app.get('/api/streams/:id/events', (req, res) => {
-  const sid = Number(req.params.id);
-  const s = db.prepare('SELECT * FROM streams WHERE id = ? AND live = 1').get(sid);
-  if (!s) return fail(res, 404, 'Buổi live đã kết thúc');
-  const host = !!req.user && req.user.id === s.user_id && req.query.host === '1';
-  const room = roomOf(sid);
-  const clientId = crypto.randomBytes(6).toString('hex');
-  sse(res);
-  room.clients.set(clientId, { res, userId: req.user ? req.user.id : 0, host });
-  send(res, 'hello', { clientId, viewers: viewerCount(room), chat: room.chat, host });
-  broadcast(room, 'viewers', { viewers: viewerCount(room) });
-  if (!host) {
-    for (const [id, c] of room.clients) if (c.host) send(c.res, 'viewer-join', { clientId });
-  }
-  req.on('close', () => {
-    room.clients.delete(clientId);
-    broadcast(room, 'viewers', { viewers: viewerCount(room) });
-    if (!host) for (const c of room.clients.values()) if (c.host) send(c.res, 'viewer-leave', { clientId });
-    if (!room.clients.size) rooms.delete(sid);
-  });
-});
-
-app.post('/api/streams/:id/chat', needUser, postLimiter, (req, res) => {
-  const room = rooms.get(Number(req.params.id));
-  const body = clean(req.body.body, 200);
-  if (!room || !body) return fail(res, 400, 'Không gửi được');
-  const msg = { id: crypto.randomBytes(4).toString('hex'), user: { id: req.user.id, name: req.user.name, avatar: req.user.avatar }, body, at: now() };
-  room.chat.push(msg); if (room.chat.length > 80) room.chat.shift();
-  broadcast(room, 'chat', msg);
-  res.json({ ok: true });
-});
-
-app.post('/api/streams/:id/heart', (req, res) => {
-  const room = rooms.get(Number(req.params.id));
-  if (room) broadcast(room, 'heart', {});
-  res.json({ ok: true });
-});
-
 // ---------- 1-to-1 video calls (WebRTC; this server only relays signaling over the SSE channel) ----------
 const callLimiter = rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: true, legacyHeaders: false });
 const inviteLog = new Map(); // "from>to" -> timestamps, to stop ring spam
@@ -1118,17 +1021,6 @@ app.post('/api/calls/signal', callLimiter, needUser, (req, res) => {
   }
   if (type === 'cancel' && data && data.missed) sendMessage(req.user.id, to, '📞 Cuộc gọi video nhỡ');
   pushUser(to, 'call', { type, callId, from: { id: req.user.id, name: req.user.name, avatar: req.user.avatar }, data: data ?? null });
-  res.json({ ok: true });
-});
-
-// WebRTC signaling relay (host <-> viewers)
-app.post('/api/streams/:id/signal', (req, res) => {
-  const room = rooms.get(Number(req.params.id));
-  const { from, to, data } = req.body || {};
-  if (!room || !room.clients.has(from) || !room.clients.has(to) || !data) return fail(res, 400, 'Tín hiệu không hợp lệ');
-  const a = room.clients.get(from); const b = room.clients.get(to);
-  if (!a.host && !b.host) return fail(res, 403, 'Không hợp lệ');
-  send(b.res, 'signal', { from, data });
   res.json({ ok: true });
 });
 
@@ -1559,6 +1451,7 @@ function renderPage(req, res, v) {
   res.set('Cache-Control', 'no-cache').type('html').send(html);
 }
 
+require('./src/live').install(app, { db, fail, clean, now, needUser, postLimiter, sse, send, publicUser, rmUpload, faststart, UPLOAD_DIR, VIDEO_TYPES, IMAGE_TYPES });
 const shop = require('./src/shop').install(app, { db, fail, clean, now, needUser, needAdmin, postLimiter, rmUpload, pushUser, listVideos, UPLOAD_DIR, IMAGE_TYPES });
 const seo = require('./src/seo').install(app, { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));
@@ -1575,7 +1468,7 @@ app.use('/api', (_req, res) => fail(res, 404, 'Không tìm thấy'));
 app.get('*', (req, res) => renderPage(req, res, null));
 
 app.use((err, _req, res, _next) => {
-  if (err instanceof multer.MulterError) return fail(res, 400, err.code === 'LIMIT_FILE_SIZE' ? 'File quá lớn (tối đa 100MB)' : 'Tải file thất bại');
+  if (err instanceof multer.MulterError) return fail(res, 400, err.code === 'LIMIT_FILE_SIZE' ? 'File quá lớn (video tối đa 100MB, video phát live tối đa 1GB, ảnh tối đa 8MB)' : 'Tải file thất bại');
   console.error(err);
   fail(res, 500, 'Lỗi máy chủ');
 });

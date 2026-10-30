@@ -1079,12 +1079,6 @@ function vthumb(v) {
     h('span', { class: 'views', title: isAdmin() ? fmtCount(v.views || 0) + ' lượt xem' : '', html: icon('heart') + v.likes + (isAdmin() ? '<span class="vsep">·</span>' + icon('eye2') + fmtCount(v.views || 0) : '') }),
     v.distanceKm != null && h('span', { class: 'distance', html: icon('pin') + '≈ ' + v.distanceKm + ' km' }));
 }
-function lcard(s) {
-  return h('a', { class: 'vcard', href: '#/live/' + s.id },
-    h('div', { class: 'ph', html: s.host.avatar ? '' : icon('live') }), s.host.avatar && h('img', { class: 'cover', src: s.host.avatar, alt: '' }),
-    h('span', { class: 'livepill live-tag' }, 'LIVE'), h('span', { class: 'views', html: icon('eye') + s.viewers }),
-    h('div', { class: 'shade' }, h('div', { class: 'who' }, avatar(s.host), s.host.name), h('div', { class: 'cap' }, s.title)));
-}
 function pcard(u) {
   return h('a', { class: 'card pcard', href: '#/u/' + u.id },
     h('div', { class: 'pic' }, u.avatar ? h('img', { src: u.avatar, alt: u.name, loading: 'lazy' }) : h('span', { class: 'init' }, u.name.charAt(0).toUpperCase())),
@@ -1111,7 +1105,7 @@ async function pageHome() {
         h('div', { class: 'float f1', html: icon('heart') + 'Linh vừa thích video của bạn' }),
         h('div', { class: 'float f2', html: icon('cal') + 'Lịch hẹn cà phê · 19:30' })))));
 
-  if (lives.streams.length) w.append(h('section', { class: 'block wrap' }, h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Đang phát trực tiếp'), h('a', { class: 'btn sm', href: '#/live' }, 'Xem tất cả')), h('div', { class: 'grid g4' }, lives.streams.slice(0, 4).map(lcard))));
+  if (lives.streams.length) w.append(h('section', { class: 'block wrap' }, h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Đang phát trực tiếp'), h('a', { class: 'btn sm', href: '#/live' }, 'Xem tất cả')), h('div', { class: 'lvgrid' }, lives.streams.slice(0, 4).map((s) => window.XGLive.liveCard(s)))));
   w.append(h('section', { class: 'block wrap' }, h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Video mới nhất'), h('a', { class: 'btn sm', href: '#/feed' }, 'Lướt xem')),
     vids.videos.length ? h('div', { class: 'grid g4' }, vids.videos.slice(0, 8).map(vthumb)) : h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video'), h('p', {}, 'Hãy là người đầu tiên chia sẻ!'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video'))));
   if (ppl.people.length) w.append(h('section', { class: 'block wrap' }, h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Thành viên mới'), h('a', { class: 'btn sm', href: '#/people' }, 'Khám phá')), h('div', { class: 'grid g4' }, ppl.people.slice(0, 4).map(pcard))));
@@ -1837,107 +1831,6 @@ async function pageDates() {
   window.addEventListener('bookingupdate', load); onLeave(() => window.removeEventListener('bookingupdate', load));
 }
 
-// ---------- live ----------
-async function pageLive() {
-  const { streams } = await api('/streams');
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' },
-    h('div', { class: 'head' }, h('h2', { class: 'title' }, 'Livestream'), h('a', { class: 'btn live', href: '#/golive', html: icon('live') + 'Phát trực tiếp' })),
-    streams.length ? h('div', { class: 'grid g4' }, streams.map(lcard)) : h('div', { class: 'card empty' }, h('div', { class: 'ico', html: icon('live') }), h('h3', {}, 'Hiện chưa có buổi live nào'), h('p', {}, 'Hãy mở buổi live đầu tiên và mời mọi người vào trò chuyện!'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/golive' }, 'Bắt đầu phát'))), footer());
-}
-
-async function pageGoLive() {
-  if (!S.user) { openAuth('login'); location.hash = '#/'; return; }
-  const err = h('div', { class: 'err', hidden: true });
-  const url = h('label', { class: 'f', hidden: true }, h('span', {}, 'Liên kết phát'), h('input', { name: 'source', type: 'url', placeholder: 'https://…' }), h('small', {}, 'Dán liên kết YouTube Live hoặc luồng HLS (.m3u8) của bạn.'));
-  const kind = h('select', { name: 'kind' }, h('option', { value: 'webrtc' }, 'Phát bằng camera & micro trên trình duyệt'), h('option', { value: 'youtube' }, 'Nhúng YouTube Live'), h('option', { value: 'hls' }, 'Luồng HLS (.m3u8) từ OBS / dịch vụ stream'));
-  kind.addEventListener('change', () => { url.hidden = kind.value === 'webrtc'; });
-  const f = h('form', {}, h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Bắt đầu livestream'), h('p', { class: 'muted', style: 'margin-bottom:22px' }, 'Mọi người có thể xem và chat trực tiếp cùng bạn.'), err,
-    h('label', { class: 'f' }, h('span', {}, 'Tiêu đề'), h('input', { name: 'title', maxlength: 80, required: true, placeholder: 'VD: Trò chuyện tối thứ 6 ✨' })),
-    h('label', { class: 'f' }, h('span', {}, 'Cách phát'), kind), url,
-    h('div', { class: 'notice', style: 'margin-bottom:16px', html: icon('shield') + '<span>Livestream phải tuân thủ quy tắc cộng đồng: không nội dung khiêu dâm, không kêu gọi chuyển tiền.</span>' }),
-    h('button', { class: 'btn live lg', style: 'width:100%', type: 'submit' }, 'Phát trực tiếp ngay'));
-  f.addEventListener('submit', async (e) => {
-    e.preventDefault(); const d = Object.fromEntries(new FormData(f));
-    try { const r = await api('/streams', { method: 'POST', body: d }); location.hash = '#/live/' + r.id + (d.kind === 'webrtc' ? '?host=1' : ''); }
-    catch (ex) { err.textContent = ex.message; err.hidden = false; }
-  });
-  main.append(h('div', { class: 'wrap', style: 'max-width:620px;padding:32px 0' }, h('div', { class: 'card', style: 'padding:28px' }, f)));
-}
-
-const RTC = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
-
-async function pageStream(id, wantHost) {
-  const { stream } = await api('/streams/' + id);
-  if (!stream.live) { main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Buổi live đã kết thúc'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/live' }, 'Xem buổi live khác'))); return; }
-  const isHost = !!S.user && S.user.id === stream.host.id;
-  const stage = h('div', { class: 'stage' });
-  const vc = h('span', { class: 'vc', html: icon('eye') + '<span>0</span>' });
-  const msgs = h('div', { class: 'msgs', 'aria-live': 'polite' });
-  const hearts = h('div', { class: 'hearts', 'aria-hidden': 'true' });
-  let clientId = null; const peers = new Map(); let localStream = null;
-  const addMsg = (m) => { msgs.append(h('div', { class: 'lmsg', translate: 'no' }, avatar(m.user), h('div', {}, h('b', {}, m.user.name), m.body))); msgs.scrollTop = msgs.scrollHeight; };
-  const heart = () => { const s = h('span', { style: `--dx:${Math.round(Math.random() * 50 - 25)}px;left:${Math.round(Math.random() * 30)}px` }, '💗'); hearts.append(s); setTimeout(() => s.remove(), 2400); };
-
-  const video = h('video', { playsinline: true, autoplay: true });
-  const wait = h('div', { class: 'wait' }, h('div', {}, h('div', { class: 'spin' }), h('p', {}, isHost ? 'Đang bật camera…' : 'Đang kết nối với người phát…')));
-  if (stream.kind === 'youtube') stage.append(h('iframe', { src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(stream.source)}?autoplay=1&rel=0`, allow: 'autoplay; encrypted-media; picture-in-picture', allowfullscreen: true, title: stream.title }));
-  else if (stream.kind === 'hls') {
-    video.muted = true; stage.append(video);
-    if (window.Hls && Hls.isSupported()) { const hls = new Hls({ lowLatencyMode: true }); hls.loadSource(stream.source); hls.attachMedia(video); onLeave(() => hls.destroy()); } else video.src = stream.source;
-    video.play().catch(() => {});
-  } else stage.append(video, wait);
-  stage.append(h('div', { class: 'top' }, h('span', { class: 'livepill' }, 'LIVE'), vc),
-    h('div', { class: 'info' }, h('div', {}, h('b', { style: 'font-size:18px' }, stream.title), h('a', { href: '#/u/' + stream.host.id, class: 'who', style: 'display:flex;gap:8px;align-items:center;margin-top:6px' }, avatar(stream.host), stream.host.name)),
-      h('div', { class: 'row' },
-        !isHost && h('button', { class: 'iconbtn', 'aria-label': 'Thả tim', onclick: () => { api('/streams/' + id + '/heart', { method: 'POST' }); }, html: icon('heart') }),
-        !isHost && h('button', { class: 'btn sm', onclick: () => openBook(stream.host), html: icon('cal') + 'Hẹn gặp' }),
-        !isHost && h('button', { class: 'btn sm', onclick: () => startChat(stream.host), html: icon('send') + 'Nhắn riêng' }),
-        isHost ? h('button', { class: 'btn live sm', onclick: async () => { await api('/streams/' + id + '/end', { method: 'POST' }); toast('Đã kết thúc buổi live'); location.hash = '#/live'; } }, 'Kết thúc') : h('button', { class: 'iconbtn', 'aria-label': 'Báo cáo', onclick: () => openReport('stream', id), html: icon('flag') }))), hearts);
-
-  const input = h('input', { placeholder: S.user ? 'Nói gì đó…' : 'Đăng nhập để chat', maxlength: 200, 'aria-label': 'Chat', autocomplete: 'off' });
-  const form = h('form', { class: 'composer' }, input, h('button', { class: 'btn primary', type: 'submit', 'aria-label': 'Gửi', html: icon('send') }));
-  form.addEventListener('submit', async (e) => { e.preventDefault(); if (!S.user) return openAuth('login'); const body = input.value.trim(); if (!body) return; input.value = ''; try { await api('/streams/' + id + '/chat', { method: 'POST', body: { body } }); } catch (ex) { fail(ex); } });
-  main.append(h('div', { class: 'wrap livepage' }, stage, h('aside', { class: 'chatbox' }, h('header', {}, 'Chat trực tiếp'), msgs, form)));
-
-  const signal = (to, data) => api('/streams/' + id + '/signal', { method: 'POST', body: { from: clientId, to, data } }).catch(() => {});
-  async function hostPeer(viewerId) {
-    const pc = new RTCPeerConnection(RTC); peers.set(viewerId, pc);
-    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
-    pc.onicecandidate = (e) => e.candidate && signal(viewerId, { ice: e.candidate });
-    pc.onconnectionstatechange = () => { if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) { pc.close(); peers.delete(viewerId); } };
-    await pc.setLocalDescription(await pc.createOffer()); signal(viewerId, { sdp: pc.localDescription });
-  }
-  async function viewerSignal(from, data) {
-    let pc = peers.get(from);
-    if (!pc) {
-      pc = new RTCPeerConnection(RTC); peers.set(from, pc);
-      pc.ontrack = (e) => { video.srcObject = e.streams[0]; video.muted = true; video.play().catch(() => {}); wait.remove(); stage.append(h('button', { class: 'btn sm', style: 'position:absolute;right:16px;top:16px;z-index:3', onclick: (ev) => { video.muted = !video.muted; ev.currentTarget.textContent = video.muted ? '🔇 Bật tiếng' : '🔊 Tắt tiếng'; } }, '🔇 Bật tiếng')); };
-      pc.onicecandidate = (e) => e.candidate && signal(from, { ice: e.candidate });
-    }
-    if (data.sdp) { await pc.setRemoteDescription(data.sdp); if (data.sdp.type === 'offer') { await pc.setLocalDescription(await pc.createAnswer()); signal(from, { sdp: pc.localDescription }); } }
-    else if (data.ice) pc.addIceCandidate(data.ice).catch(() => {});
-  }
-
-  if (stream.kind === 'webrtc' && isHost) {
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
-      video.srcObject = localStream; video.muted = true; wait.remove();
-      onLeave(() => localStream.getTracks().forEach((t) => t.stop()));
-    } catch { wait.innerHTML = '<p>Không truy cập được camera/micro. Hãy cấp quyền cho trình duyệt rồi tải lại trang.</p>'; }
-  }
-
-  const es = new EventSource(`/api/streams/${id}/events${isHost && stream.kind === 'webrtc' ? '?host=1' : ''}`);
-  onLeave(() => { es.close(); peers.forEach((p) => p.close()); });
-  es.addEventListener('hello', (e) => { const d = JSON.parse(e.data); clientId = d.clientId; vc.lastChild.textContent = d.viewers; d.chat.forEach(addMsg); });
-  es.addEventListener('viewers', (e) => { vc.lastChild.textContent = JSON.parse(e.data).viewers; });
-  es.addEventListener('chat', (e) => addMsg(JSON.parse(e.data)));
-  es.addEventListener('heart', heart);
-  es.addEventListener('ended', () => { toast('Buổi live đã kết thúc'); setTimeout(() => (location.hash = '#/live'), 1500); });
-  es.addEventListener('viewer-join', (e) => { if (localStream) hostPeer(JSON.parse(e.data).clientId); });
-  es.addEventListener('viewer-leave', (e) => { const p = peers.get(JSON.parse(e.data).clientId); if (p) { p.close(); peers.delete(JSON.parse(e.data).clientId); } });
-  es.addEventListener('signal', (e) => { const { from, data } = JSON.parse(e.data); if (!isHost) viewerSignal(from, data); else { const pc = peers.get(from); if (pc) { if (data.sdp) pc.setRemoteDescription(data.sdp).catch(() => {}); else if (data.ice) pc.addIceCandidate(data.ice).catch(() => {}); } } });
-}
-
 // ---------- terms ----------
 function pageTerms() {
   main.append(h('div', { class: 'wrap' }, h('div', { class: 'prose' }, h('h2', { class: 'title' }, 'Điều khoản & Quy tắc cộng đồng'),
@@ -2375,8 +2268,8 @@ async function route() {
     if (a === 'upload') return pageUpload();
     if (a === 'messages') return pageMessages(b);
     if (a === 'dates') return pageDates();
-    if (a === 'live') return b ? pageStream(b, /host=1/.test(query || '')) : pageLive();
-    if (a === 'golive') return pageGoLive();
+    if (a === 'live') return b ? window.XGLive.pageStream(b, /host=1/.test(query || '')) : window.XGLive.pageLive();
+    if (a === 'golive') return window.XGLive.pageGoLive();
     if (a === 'terms') return pageTerms();
     if (a === 'install') return pageInstall();
     if (a === 'reset') return pageReset(query);
@@ -2394,7 +2287,7 @@ async function route() {
   main.focus({ preventScroll: true });
 }
 
-window.XG = { h, toast, icon, api, modal, fail, avatar, esc, fmtCount, timeAgo, fmtDate, needLogin, openAuth, startChat, vbadge, renderPager, areaTile, footer, main, S, onLeave };
+window.XG = { h, toast, icon, api, apiUpload, fmtMB, openBook, openReport, rtcConfig, modal, fail, avatar, esc, fmtCount, timeAgo, fmtDate, needLogin, openAuth, startChat, vbadge, renderPager, areaTile, footer, main, S, onLeave };
 
 // ---------- boot ----------
 (async function boot() {

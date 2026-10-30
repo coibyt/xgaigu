@@ -153,6 +153,15 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   created_at INTEGER NOT NULL,
   last_used_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS live_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stream_id INTEGER NOT NULL, user_id INTEGER NOT NULL, kind TEXT NOT NULL,
+  body TEXT DEFAULT '', gift TEXT DEFAULT '', qty INTEGER DEFAULT 0, value INTEGER DEFAULT 0, at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_live_events_stream ON live_events(stream_id, id);
+CREATE TABLE IF NOT EXISTS wallets (
+  user_id INTEGER PRIMARY KEY, coins INTEGER NOT NULL DEFAULT 0, day TEXT DEFAULT '', received INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS shops (
   user_id INTEGER PRIMARY KEY,
   name TEXT DEFAULT '', slogan TEXT DEFAULT '', about TEXT DEFAULT '', banner TEXT DEFAULT '', logo TEXT DEFAULT '',
@@ -238,6 +247,16 @@ for (const [col, ddl] of [
   ['verified', 'verified INTEGER DEFAULT 0'],
 ]) if (!userCols.includes(col)) db.exec('ALTER TABLE users ADD COLUMN ' + ddl);
 
+const streamCols = db.prepare('PRAGMA table_info(streams)').all().map((c) => c.name);
+for (const [col, ddl] of [
+  ['file', "file TEXT DEFAULT ''"],
+  ['thumb', "thumb TEXT DEFAULT ''"],
+  ['duration', 'duration REAL DEFAULT 0'],
+  ['loop', 'loop INTEGER DEFAULT 0'],
+  ['gifts', 'gifts INTEGER DEFAULT 0'],
+  ['pinned', "pinned TEXT DEFAULT ''"],
+]) if (!streamCols.includes(col)) db.exec('ALTER TABLE streams ADD COLUMN ' + ddl);
+
 const videoCols = db.prepare('PRAGMA table_info(videos)').all().map((c) => c.name);
 if (!videoCols.includes('thumb')) db.exec("ALTER TABLE videos ADD COLUMN thumb TEXT DEFAULT ''");
 for (const [col, ddl] of [
@@ -261,6 +280,7 @@ for (const [col, ddl] of [
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 
 // Streams left "live" by a previous process are no longer live.
-db.prepare('UPDATE streams SET live = 0, ended_at = ? WHERE live = 1').run(Date.now());
+// ("Live bằng video" keeps playing: it does not depend on the host's browser.)
+db.prepare("UPDATE streams SET live = 0, ended_at = ? WHERE live = 1 AND kind <> 'video'").run(Date.now());
 
 module.exports = db;

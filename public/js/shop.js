@@ -446,7 +446,7 @@ function productForm(p, onSaved) {
       i > 0 && h('button', { type: 'button', 'aria-label': 'Dời lên trước', onclick: () => { [imgs[i - 1], imgs[i]] = [imgs[i], imgs[i - 1]]; paint(); } }, '‹'),
       h('button', { type: 'button', 'aria-label': 'Xoá ảnh', onclick: () => { imgs.splice(i, 1); paint(); } }, '✕'),
       i < imgs.length - 1 && h('button', { type: 'button', 'aria-label': 'Dời ra sau', onclick: () => { [imgs[i + 1], imgs[i]] = [imgs[i], imgs[i + 1]]; paint(); } }, '›')))),
-    imgs.length < 9 && h('label', { class: 'imgadd', for: 'pimg' }, h('b', {}, '+'), h('span', {}, 'Thêm ảnh'), h('small', {}, imgs.length + '/9')));
+    imgs.length < 9 ? h('label', { class: 'imgadd', for: 'pimg' }, h('b', {}, '+'), h('span', {}, 'Thêm ảnh'), h('small', {}, imgs.length + '/9')) : '');
   fileIn.addEventListener('change', () => {
     for (const f of fileIn.files) {
       if (imgs.length >= 9) break;
@@ -602,7 +602,7 @@ async function adminBox() {
       return h('article', { class: 'sc-prow' + (p.locked || p.status !== 'active' ? ' dim' : '') }, h('img', { src: p.image, alt: '' }),
         h('div', { class: 'sc-pinfo' }, h('a', { href: '#/p/' + p.id }, p.title), h('div', { class: 'sc-pmeta' }, h('b', {}, vnd(p.price)), h('span', {}, p.seller.name + ' · ' + p.seller.email), h('span', {}, 'Đơn: ' + p.orders), h('span', {}, 'Đã bán: ' + p.sold), h('span', {}, p.status === 'active' ? 'Đang bán' : 'Chủ shop ẩn'))),
         h('div', { class: 'sc-pact' }, h('a', { class: 'btn sm', href: '#/shop/' + p.seller.id }, 'Gian hàng'), lock));
-    })), d.products.length ? null : h('p', { class: 'muted' }, 'Chưa có sản phẩm.'));
+    })), d.products.length ? '' : h('p', { class: 'muted' }, 'Chưa có sản phẩm.'));
     renderPager(pager, d.page, d.pages, go);
   };
   let t; q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => go(1), 350); });
