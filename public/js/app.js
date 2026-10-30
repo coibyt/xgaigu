@@ -476,6 +476,7 @@ function connectEvents() {
     window.dispatchEvent(new CustomEvent('dm', { detail: m }));
   });
   es.addEventListener('call', (ev) => { onCallEvent(JSON.parse(ev.data)).catch(() => {}); });
+  es.addEventListener('order', (ev) => { const d = JSON.parse(ev.data); toast(d.kind === 'new' ? '🛍️ Đơn hàng mới: ' + d.title : '📦 Đơn ' + d.code + ': ' + d.statusText); window.dispatchEvent(new CustomEvent('xg-order', { detail: d })); });
   es.addEventListener('booking', () => { toast('📅 Có cập nhật lịch hẹn'); window.dispatchEvent(new Event('bookingupdate')); });
   S.es = es;
 }
@@ -558,7 +559,7 @@ const Install = (() => {
 
 // ---------- nav ----------
 const NAV = [
-  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/regions', 'Khu vực', 'pin'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
+  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/shop', 'Mua sắm', 'home'], ['#/regions', 'Khu vực', 'pin'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
 ];
 function renderNav() {
   const cur = location.hash || '#/';
@@ -993,6 +994,7 @@ function slide(v) {
       h('div', { class: 'meta' }, vflags(v),
         h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
         (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
+        v.product && window.XGShop && window.XGShop.videoCard(v),
         h('button', { class: 'infobtn', type: 'button', onclick: () => openInfo(v), html: icon('info') + 'Xem thông tin' }),
         v.caption && h('p', { class: 'cap', translate: 'no' }, v.caption))),
     rail);
@@ -1002,7 +1004,7 @@ function slide(v) {
 function feedTabs(cur) {
   const t = (href, label, key, extra) => h('a', { href, class: cur === key ? 'on' : '' }, extra, label);
   return h('nav', { class: 'feedtabs', 'aria-label': 'Loại nội dung' },
-    t('#/', 'Dành cho bạn', 'foryou'), t('#/regions', 'Khu vực', 'area'), t('#/nearby', 'Quanh đây', 'near'), t('#/live', 'Trực tiếp', 'live', h('i', { class: 'dot' })));
+    t('#/', 'Dành cho bạn', 'foryou'), t('#/regions', 'Khu vực', 'area'), t('#/nearby', 'Quanh đây', 'near'), t('#/shop', 'Mua sắm', 'shop'), t('#/live', 'Trực tiếp', 'live', h('i', { class: 'dot' })));
 }
 
 async function pageFeed(startId, home) {
@@ -1233,8 +1235,9 @@ async function pageUser(id) {
       ? [followBtn,
         h('button', { class: 'btn', onclick: () => startChat(user), html: icon('send') + '<span>Nhắn tin</span>' }),
         h('button', { class: 'btn', onclick: () => openBook(user), html: icon('cal') + '<span>Hẹn gặp</span>' }),
+        stats.products > 0 && window.XGShop.profileButton(user, false),
         h('button', { class: 'btn more', 'aria-label': 'Thêm', onclick: more, html: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M7 10l5 6 5-6z"/></svg>' })]
-      : [h('a', { class: 'btn primary', href: '#/me' }, 'Sửa hồ sơ'), h('button', { class: 'btn', onclick: shareProfile, html: icon('share') + '<span>Chia sẻ hồ sơ</span>' })]),
+      : [h('a', { class: 'btn primary', href: '#/me' }, 'Sửa hồ sơ'), window.XGShop.profileButton(user, true), h('button', { class: 'btn', onclick: shareProfile, html: icon('share') + '<span>Chia sẻ hồ sơ</span>' })]),
     user.bio && h('p', { class: 'tk-bio', translate: 'no' }, user.bio),
     (user.city || user.address) && h('div', { class: 'tk-loc', html: icon('pin') + ' ' + esc(user.city || 'Việt Nam') }),
     facts.length > 0 && h('div', { class: 'facts tk-facts' }, facts.map(([k, v]) => h('span', { class: 'fact' }, h('b', {}, k), v))),
@@ -1366,6 +1369,7 @@ async function pageMe() {
         h('button', { type: 'button', class: 'btn ghost sm', onclick: () => logout(true) }, 'Đăng xuất mọi tài khoản'))),
     h('div', { class: 'card', style: 'padding:24px' }, f),
     pw,
+    window.XGShop.accountCard(),
     apiKeysCard(),
     h('div', { class: 'row', style: 'margin-top:20px' }, u.role === 'admin' && h('a', { class: 'btn', href: '#/admin' }, 'Quản trị'),
       h('button', { type: 'button', class: 'btn', onclick: openAccounts, html: icon('users') + 'Chuyển tài khoản' }),
@@ -1714,7 +1718,7 @@ async function pageUpload() {
     h('p', { class: 'muted', style: 'text-align:center;margin:-4px 0 12px' }, '— hoặc —'),
     h('label', { class: 'f' }, h('span', {}, 'Dán liên kết (YouTube, .mp4, .m3u8)'), h('input', { name: 'url', type: 'url', placeholder: 'https://' })),
     h('label', { class: 'f' }, h('span', {}, 'Mô tả'), h('textarea', { name: 'caption', maxlength: 300, placeholder: 'Giới thiệu ngắn về bạn, sở thích, mẫu người lý tưởng…' })),
-    geoBox, nickBox, detailsBox,
+    geoBox, nickBox, detailsBox, window.XGShop.productPicker(''),
     h('div', { class: 'notice', style: 'margin-bottom:16px', html: icon('shield') + '<span>Không đăng nội dung khiêu dâm, ảnh/video của người khác hay quảng cáo dịch vụ tình dục. Vi phạm sẽ bị khoá tài khoản.</span>' }),
     h('button', { class: 'btn primary lg', type: 'submit', style: 'width:100%' }, 'Đăng video'),
     upBox);
@@ -1967,6 +1971,7 @@ async function adminVideoDialog(id, onChange, own = false) {
     input('origin', 'Xuất xứ', i.origin, { maxlength: 60 }), input('address', 'Địa chỉ', i.address, { maxlength: 200 }), input('workTime', 'Thời gian rảnh', i.workTime, { maxlength: 120 }),
     h('label', { class: 'f' }, h('span', {}, 'Sở thích'), h('textarea', { name: 'interests', rows: 3, maxlength: 8000 }, Array.isArray(i.interests) ? i.interests.join(', ') : (i.interests || ''))),
     h('label', { class: 'f' }, h('span', {}, 'Điều không muốn'), h('textarea', { name: 'boundaries', rows: 2, maxlength: 300 }, i.boundaries || '')),
+    own && window.XGShop.productPicker(v.productId),
     h('button', { class: 'btn primary', type: 'submit', style: 'width:100%' }, 'Lưu chỉnh sửa'));
   const statusLine = h('p', { class: 'sub' });
   const paint = () => { statusLine.textContent = own ? STATUS[v.status] + (v.lockedByAdmin ? ' — video đã bị cấm xuất bản' : v.hiddenByAdmin ? ' — đang bị quản trị viên ẩn' : '') : '#' + v.id + ' · ' + v.owner.email + ' · ' + STATUS[v.status] + (v.note ? ' — ' + v.note : '') + ' · ' + v.views + ' lượt xem'; };
@@ -2340,7 +2345,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, await window.XGShop.adminBox(), videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 
@@ -2378,6 +2383,7 @@ async function route() {
     if (a === 'forgot-password') { const holder = h('div'); const mm = modal(holder); holder.append(forgotForm(mm)); location.hash = '#/'; return; }
     if (a === 'email-verified') return pageEmailVerified(query);
     if (a === 'admin') return pageAdmin();
+    if (['shop', 'p', 'seller', 'orders'].includes(a)) return window.XGShop.page(a, seg.slice(1), query);
     main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Không tìm thấy trang'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/' }, 'Về trang chủ')));
   };
   try { await page(); } catch (e) {
@@ -2388,7 +2394,7 @@ async function route() {
   main.focus({ preventScroll: true });
 }
 
-window.XG = { h, toast, icon };
+window.XG = { h, toast, icon, api, modal, fail, avatar, esc, fmtCount, timeAgo, fmtDate, needLogin, openAuth, startChat, vbadge, renderPager, areaTile, footer, main, S, onLeave };
 
 // ---------- boot ----------
 (async function boot() {

@@ -153,6 +153,36 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   created_at INTEGER NOT NULL,
   last_used_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS shops (
+  user_id INTEGER PRIMARY KEY,
+  name TEXT DEFAULT '', slogan TEXT DEFAULT '', about TEXT DEFAULT '', banner TEXT DEFAULT '', logo TEXT DEFAULT '',
+  phone TEXT DEFAULT '', zalo TEXT DEFAULT '', address TEXT DEFAULT '', bank TEXT DEFAULT '', policies TEXT DEFAULT '[]',
+  accent TEXT DEFAULT '', closed INTEGER DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL, price INTEGER NOT NULL DEFAULT 0, compare_price INTEGER DEFAULT 0,
+  description TEXT DEFAULT '', images TEXT DEFAULT '[]', category TEXT DEFAULT '', variants TEXT DEFAULT '[]',
+  stock INTEGER, status TEXT DEFAULT 'active', locked INTEGER DEFAULT 0, sold INTEGER DEFAULT 0, views INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL, updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id, status);
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE, product_id INTEGER NOT NULL, seller_id INTEGER NOT NULL, buyer_id INTEGER NOT NULL, video_id INTEGER,
+  title TEXT, image TEXT, variant TEXT DEFAULT '', price INTEGER NOT NULL, qty INTEGER NOT NULL, total INTEGER NOT NULL,
+  name TEXT, phone TEXT, address TEXT, note TEXT DEFAULT '', pay TEXT DEFAULT 'cod', status TEXT DEFAULT 'new', seller_note TEXT DEFAULT '',
+  created_at INTEGER NOT NULL, updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_orders_seller ON orders(seller_id, status);
+CREATE INDEX IF NOT EXISTS idx_orders_buyer ON orders(buyer_id);
+CREATE TABLE IF NOT EXISTS product_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL, order_id INTEGER UNIQUE, user_id INTEGER NOT NULL,
+  rating INTEGER NOT NULL, body TEXT DEFAULT '', variant TEXT DEFAULT '', created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reviews_product ON product_reviews(product_id);
 CREATE TABLE IF NOT EXISTS saves (
   user_id INTEGER NOT NULL,
   video_id INTEGER NOT NULL,
@@ -226,6 +256,7 @@ for (const [col, ddl] of [
   ['verified', 'verified INTEGER DEFAULT 0'],
   ['optimized', 'optimized INTEGER DEFAULT 0'],
   ['hearts', 'hearts INTEGER DEFAULT 0'],
+  ['product_id', 'product_id INTEGER'],
   ['mod_note', "mod_note TEXT DEFAULT ''"],
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 

@@ -464,6 +464,7 @@ app.get('/api/users/:id', (req, res) => {
      FROM videos v WHERE v.user_id = ? AND v.hidden = 0`).get(u.id);
   if (!(req.user && req.user.role === 'admin')) delete stats.views;
   stats.followers = db.prepare('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?').get(u.id).n;
+  stats.products = db.prepare("SELECT COUNT(*) AS n FROM products WHERE user_id = ? AND status = 'active' AND locked = 0").get(u.id).n;
   const following = !!(req.user && db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?').get(req.user.id, u.id));
   res.json({ user: publicUser(u), videos: listVideos(req.user, { userId: u.id, limit: 60 }), stats, following });
 });
@@ -526,9 +527,11 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
     for (const x of db.prepare('SELECT video_id, COUNT(*) AS n FROM saves WHERE video_id IN (' + marks + ') GROUP BY video_id').all(...vids)) saveCount.set(x.video_id, x.n);
     if (viewer) for (const x of db.prepare('SELECT video_id FROM saves WHERE user_id = ? AND video_id IN (' + marks + ')').all(viewer.id, ...vids)) savedByMe.add(x.video_id);
   }
+  const cards = shop.cardsFor(rows.map((r) => r.product_id));
   return rows.map((r) => {
     let info = {}; try { info = r.info ? JSON.parse(r.info) : {}; } catch {}
     return {
+      product: cards.get(r.product_id) || null,
       id: r.id, caption: r.caption, file: r.file, url: r.url, thumb: r.thumb || '', createdAt: r.created_at,
       region: r.region || '', province: r.province || '', district: r.district || '', info,
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
@@ -748,10 +751,13 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   const nickname = clean(req.body.nickname, 40);
   const place = readPlace(req.body);
   const hidden = ['1', 'true'].includes(String(req.body.hidden)); // posted as a draft only the owner can see
+  const productId = shop.ownProductId(req.user.id, req.body.productId);
+  if (productId === false) { dropAll(); return fail(res, 400, 'Sản phẩm gắn kèm không thuộc gian hàng của bạn'); }
   const r = db.prepare('INSERT INTO videos (user_id, caption, file, url, thumb, region, province, district, info, v_phone, nickname, lat, lng, hidden, hidden_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '',
       area.region, area.province, area.district, JSON.stringify(info), phone, nickname, place.lat, place.lng, hidden ? 1 : 0, hidden ? 'owner' : '', now());
   const newId = Number(r.lastInsertRowid);
+  if (productId) db.prepare('UPDATE videos SET product_id = ? WHERE id = ?').run(productId, newId);
   if (file) setTimeout(() => transcode.enqueue('/uploads/' + file.filename, newId), 1500); // shrink for fast loading, in the background
   res.json({ ok: true, id: newId, hidden });
 });
@@ -1230,7 +1236,7 @@ const adminVideoRow = (id) => {
   if (!r) return null;
   let info = {}; try { info = JSON.parse(r.info || '{}'); } catch {}
   return { id: r.id, caption: r.caption, nickname: r.nickname, phone: r.v_phone, file: r.file, url: r.url, thumb: r.thumb, region: r.region, province: r.province, district: r.district,
-    info, views: r.views || 0, badge: r.badge || '', verified: !!r.verified, accountVerified: !!r.u_verified, likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? (r.hidden_by === 'owner' ? 'self' : 'hidden') : 'visible', note: r.mod_note || '',
+    info, productId: r.product_id || null, views: r.views || 0, badge: r.badge || '', verified: !!r.verified, accountVerified: !!r.u_verified, likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? (r.hidden_by === 'owner' ? 'self' : 'hidden') : 'visible', note: r.mod_note || '',
     owner: { id: r.user_id, email: r.u_email, name: r.u_name } };
 };
 // "Đã xác minh": only admins can grant or remove it (members have no endpoint that touches this column).
@@ -1389,6 +1395,12 @@ app.post('/api/admin/videos/:id(\\d+)/badge', needAdmin, (req, res) => {
 const saveVideoEdit = (req, res, id) => {
   const area = readArea(req.body);
   if (!area.region || !area.province) return fail(res, 400, 'Vui lòng chọn miền và tỉnh/thành');
+  if ('productId' in req.body) {
+    const owner = db.prepare('SELECT user_id FROM videos WHERE id = ?').get(id).user_id;
+    const pid = shop.ownProductId(owner, req.body.productId);
+    if (pid === false) return fail(res, 400, 'Sản phẩm gắn kèm không thuộc gian hàng của chủ video');
+    db.prepare('UPDATE videos SET product_id = ? WHERE id = ?').run(pid, id);
+  }
   db.prepare('UPDATE videos SET caption = ?, nickname = ?, v_phone = ?, region = ?, province = ?, district = ?, info = ? WHERE id = ?')
     .run(clean(req.body.caption, 300), clean(req.body.nickname, 40), clean(req.body.phone, 20).replace(/[^\d+]/g, ''), area.region, area.province, area.district, JSON.stringify(readInfo(req.body)), id);
   res.json({ ok: true, video: adminVideoRow(id) });
@@ -1541,12 +1553,13 @@ function renderPage(req, res, v) {
   ].join('\n');
   let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
   html = html.replace(/<title>[\s\S]*?<\/title>\s*/, '').replace(/<meta name="description"[^>]*>\s*/, '').replace(/<meta property="og:[^>]*>\s*/g, '');
-  html = html.replace(/(\/(?:js\/[\w.-]+\.js|css\/app\.css))"/g, '$1?v=' + ASSET_V + '"');
+  html = html.replace(/(\/(?:js\/[\w.-]+\.js|css\/[\w.-]+\.css))"/g, '$1?v=' + ASSET_V + '"');
   if (!v && req.path === '/') html = html.replace('<main id="main" tabindex="-1"></main>', () => '<main id="main" tabindex="-1">' + seo.homeHtml(req) + '</main>'); // links for crawlers; the app replaces it
   html = html.replace('</head>', tags + '\n</head>');
   res.set('Cache-Control', 'no-cache').type('html').send(html);
 }
 
+const shop = require('./src/shop').install(app, { db, fail, clean, now, needUser, needAdmin, postLimiter, rmUpload, pushUser, listVideos, UPLOAD_DIR, IMAGE_TYPES });
 const seo = require('./src/seo').install(app, { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));
 app.get('/', (req, res) => renderPage(req, res, null));
