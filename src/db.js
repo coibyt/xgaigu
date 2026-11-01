@@ -245,6 +245,8 @@ for (const [col, ddl] of [
   ['email_verified', 'email_verified INTEGER DEFAULT 1'],
   ['marketing_optout', 'marketing_optout INTEGER DEFAULT 0'],
   ['verified', 'verified INTEGER DEFAULT 0'],
+  ['live_ban_until', 'live_ban_until INTEGER DEFAULT 0'],
+  ['live_ban_reason', "live_ban_reason TEXT DEFAULT ''"],
 ]) if (!userCols.includes(col)) db.exec('ALTER TABLE users ADD COLUMN ' + ddl);
 
 const streamCols = db.prepare('PRAGMA table_info(streams)').all().map((c) => c.name);
@@ -255,6 +257,8 @@ for (const [col, ddl] of [
   ['loop', 'loop INTEGER DEFAULT 0'],
   ['gifts', 'gifts INTEGER DEFAULT 0'],
   ['pinned', "pinned TEXT DEFAULT ''"],
+  ['ended_by', "ended_by TEXT DEFAULT ''"],
+  ['end_reason', "end_reason TEXT DEFAULT ''"],
 ]) if (!streamCols.includes(col)) db.exec('ALTER TABLE streams ADD COLUMN ' + ddl);
 
 const videoCols = db.prepare('PRAGMA table_info(videos)').all().map((c) => c.name);

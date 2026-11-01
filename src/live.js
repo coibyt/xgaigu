@@ -19,8 +19,9 @@ const GIFTS = [
 ];
 const REACTS = ['❤️', '😍', '🔥', '👏', '😂', '😮', '🌹', '🎉', '💋', '🥰'];
 const DAILY = 300, WALLET_CAP = 3000;
+const FOREVER = 253402300799000; // live ban without an end date
 
-function install(app, { db, fail, clean, now, needUser, postLimiter, sse, send, publicUser, rmUpload, faststart, UPLOAD_DIR, VIDEO_TYPES, IMAGE_TYPES }) {
+function install(app, { db, fail, clean, now, needUser, needAdmin, postLimiter, sse, send, publicUser, rmUpload, faststart, UPLOAD_DIR, VIDEO_TYPES, IMAGE_TYPES }) {
   const liveUpload = multer({
     storage: multer.diskStorage({ destination: UPLOAD_DIR, filename: (_req, file, cb) => cb(null, 'live-' + crypto.randomBytes(14).toString('hex') + (VIDEO_TYPES[file.mimetype] || IMAGE_TYPES[file.mimetype] || '')) }),
     limits: { fileSize: 1024 * 1024 * 1024, files: 2 },
@@ -51,17 +52,26 @@ function install(app, { db, fail, clean, now, needUser, postLimiter, sse, send, 
     const rows = db.prepare("SELECT id, file FROM streams WHERE live = 1 AND kind = 'video' AND loop = 0 AND duration > 0 AND started_at + duration * 1000 + 5000 < ?").all(now());
     for (const s of rows) endStream(s);
   }
-  function endStream(s) {
-    db.prepare('UPDATE streams SET live = 0, ended_at = ? WHERE id = ?').run(now(), s.id);
+  // by = 'admin' when a moderator switched it off: everyone is disconnected, so the camera relay stops too
+  function endStream(s, by = '', reason = '') {
+    db.prepare('UPDATE streams SET live = 0, ended_at = ?, ended_by = ?, end_reason = ? WHERE id = ?').run(now(), by, reason, s.id);
     const room = rooms.get(s.id);
-    if (room) broadcast(room, 'ended', {});
+    if (!room) return;
+    broadcast(room, 'ended', { byAdmin: by === 'admin', reason });
+    if (by === 'admin') { for (const c of room.clients.values()) c.res.end(); rooms.delete(s.id); }
   }
+  const liveBan = (uid) => {
+    const u = db.prepare('SELECT live_ban_until, live_ban_reason FROM users WHERE id = ?').get(uid);
+    return u && u.live_ban_until > now() ? { until: u.live_ban_until, forever: u.live_ban_until >= FOREVER, reason: u.live_ban_reason || '' } : null;
+  };
+  const vnTime = (t) => { const d = new Date(t + 7 * 3600_000).toISOString(); return d.slice(11, 16) + ' ngày ' + d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4); };
+  const banText = (b) => 'Bạn đã bị quản trị viên khoá quyền phát live ' + (b.forever ? 'vĩnh viễn' : 'đến ' + vnTime(b.until)) + (b.reason ? '. Lý do: ' + b.reason : '') + '.';
   const fans = (sid) => db.prepare(`SELECT u.id, u.name, u.avatar, SUM(e.value) AS value FROM live_events e JOIN users u ON u.id = e.user_id
     WHERE e.stream_id = ? AND e.kind = 'gift' GROUP BY e.user_id ORDER BY value DESC LIMIT 5`).all(sid);
   const mapStream = (s, u) => ({
     id: s.id, title: s.title, kind: s.kind, source: ['webrtc', 'video'].includes(s.kind) ? '' : s.source,
     file: s.kind === 'video' ? s.file : '', thumb: s.thumb || '', duration: s.duration || 0, loop: !!s.loop,
-    live: !!s.live, startedAt: s.started_at, gifts: s.gifts || 0, pinned: s.pinned ? JSON.parse(s.pinned) : null,
+    live: !!s.live, startedAt: s.started_at, endedByAdmin: s.ended_by === 'admin', endReason: s.ended_by === 'admin' ? s.end_reason || '' : '', gifts: s.gifts || 0, pinned: s.pinned ? JSON.parse(s.pinned) : null,
     viewers: rooms.has(s.id) ? viewerCount(rooms.get(s.id)) : 0,
     host: publicUser(u),
   });
@@ -74,15 +84,18 @@ function install(app, { db, fail, clean, now, needUser, postLimiter, sse, send, 
     list.sort((a, b) => b.viewers - a.viewers || b.id - a.id);
     res.json({ streams: list });
   });
+  app.get('/api/live/me', needUser, (req, res) => { const b = liveBan(req.user.id); res.json({ ban: b && { ...b, text: banText(b) } }); });
   app.get('/api/live/gifts', (req, res) => res.json({ gifts: GIFTS, reacts: REACTS, daily: DAILY, wallet: req.user ? wallet(req.user.id) : null }));
 
   app.post('/api/streams', needUser, postLimiter, liveUpload.fields([{ name: 'file', maxCount: 1 }, { name: 'thumb', maxCount: 1 }]), (req, res) => {
     const b = req.body || {};
+    const ban = liveBan(req.user.id);
     const file = req.files && req.files.file && req.files.file[0], thumbF = req.files && req.files.thumb && req.files.thumb[0];
     const drop = () => { if (file) rmUpload(file.filename); if (thumbF) rmUpload(thumbF.filename); };
     const title = clean(b.title, 80);
     const kind = ['webrtc', 'hls', 'youtube', 'video'].includes(b.kind) ? b.kind : 'webrtc';
     let source = clean(b.source, 500), vfile = '', thumb = '', duration = 0;
+    if (ban) { drop(); return fail(res, 403, banText(ban)); }
     if (title.length < 3) { drop(); return fail(res, 400, 'Vui lòng nhập tiêu đề buổi live'); }
     if (kind === 'video') {
       duration = Number(b.duration);
@@ -121,7 +134,7 @@ function install(app, { db, fail, clean, now, needUser, postLimiter, sse, send, 
   app.post('/api/streams/:id(\\d+)/end', needUser, (req, res) => {
     const s = db.prepare('SELECT * FROM streams WHERE id = ?').get(req.params.id);
     if (!s || (s.user_id !== req.user.id && req.user.role !== 'admin')) return fail(res, 403, 'Không có quyền');
-    endStream(s);
+    if (s.live) endStream(s, s.user_id === req.user.id ? '' : 'admin');
     res.json({ ok: true });
   });
 
@@ -221,6 +234,34 @@ function install(app, { db, fail, clean, now, needUser, postLimiter, sse, send, 
     const a = room.clients.get(from); const b = room.clients.get(to);
     if (!a.host && !b.host) return fail(res, 403, 'Không hợp lệ');
     send(b.res, 'signal', { from, data });
+    res.json({ ok: true });
+  });
+
+  // ---------- admin ----------
+  app.get('/api/admin/live', needAdmin, (_req, res) => {
+    expire();
+    const live = db.prepare('SELECT s.*, u.email AS u_email FROM streams s JOIN users u ON u.id = s.user_id WHERE s.live = 1 ORDER BY s.started_at DESC').all()
+      .map((s) => ({ ...mapStream(s, db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id)), email: s.u_email }));
+    const banned = db.prepare('SELECT id, name, avatar, email, live_ban_until, live_ban_reason FROM users WHERE live_ban_until > ? ORDER BY live_ban_until').all(now())
+      .map((u) => ({ id: u.id, name: u.name, avatar: u.avatar, email: u.email, until: u.live_ban_until, forever: u.live_ban_until >= FOREVER, reason: u.live_ban_reason || '' }));
+    res.json({ live, banned });
+  });
+  // switch a live off; days = 0 (just stop), 1 / 7 / 30, or -1 (never again)
+  app.post('/api/admin/live/:id(\\d+)/stop', needAdmin, (req, res) => {
+    const s = db.prepare('SELECT * FROM streams WHERE id = ?').get(Number(req.params.id));
+    if (!s) return fail(res, 404, 'Không tìm thấy buổi live');
+    const reason = clean(req.body.reason, 200), days = Number(req.body.days) || 0;
+    if (s.live) endStream(s, 'admin', reason);
+    if (days) setBan(s.user_id, days, reason);
+    res.json({ ok: true });
+  });
+  function setBan(uid, days, reason) {
+    const until = days < 0 ? FOREVER : days > 0 ? now() + Math.min(days, 3650) * 86400_000 : 0;
+    db.prepare('UPDATE users SET live_ban_until = ?, live_ban_reason = ? WHERE id = ?').run(until, until ? reason : '', uid);
+    if (until) for (const x of db.prepare('SELECT * FROM streams WHERE user_id = ? AND live = 1').all(uid)) endStream(x, 'admin', reason);
+  }
+  app.post('/api/admin/users/:id(\\d+)/live-ban', needAdmin, (req, res) => {
+    setBan(Number(req.params.id), Number(req.body.days) || 0, clean(req.body.reason, 200));
     res.json({ ok: true });
   });
 

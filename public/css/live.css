@@ -209,3 +209,10 @@ svg.coin{width:15px;height:15px;vertical-align:-2px;flex:none}
 /* the floating install button stays out of the way inside a live room and on a product page with its buy bar */
 body:has(.lv-room) .install-fab{display:none!important}
 @media (max-width:860px){body:has(.pdp-bar) .install-fab{bottom:calc(var(--tab-h) + 76px)}}
+
+/* admin: the "live switched off" notice */
+.lv-stopped{text-align:center;padding:8px 4px}
+.lv-stopped-ico{font-size:44px;margin-bottom:8px}
+.lv-stopped h3{margin-bottom:8px}
+.lv-stopped p{margin-bottom:10px}
+.lva-stop select,.lva-stop input{width:100%}

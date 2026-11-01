@@ -2003,7 +2003,7 @@ async function pageAdmin() {
       h('td', {}, String(x.views)),
       h('td', {}, h('b', { style: 'color:' + BADGE[x.status][1] }, BADGE[x.status][0])),
       h('td', {}, h('button', { class: 'btn sm', onclick: () => adminVideoDialog(x.id, () => loadVideos().catch(fail)) }, 'Quản lý')))));
-    vPager.replaceChildren(vpage > 0 && h('button', { class: 'btn sm', onclick: () => { vpage--; loadVideos(); } }, '← Trước'), (vpage + 1) * d.size < d.total && h('button', { class: 'btn sm', onclick: () => { vpage++; loadVideos(); } }, 'Sau →'));
+    vPager.replaceChildren(vpage > 0 ? h('button', { class: 'btn sm', onclick: () => { vpage--; loadVideos(); } }, '← Trước') : '', (vpage + 1) * d.size < d.total ? h('button', { class: 'btn sm', onclick: () => { vpage++; loadVideos(); } }, 'Sau →') : '');
   };
   const vReload = () => { vpage = 0; loadVideos().catch(fail); };
   vq.addEventListener('input', () => { clearTimeout(vqt); vqt = setTimeout(vReload, 300); }); vst.addEventListener('change', vReload);
@@ -2238,7 +2238,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, await window.XGShop.adminBox(), videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, await window.XGLive.adminBox(), await window.XGShop.adminBox(), videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 
