@@ -302,6 +302,8 @@ for (const [col, ddl] of [
   ['hearts', 'hearts INTEGER DEFAULT 0'],
   ['product_id', 'product_id INTEGER'],
   ['thumb_try', 'thumb_try INTEGER DEFAULT 0'],
+  ['opt_level', 'opt_level INTEGER DEFAULT 0'],
+  ['opt_claim', 'opt_claim INTEGER DEFAULT 0'],
   ['mod_note', "mod_note TEXT DEFAULT ''"],
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 

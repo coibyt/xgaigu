@@ -2164,11 +2164,39 @@ async function pageAdmin() {
   const optBox = await (async () => {
     const o = await api('/admin/optimize').catch(() => null); if (!o) return null;
     const info = h('p', { class: 'muted', style: 'font-size:14px;line-height:1.7' }), limit = h('input', { type: 'number', min: 1, max: 1000, value: 50, style: 'width:100px' });
-    const startB = h('button', { class: 'btn primary', type: 'button' }, 'Nén video cũ'), stopB = h('button', { class: 'btn', type: 'button', hidden: true }, 'Dừng');
+    const startB = h('button', { class: 'btn primary', type: 'button' }, 'Nén video cũ ngay'), stopB = h('button', { class: 'btn', type: 'button', hidden: true }, 'Dừng');
+    // compression settings
+    const cs = o.settings || {};
+    const num = (v, min, max) => h('input', { type: 'number', min, max, value: v, style: 'width:84px' });
+    const chk = (v) => h('input', { type: 'checkbox', checked: !!v, style: 'width:18px;height:18px;min-height:0;padding:0' });
+    const enabled = chk(cs.enabled), autoNew = chk(cs.autoNew), autoOld = chk(cs.autoOld);
+    const t1 = num(cs.tier1Mb, 3, 2000), p1 = num(cs.tier1Pct, 10, 90), t2 = num(cs.tier2Mb, 5, 5000), p2 = num(cs.tier2Pct, 10, 90);
+    const side = h('select', { style: 'width:auto' }, [[480, '480p (nhẹ nhất)'], [540, '540p'], [720, '720p (khuyên dùng)'], [1080, '1080p (nét nhất, nặng)']].map(([v, l]) => h('option', { value: v, selected: Number(cs.maxSide) === v }, l)));
+    const quality = h('select', { style: 'width:auto' }, [['light', 'Nhẹ máy nhất'], ['balanced', 'Cân bằng (khuyên dùng)'], ['sharp', 'Nét hơn']].map(([v, l]) => h('option', { value: v, selected: cs.quality === v }, l)));
+    const saveS = h('button', { class: 'btn primary', type: 'button' }, 'Lưu cài đặt nén');
+    const line = (...kids) => h('label', { class: 'row', style: 'gap:8px;flex-wrap:wrap;align-items:center;font-size:15px' }, ...kids);
+    saveS.addEventListener('click', async () => {
+      try {
+        const r = await api('/admin/optimize/settings', { method: 'PUT', body: { enabled: enabled.checked, autoNew: autoNew.checked, autoOld: autoOld.checked, tier1Mb: t1.value, tier1Pct: p1.value, tier2Mb: t2.value, tier2Pct: p2.value, maxSide: side.value, quality: quality.value } });
+        Object.assign(cs, r.settings); t1.value = cs.tier1Mb; p1.value = cs.tier1Pct; t2.value = cs.tier2Mb; p2.value = cs.tier2Pct;
+        toast('Đã lưu cài đặt nén video'); paint(await api('/admin/optimize'));
+      } catch (e) { fail(e); }
+    });
+    const settingsCard = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px;margin-bottom:12px' },
+      h('h3', { style: 'font-size:17px' }, 'Cài đặt nén'),
+      line(enabled, 'Bật nén video'),
+      line('Video nặng trên', t1, 'MB → nén còn', p1, '% dung lượng'),
+      line('Video nặng trên', t2, 'MB → nén còn', p2, '% dung lượng'),
+      line('Độ phân giải tối đa', side),
+      line('Chất lượng', quality),
+      h('p', { class: 'muted', style: 'font-size:13px;margin-top:-4px' }, 'Video nhỏ hơn mức đầu chỉ được nén khi nặng hơn mức điện thoại cần. Mức “Chất lượng” đặt giới hạn thấp nhất, nên video luôn xem rõ trên điện thoại (khi đó dung lượng có thể cao hơn % đã đặt một chút).'),
+      line(autoNew, 'Tự nén video mới đăng'),
+      line(autoOld, 'Tự nén dần các video đã đăng (chạy nền, mỗi lần một video, không làm chậm website)'),
+      h('div', {}, saveS));
     let timer;
     const paint = (s) => {
       info.textContent = s.available
-        ? 'Còn ' + s.pending + ' video lớn hơn 2 MB chưa nén (khoảng ' + s.pendingMB + ' MB). Đã nén: ' + s.optimized + ' video. Phiên này: nén xong ' + s.done + ', tiết kiệm ' + s.savedMB + ' MB' + (s.skipped ? ', bỏ qua ' + s.skipped + ' video đã đủ nhẹ' : '') + (s.failed ? ', lỗi ' + s.failed : '') + (s.running ? ' · đang chạy, còn ' + s.queued + ' video trong hàng đợi…' : '.')
+        ? 'Còn ' + s.pending + ' video cần xem xét để nén (khoảng ' + s.pendingMB + ' MB).' + (s.settings && s.settings.autoOld ? ' Đang bật tự nén dần.' : '') + ' Đã nén: ' + s.optimized + ' video. Phiên này: nén xong ' + s.done + ', tiết kiệm ' + s.savedMB + ' MB' + (s.skipped ? ', bỏ qua ' + s.skipped + ' video đã đủ nhẹ' : '') + (s.failed ? ', lỗi ' + s.failed : '') + (s.running ? ' · đang chạy, còn ' + s.queued + ' video trong hàng đợi…' : '.')
         : 'Máy chủ này không có ffmpeg nên không nén được video.';
       startB.disabled = !s.available || s.running; stopB.hidden = !s.running;
       if (s.running && !timer) timer = setInterval(async () => { try { paint(await api('/admin/optimize')); } catch {} }, 5000);
@@ -2178,8 +2206,8 @@ async function pageAdmin() {
     startB.addEventListener('click', async () => { try { const r = await api('/admin/optimize/start', { method: 'POST', body: { limit: limit.value } }); toast('Đã xếp hàng ' + r.queued + ' video'); paint(await api('/admin/optimize')); } catch (e) { fail(e); } });
     stopB.addEventListener('click', async () => { try { await api('/admin/optimize/stop', { method: 'POST' }); toast('Sẽ dừng sau video hiện tại'); } catch (e) { fail(e); } });
     return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Tối ưu video'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Chỉ video lớn hơn 2 MB mới được xem xét; video dưới 2 MB giữ nguyên. Video đã nhẹ (từ 720p trở xuống và dưới khoảng 1,6 Mbit/s, mức tương đương các trang video ngắn khác) cũng giữ nguyên để không mất chất lượng. Video nặng hơn được nén về tối đa 720p, khoảng 1–1,8 Mbit/s, từng video một ở nền. File gốc chỉ bị thay khi bản nén nhỏ hơn rõ rệt.'),
+      settingsCard, h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
+        h('p', { class: 'muted', style: 'font-size:14px' }, 'Nén từng video một ở nền. File gốc chỉ bị thay khi bản nén nhỏ hơn rõ rệt và chạy tốt. Video dưới 2 MB giữ nguyên.'),
         info, h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'muted', style: 'font-size:14px' }, 'Nén tối đa'), limit, h('span', { class: 'muted', style: 'font-size:14px' }, 'video mỗi lần'), startB, stopB)));
   })();
   // email: confirmation switch, test mail, campaigns

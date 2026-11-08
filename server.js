@@ -169,7 +169,7 @@ function startSession(req, res, userId) {
 // ---------- uploads ----------
 const faststart = require('./src/faststart').create({ ffmpeg: FFMPEG, uploadDir: UPLOAD_DIR });
 const thumbs = require('./src/thumbs').create({ ffmpeg: FFMPEG, db, uploadDir: UPLOAD_DIR });
-const transcode = require('./src/transcode').create({ ffmpeg: FFMPEG, uploadDir: UPLOAD_DIR, db, afterNotSmaller: (stored) => faststart.enqueue(stored) });
+const transcode = require('./src/transcode').create({ ffmpeg: FFMPEG, uploadDir: UPLOAD_DIR, db, afterNotSmaller: (stored) => faststart.enqueue(stored), settings: () => getConf('video_compress') });
 // old files: after start-up, one at a time, fix MP4/MOV files whose index is at the end (slow start)
 setTimeout(() => {
   try {
@@ -761,7 +761,7 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   const newId = Number(r.lastInsertRowid);
   if (productId) db.prepare('UPDATE videos SET product_id = ? WHERE id = ?').run(productId, newId);
   if (file && !thumb) thumbs.ensureThumb(newId).catch(() => {}); // a cover picked from the video itself
-  if (file) setTimeout(() => transcode.enqueue('/uploads/' + file.filename, newId), 1500); // shrink for fast loading, in the background
+  if (file) setTimeout(() => transcode.enqueueNew('/uploads/' + file.filename, newId), 1500); // shrink for fast loading, in the background
   if (!hidden) telegram.announce(newId);
   res.json({ ok: true, id: newId, hidden });
 });
@@ -1145,15 +1145,10 @@ app.post('/api/admin/videos/:id(\\d+)/verified', needAdmin, (req, res) => {
 });
 // ---------- video optimisation (admin) ----------
 const MB = 1048576;
-function optimizable(limit = 3000) {
-  const rows = db.prepare("SELECT id, file FROM videos WHERE file != '' AND optimized = 0 ORDER BY id DESC LIMIT ?").all(limit);
-  const out = [];
-  for (const r of rows) { try { const size = fs.statSync(path.join(UPLOAD_DIR, path.basename(r.file))).size; if (size > 2 * MB) out.push({ id: r.id, file: r.file, size }); } catch {} }
-  return out;
-}
+const optimizable = (limit) => transcode.candidates(limit);
 app.get('/api/admin/optimize', needAdmin, (_req, res) => {
   const list = FFMPEG ? optimizable() : [];
-  res.json({ available: !!FFMPEG, pending: list.length, pendingMB: Math.round(list.reduce((n, x) => n + x.size, 0) / MB),
+  res.json({ available: !!FFMPEG, settings: transcode.conf(), pending: list.length, pendingMB: Math.round(list.reduce((n, x) => n + x.size, 0) / MB),
     optimized: db.prepare('SELECT COUNT(*) AS n FROM videos WHERE optimized = 1').get().n, queued: transcode.pending(),
     running: transcode.stats.running, done: transcode.stats.done, failed: transcode.stats.failed, skipped: transcode.stats.skipped, savedMB: Math.round(transcode.stats.savedBytes / MB) });
 });
@@ -1163,6 +1158,11 @@ app.post('/api/admin/optimize/start', needAdmin, (req, res) => {
   const list = optimizable().slice(0, limit);
   list.forEach((x) => transcode.enqueue(x.file, x.id));
   res.json({ ok: true, queued: list.length });
+});
+app.put('/api/admin/optimize/settings', needAdmin, (req, res) => {
+  const s = require('./src/transcode').readSettings(JSON.stringify(req.body || {}));
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('video_compress', JSON.stringify(s));
+  res.json({ ok: true, settings: s });
 });
 app.post('/api/admin/optimize/stop', needAdmin, (_req, res) => { transcode.stop(); res.json({ ok: true }); });
 
