@@ -1364,6 +1364,7 @@ async function pageMe() {
     h('div', { class: 'card', style: 'padding:24px' }, f),
     pw,
     window.XGShop.accountCard(),
+    window.XGTele.accountCard(),
     apiKeysCard(),
     h('div', { class: 'row', style: 'margin-top:20px' }, u.role === 'admin' && h('a', { class: 'btn', href: '#/admin' }, 'Quản trị'),
       h('button', { type: 'button', class: 'btn', onclick: openAccounts, html: icon('users') + 'Chuyển tài khoản' }),
@@ -1979,13 +1980,16 @@ async function pageAdmin() {
       h('td', {}, String(u.videos)), h('td', {}, String(u.followers)), h('td', {}, String(u.likes)), h('td', {}, new Date(u.created_at).toLocaleDateString('vi-VN')),
       h('td', { style: 'text-align:center' }, h('input', { type: 'checkbox', checked: !!u.verified, title: 'Xác minh tài khoản: mọi video của thành viên này sẽ có huy hiệu Đã xác minh',
         onchange: async (e) => { const on = e.target.checked; try { const r = await api('/admin/users/' + u.id + '/verified', { method: 'POST', body: { verified: on } }); toast(on ? 'Đã xác minh tài khoản, ' + r.videos + ' video có huy hiệu' : 'Đã gỡ xác minh tài khoản'); } catch (er) { e.target.checked = !on; fail(er); } } })),
+      h('td', { style: 'text-align:center;white-space:nowrap' }, u.role === 'admin' ? h('span', { class: 'muted', title: 'Quản trị viên luôn được dùng' }, '✓') : h('input', { type: 'checkbox', checked: !!u.telegram_allowed, title: 'Cho phép tài khoản này tự động gửi video lên nhóm Telegram',
+        onchange: async (e) => { const on = e.target.checked; try { await api('/admin/users/' + u.id + '/telegram', { method: 'POST', body: { allowed: on } }); toast(on ? 'Đã cho phép ' + u.name + ' gửi lên Telegram' : 'Đã tắt gửi Telegram của ' + u.name); } catch (er) { e.target.checked = !on; fail(er); } } }),
+        u.tg_groups ? h('small', { class: 'muted', style: 'margin-left:6px' }, u.tg_groups + ' nhóm') : ''),
       h('td', {}, u.banned ? h('span', { class: 'muted' }, 'Đã khoá') : u.role === 'admin' ? '' : h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá tài khoản ' + u.email + '?')) { await api('/admin/users/' + u.id + '/ban', { method: 'POST' }); loadMembers(); } } }, 'Khoá')))));
-    pager.replaceChildren(page > 0 && h('button', { class: 'btn sm', onclick: () => { page--; loadMembers(); } }, '← Trước'), (page + 1) * d.size < d.total && h('button', { class: 'btn sm', onclick: () => { page++; loadMembers(); } }, 'Sau →'));
+    pager.replaceChildren(page > 0 ? h('button', { class: 'btn sm', onclick: () => { page--; loadMembers(); } }, '← Trước') : '', (page + 1) * d.size < d.total ? h('button', { class: 'btn sm', onclick: () => { page++; loadMembers(); } }, 'Sau →') : '');
   };
   qIn.addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(() => { page = 0; loadMembers().catch(fail); }, 300); });
   await loadMembers().catch(fail);
   const membersBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thành viên đã đăng ký'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, qIn, sortSel), memInfo,
-    h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Email', 'Tên', 'Video', 'Theo dõi', 'Lượt thích', 'Ngày đăng ký', 'Đã xác minh', ''].map((x) => h('th', {}, x)))), memBody)), pager);
+    h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Email', 'Tên', 'Video', 'Theo dõi', 'Lượt thích', 'Ngày đăng ký', 'Đã xác minh', 'Gửi Telegram', ''].map((x) => h('th', {}, x)))), memBody)), pager);
   // video moderation list
   const vBody = h('tbody', {}), vInfo = h('div', { class: 'muted', style: 'margin:10px 0;font-size:14px' }), vPager = h('div', { class: 'row', style: 'gap:8px;margin-top:12px' });
   const vq = h('input', { type: 'search', placeholder: 'Tìm theo nội dung, biệt danh, email chủ video hoặc số ID…', style: 'flex:1;min-width:200px' });
@@ -2238,7 +2242,7 @@ async function pageAdmin() {
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
     h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, await window.XGLive.adminBox(), await window.XGShop.adminBox(), videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
+  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, window.XGTele.adminBox(), await window.XGLive.adminBox(), await window.XGShop.adminBox(), videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }
 

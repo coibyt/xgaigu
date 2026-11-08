@@ -143,6 +143,8 @@ function auth(req, _res, next) {
   next();
 }
 app.use(auth);
+let telegram = null; // installed further down
+app.use((_req, _res, next) => { if (telegram) telegram.tick(); next(); });
 const needUser = (req, res, next) => (req.user ? next() : fail(res, 401, 'Vui lòng đăng nhập'));
 const needAdmin = (req, res, next) => (req.user && req.user.role === 'admin' && !req.viaToken ? next() : fail(res, 403, 'Không có quyền'));
 const needSession = (req, res, next) => (req.user && !req.viaToken ? next() : fail(res, 401, 'Vui lòng đăng nhập'));
@@ -758,6 +760,7 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   const newId = Number(r.lastInsertRowid);
   if (productId) db.prepare('UPDATE videos SET product_id = ? WHERE id = ?').run(productId, newId);
   if (file) setTimeout(() => transcode.enqueue('/uploads/' + file.filename, newId), 1500); // shrink for fast loading, in the background
+  if (!hidden) telegram.announce(newId);
   res.json({ ok: true, id: newId, hidden });
 });
 
@@ -1090,7 +1093,8 @@ app.get('/api/admin/users', needAdmin, (req, res) => {
   const where = "(lower(u.email) LIKE ? OR lower(u.name) LIKE ?)";
   const total = db.prepare('SELECT COUNT(*) AS n FROM users u WHERE ' + where).get(q, q).n;
   const users = db.prepare(
-    `SELECT u.id, u.email, u.name, u.role, u.banned, u.verified, u.created_at,
+    `SELECT u.id, u.email, u.name, u.role, u.banned, u.verified, u.telegram_allowed, u.created_at,
+       (SELECT COUNT(*) FROM tg_targets t WHERE t.user_id = u.id AND t.active = 1) AS tg_groups,
        (SELECT COUNT(*) FROM videos v WHERE v.user_id = u.id AND v.hidden = 0) AS videos,
        (SELECT COUNT(*) FROM likes l JOIN videos v ON v.id = l.video_id WHERE v.user_id = u.id) AS likes,
        (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers
@@ -1275,6 +1279,7 @@ app.post('/api/admin/videos/:id(\\d+)/status', needAdmin, (req, res) => {
   if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(req.params.id)) return fail(res, 404, 'Không tìm thấy video');
   db.prepare("UPDATE videos SET hidden = ?, locked = ?, hidden_by = ?, mod_note = ? WHERE id = ?")
     .run(status === 'visible' ? 0 : 1, status === 'banned' ? 1 : 0, status === 'visible' ? '' : 'admin', status === 'visible' ? '' : clean(req.body.note, 300), req.params.id);
+  if (status === 'visible') telegram.announce(Number(req.params.id));
   res.json({ ok: true, video: adminVideoRow(req.params.id) });
 });
 app.post('/api/admin/videos/:id(\\d+)/badge', needAdmin, (req, res) => {
@@ -1323,6 +1328,7 @@ app.post('/api/videos/:id(\\d+)/visibility', needUser, postLimiter, (req, res) =
   if (v.locked || (v.hidden && v.hidden_by !== 'owner')) return fail(res, 403, 'Video đang bị quản trị viên ẩn hoặc cấm, bạn không thể đổi.');
   const hide = !!req.body.hidden;
   db.prepare("UPDATE videos SET hidden = ?, hidden_by = ? WHERE id = ?").run(hide ? 1 : 0, hide ? 'owner' : '', v.id);
+  if (!hide) telegram.announce(v.id);
   res.json({ ok: true, hidden: hide });
 });
 app.post('/api/admin/videos/:id/hide', needAdmin, (req, res) => {
@@ -1452,6 +1458,7 @@ function renderPage(req, res, v) {
 }
 
 require('./src/live').install(app, { db, fail, clean, now, needUser, needAdmin, postLimiter, sse, send, publicUser, rmUpload, faststart, UPLOAD_DIR, VIDEO_TYPES, IMAGE_TYPES });
+telegram = require('./src/telegram').install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR });
 const shop = require('./src/shop').install(app, { db, fail, clean, now, needUser, needAdmin, postLimiter, rmUpload, pushUser, listVideos, UPLOAD_DIR, IMAGE_TYPES });
 const seo = require('./src/seo').install(app, { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));

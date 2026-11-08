@@ -5,7 +5,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { DATA_DIR } = require('./paths');
 
 const db = new DatabaseSync(path.join(DATA_DIR, 'xgaigu.db'));
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -153,6 +153,26 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   created_at INTEGER NOT NULL,
   last_used_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS tg_targets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chat_id TEXT NOT NULL, title TEXT DEFAULT '', type TEXT DEFAULT 'group', username TEXT DEFAULT '',
+  active INTEGER DEFAULT 1, last_error TEXT DEFAULT '', last_post_at INTEGER DEFAULT 0, created_at INTEGER NOT NULL,
+  UNIQUE (user_id, chat_id)
+);
+CREATE TABLE IF NOT EXISTS tg_codes (code TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS tg_prefs (
+  user_id INTEGER PRIMARY KEY, daily_limit INTEGER DEFAULT 10, mode TEXT DEFAULT 'instant', times TEXT DEFAULT '08:00,20:00',
+  per_slot INTEGER DEFAULT 1, distribute TEXT DEFAULT 'same', last_slot TEXT DEFAULT '', split_cursor INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS tg_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL, video_id INTEGER NOT NULL, target_id INTEGER NOT NULL,
+  status TEXT DEFAULT 'pending', error TEXT DEFAULT '', sent_day TEXT DEFAULT '', sent_at INTEGER DEFAULT 0, created_at INTEGER NOT NULL,
+  UNIQUE (video_id, target_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tg_queue_user ON tg_queue(user_id, status);
+CREATE TABLE IF NOT EXISTS tg_daily (target_id INTEGER NOT NULL, day TEXT NOT NULL, sent INTEGER DEFAULT 0, PRIMARY KEY (target_id, day));
 CREATE TABLE IF NOT EXISTS live_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   stream_id INTEGER NOT NULL, user_id INTEGER NOT NULL, kind TEXT NOT NULL,
@@ -246,6 +266,7 @@ for (const [col, ddl] of [
   ['marketing_optout', 'marketing_optout INTEGER DEFAULT 0'],
   ['verified', 'verified INTEGER DEFAULT 0'],
   ['live_ban_until', 'live_ban_until INTEGER DEFAULT 0'],
+  ['telegram_allowed', 'telegram_allowed INTEGER DEFAULT 0'],
   ['live_ban_reason', "live_ban_reason TEXT DEFAULT ''"],
 ]) if (!userCols.includes(col)) db.exec('ALTER TABLE users ADD COLUMN ' + ddl);
 
