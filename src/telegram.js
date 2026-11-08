@@ -325,15 +325,37 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
   }
   const releaseSlot = (targetId, day) => db.prepare('UPDATE tg_daily SET sent = sent - 1 WHERE target_id = ? AND day = ? AND sent > 0').run(targetId, day);
 
+  const cut = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : s; };
+  // a short summary of the post: the description, then the key details shown on the video page
+  function summary(v, owner, descLen) {
+    let info = {}; try { info = JSON.parse(v.info || '{}') || {}; } catch {}
+    const where = [v.district, v.province].filter(Boolean).join(', ');
+    const facts = [
+      [info.birthYear && '🎂 ' + (new Date().getFullYear() - info.birthYear) + ' tuổi', info.height && '📏 ' + info.height + ' cm', info.weight && '⚖️ ' + info.weight + ' kg'].filter(Boolean).join(' · '),
+      [info.origin && '🏡 Quê: ' + cut(info.origin, 40), info.occupation && '💼 ' + cut(info.occupation, 40)].filter(Boolean).join(' · '),
+      info.workTime && '🕒 ' + cut(info.workTime, 80),
+      info.interests && '💗 Sở thích: ' + cut(info.interests, 100),
+    ].filter(Boolean);
+    return [
+      `🎬 <b>${esc(v.nickname || owner.name)}</b>` + (where ? ` · 📍 ${esc(where)}` : ''),
+      v.caption && descLen ? '\n📝 ' + esc(cut(v.caption, descLen)) : '',
+      facts.length ? '\n' + facts.map(esc).join('\n') : '',
+    ].join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  const localFile = (p) => { if (!p || !p.startsWith('/uploads/')) return ''; const f = path.join(UPLOAD_DIR, path.basename(p)); return fs.existsSync(f) ? f : ''; };
   async function postVideo(target, v, owner) {
     const url = base() + '/v/' + v.id;
-    const where = [v.district, v.province].filter(Boolean).join(', ');
-    const caption = (v.caption ? `🎬 <b>${esc(v.caption.slice(0, 600))}</b>\n` : '🎬 <b>Video mới</b>\n') + `👤 ${esc(v.nickname || owner.name)}` + (where ? `\n📍 ${esc(where)}` : '') + `\n\n▶️ Xem ngay: ${esc(url)}`;
+    const tail = `\n\n👉 <b>Nhấp vào link để xem video:</b>\n${esc(url)}`;
+    // Telegram allows 1024 characters under a photo: shorten the description until it fits
+    let caption = '';
+    for (const n of [400, 250, 150, 80, 0]) { caption = summary(v, owner, n) + tail; if (caption.length <= 1000) break; }
+    if (caption.length > 1000) caption = `🎬 <b>${esc(v.nickname || owner.name)}</b>` + tail;
     const params = { chat_id: target.chat_id, parse_mode: 'HTML' };
-    if (url.startsWith('https://')) params.reply_markup = { inline_keyboard: [[{ text: '▶ Xem video trên xgaigu', url }]] };
-    const thumb = v.thumb && v.thumb.startsWith('/uploads/') ? path.join(UPLOAD_DIR, path.basename(v.thumb)) : '';
-    if (thumb && fs.existsSync(thumb)) await call('sendPhoto', { ...params, caption }, undefined, { field: 'photo', path: thumb });
-    else await call('sendMessage', { ...params, text: caption });
+    if (url.startsWith('https://')) params.reply_markup = { inline_keyboard: [[{ text: '▶ Xem video ngay', url }]] };
+    // the video's cover picture, else the member's profile picture, else Telegram's own preview of the link
+    const photo = localFile(v.thumb) || localFile(owner.avatar);
+    if (photo) await call('sendPhoto', { ...params, caption }, undefined, { field: 'photo', path: photo });
+    else await call('sendMessage', { ...params, text: caption, link_preview_options: { url, prefer_large_media: true, show_above_text: true } });
   }
   // the status update is a claim: when several processes run the queue, only one sends a row
   async function sendRow(row, owner, day) {
