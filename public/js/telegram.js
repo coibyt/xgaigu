@@ -14,7 +14,7 @@ function accountCard() {
     if (!d.enabled) { card.hidden = true; return; }
     card.hidden = false;
     const head = h('div', { class: 'tg-head' }, h('span', { class: 'tg-logo', html: PLANE }), h('div', {}, h('h3', {}, 'Tự động đăng lên Telegram'),
-      h('p', { class: 'muted' }, 'Video mới của bạn được bot tự gửi vào nhóm/kênh Telegram của bạn, theo số bài và giờ bạn chọn.')));
+      h('p', { class: 'muted' }, 'Mọi video của bạn, cả video đang có và video đăng mới, được tự xếp vào hàng chờ và bot gửi vào nhóm/kênh Telegram của bạn theo số bài và giờ bạn chọn.')));
     if (!d.allowed) { card.replaceChildren(head, h('div', { class: 'notice tg-off' }, '🔒 Tài khoản của bạn chưa được bật chức năng này. Hãy liên hệ quản trị viên để được cho phép.')); return; }
     card.replaceChildren(head, groupsBlock(d), prefsBlock(d), queueBlock(d));
   };
@@ -38,7 +38,7 @@ function accountCard() {
           h('button', { type: 'button', class: 'btn sm ghost', onclick: () => { if (confirm('Gỡ kết nối nhóm ' + t.title + '? Các bài đang chờ gửi vào nhóm này sẽ bị huỷ.')) act(() => api('/me/telegram/targets/' + t.id, { method: 'DELETE' }), 'Đã gỡ ' + t.title); } }, 'Gỡ')));
     });
     const add = h('button', { type: 'button', class: 'btn primary', onclick: () => connectDialog(d.bot) }, '+ Kết nối nhóm / kênh');
-    return h('div', { class: 'tg-block' }, h('div', { class: 'tg-btitle' }, h('h4', {}, 'Nhóm nhận bài ', h('small', { class: 'muted' }, '(' + d.targets.length + '/5)')), d.targets.length < 5 ? add : ''),
+    return h('div', { class: 'tg-block' }, h('div', { class: 'tg-btitle' }, h('h4', {}, 'Nhóm nhận bài ', h('small', { class: 'muted' }, '(' + d.targets.length + '/' + d.maxTargets + ')')), d.targets.length < d.maxTargets ? add : ''),
       rows.length ? h('div', { class: 'tg-groups' }, rows) : h('div', { class: 'tg-empty' }, h('p', {}, 'Chưa kết nối nhóm nào.'), h('p', { class: 'muted' }, 'Bấm “Kết nối nhóm / kênh” để lấy mã và làm theo 3 bước.')));
   }
   async function connectDialog(bot) {
@@ -147,7 +147,20 @@ function accountCard() {
 function adminBox() {
   const body = h('div');
   const box = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Bot Telegram tự đăng video'),
-    h('p', { class: 'muted', style: 'margin-bottom:14px' }, 'Thành viên được cho phép (cột “Gửi Telegram” trong danh sách thành viên) sẽ kết nối nhóm của họ với bot này để video mới tự gửi vào nhóm.'), body);
+    h('p', { class: 'muted', style: 'margin-bottom:14px' }, 'Thành viên được cho phép (cột “Gửi Telegram” trong danh sách thành viên) sẽ kết nối nhóm của họ với bot này; mọi video của họ (có sẵn và đăng mới) tự vào hàng chờ và được gửi vào nhóm.'), body, limitForm());
+  // how many groups each account may link
+  function limitForm() {
+    const inp = h('input', { type: 'number', min: 1, max: 500, class: 'tg-num', 'aria-label': 'Số nhóm tối đa mỗi tài khoản' });
+    const btn = h('button', { type: 'submit', class: 'btn sm primary' }, 'Lưu');
+    const f = h('form', { class: 'card tg-limit' }, h('label', { class: 'tg-inline' }, 'Mỗi tài khoản kết nối tối đa ', inp, ' nhóm/kênh nhận bài'), btn);
+    api('/admin/telegram-limit').then((d) => { inp.value = d.maxTargets; }).catch(() => {});
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); btn.disabled = true;
+      try { const r = await api('/admin/telegram-limit', { method: 'PUT', body: { maxTargets: inp.value } }); inp.value = r.maxTargets; toast('Đã đặt tối đa ' + r.maxTargets + ' nhóm mỗi tài khoản'); load(); }
+      catch (ex) { fail(ex); } finally { btn.disabled = false; }
+    });
+    return f;
+  }
   const tokenForm = (label) => {
     const inp = h('input', { type: 'password', autocomplete: 'off', placeholder: '123456789:AA…', style: 'flex:1;min-width:220px' });
     const btn = h('button', { type: 'submit', class: 'btn primary' }, label);
@@ -178,7 +191,7 @@ function adminBox() {
         h('a', { href: 'https://t.me/' + bot.username, target: '_blank', rel: 'noopener' }, h('b', {}, '@' + bot.username)),
         h('span', { class: 'tg-pill ' + (bot.webhookOk && !bot.webhookError ? 'ok' : 'bad') }, bot.webhookOk && !bot.webhookError ? 'Đang hoạt động' : 'Cần kiểm tra'), reconnect, remove),
       bot.webhookError ? h('p', { class: 'tg-err', style: 'margin-bottom:12px' }, '⚠ ' + bot.webhookError) : '',
-      h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, stat('Tài khoản được phép', bot.allowedUsers), stat('Nhóm đã kết nối', bot.targets), stat('Bài đang chờ', bot.queued), stat('Đã gửi hôm nay', bot.sentToday)),
+      h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, stat('Tài khoản được phép', bot.allowedUsers), stat('Nhóm đã kết nối', bot.targets), stat('Tối đa mỗi tài khoản', bot.maxTargets + ' nhóm'), stat('Bài đang chờ', bot.queued), stat('Đã gửi hôm nay', bot.sentToday)),
       change));
   };
   load().catch(fail);

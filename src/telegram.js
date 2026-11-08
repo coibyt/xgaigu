@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const API_BASE = (process.env.TELEGRAM_API_BASE || 'https://api.telegram.org').replace(/\/$/, '');
-const MAX_TARGETS = 5;
+const MAX_TARGETS = 50; // groups per account unless the admin sets another number
 const CODE_MINUTES = 30;
 const DEFAULT_PREFS = { daily_limit: 10, mode: 'instant', times: '08:00,20:00', per_slot: 1, distribute: 'same', last_slot: '', split_cursor: 0 };
 const NOT_ALLOWED = 'Tài khoản của bạn chưa được quản trị viên cho phép tự đăng lên Telegram.';
@@ -36,6 +36,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
   const enabled = () => !!getConf('tg_bot_token');
   const base = () => (process.env.SITE_URL || getConf('tg_base') || '').replace(/\/$/, '');
   const userRow = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const maxTargets = () => Number(getConf('tg_max_targets')) || MAX_TARGETS;
   const allowed = (u) => !!u && !u.banned && (u.role === 'admin' || !!u.telegram_allowed);
 
   async function call(method, params = {}, token = getConf('tg_bot_token'), file = null) {
@@ -85,6 +86,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
     out.targets = db.prepare('SELECT COUNT(*) AS n FROM tg_targets WHERE active = 1').get().n;
     out.allowedUsers = db.prepare("SELECT COUNT(*) AS n FROM users WHERE telegram_allowed = 1 AND role <> 'admin'").get().n;
     out.queued = db.prepare("SELECT COUNT(*) AS n FROM tg_queue WHERE status = 'pending'").get().n;
+    out.maxTargets = maxTargets();
     out.sentToday = db.prepare('SELECT COALESCE(SUM(sent), 0) AS n FROM tg_daily WHERE day = ?').get(nowParts().day).n;
     return out;
   }
@@ -101,9 +103,18 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
     setConf({ tg_bot_token: '', tg_bot_username: '', tg_bot_id: '', tg_hook_secret: '' });
     res.json({ ok: true });
   });
+  // how many groups/channels each account may link
+  app.get('/api/admin/telegram-limit', needAdmin, (_req, res) => res.json({ maxTargets: maxTargets() }));
+  app.put('/api/admin/telegram-limit', needAdmin, (req, res) => {
+    const n = Math.round(Number(req.body.maxTargets));
+    if (!(n >= 1 && n <= 500)) return fail(res, 400, 'Số nhóm phải từ 1 đến 500');
+    setConf({ tg_max_targets: n });
+    res.json({ ok: true, maxTargets: n });
+  });
   // which accounts may auto-post (admins always may)
   app.post('/api/admin/users/:id(\\d+)/telegram', needAdmin, (req, res) => {
     db.prepare('UPDATE users SET telegram_allowed = ? WHERE id = ?').run(req.body.allowed ? 1 : 0, Number(req.params.id));
+    if (req.body.allowed) backfill(Number(req.params.id));
     res.json({ ok: true, allowed: !!req.body.allowed });
   });
 
@@ -111,15 +122,16 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
   function saveTarget(userId, chat) {
     const chatId = String(chat.id);
     const existing = db.prepare('SELECT id FROM tg_targets WHERE user_id = ? AND chat_id = ?').get(userId, chatId);
-    if (!existing && db.prepare('SELECT COUNT(*) AS n FROM tg_targets WHERE user_id = ?').get(userId).n >= MAX_TARGETS) throw new TgError(`Mỗi tài khoản kết nối tối đa ${MAX_TARGETS} nhóm/kênh.`);
+    if (!existing && db.prepare('SELECT COUNT(*) AS n FROM tg_targets WHERE user_id = ?').get(userId).n >= maxTargets()) throw new TgError(`Mỗi tài khoản kết nối tối đa ${maxTargets()} nhóm/kênh.`);
     const title = String(chat.title || chat.username || chatId).slice(0, 200), type = chat.type === 'channel' ? 'channel' : 'group';
     if (existing) db.prepare("UPDATE tg_targets SET title = ?, type = ?, username = ?, active = 1, last_error = '' WHERE id = ?").run(title, type, chat.username || '', existing.id);
     else db.prepare('INSERT INTO tg_targets (user_id, chat_id, title, type, username, created_at) VALUES (?,?,?,?,?,?)').run(userId, chatId, title, type, chat.username || '', now());
+    backfill(userId); // the videos already on the account go into the queue too
     return { title };
   }
   async function sendTest(target, user) {
     await call('sendMessage', { chat_id: target.chat_id, parse_mode: 'HTML', disable_web_page_preview: true,
-      text: `✅ Đã kết nối với tài khoản <b>${esc(user.name)}</b> trên xgaigu.\nVideo mới của tài khoản sẽ được tự động đăng vào đây.\n${esc(base())}/#/u/${user.id}` });
+      text: `✅ Đã kết nối với tài khoản <b>${esc(user.name)}</b> trên xgaigu.\nCác video của tài khoản sẽ được tự động đăng vào đây.\n${esc(base())}/#/u/${user.id}` });
   }
   const mine = (req, res) => {
     if (!enabled()) { fail(res, 400, 'Quản trị viên chưa bật bot Telegram.'); return null; }
@@ -136,7 +148,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
     const u = userRow(req.user.id);
     if (!enabled()) return res.json({ enabled: false });
     if (!allowed(u)) return res.json({ enabled: true, allowed: false });
-    res.json({ enabled: true, allowed: true, bot: getConf('tg_bot_username'), ...queueInfo(u.id),
+    res.json({ enabled: true, allowed: true, bot: getConf('tg_bot_username'), maxTargets: maxTargets(), ...queueInfo(u.id),
       targets: db.prepare('SELECT id, title, type, username, active, last_error AS lastError, last_post_at AS lastPostAt FROM tg_targets WHERE user_id = ? ORDER BY id').all(u.id).map((t) => ({ ...t, active: !!t.active })) });
   });
   app.post('/api/me/telegram/code', needUser, (req, res) => {
@@ -172,6 +184,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
   app.post('/api/me/telegram/targets/:id(\\d+)/active', needUser, (req, res) => {
     const t = targetOf(req, res); if (!t) return;
     db.prepare("UPDATE tg_targets SET active = ?, last_error = CASE WHEN ? THEN '' ELSE last_error END WHERE id = ?").run(req.body.active ? 1 : 0, req.body.active ? 1 : 0, t.id);
+    if (req.body.active) backfill(req.user.id);
     res.json({ ok: true });
   });
   app.delete('/api/me/telegram/targets/:id(\\d+)', needUser, (req, res) => {
@@ -198,6 +211,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
     // times that already passed today start counting from tomorrow (no catch-up send right after saving)
     const at = nowParts(), past = parseTimes(p.times).filter((t) => t < at.hm);
     if (p.mode === 'schedule' && past.length) db.prepare("UPDATE tg_prefs SET last_slot = ? WHERE user_id = ? AND (last_slot IS NULL OR last_slot < ?)").run(at.day + ' ' + past[past.length - 1], req.user.id, at.day + ' ' + past[past.length - 1]);
+    backfill(req.user.id); // e.g. switching to "same videos for every group" fills in the other groups
     dispatchUser(req.user.id).catch((e) => console.error('[telegram]', e.message));
     res.json({ ok: true, ...queueInfo(req.user.id) });
   });
@@ -279,6 +293,21 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
     }
     return n;
   }
+  // every public video of the account goes into the queue (oldest first); the daily limit spreads them over the days.
+  // In "different videos per group" mode a video that already went to one group is not given to another.
+  function backfill(uid) {
+    try {
+      if (!enabled() || !allowed(userRow(uid))) return 0;
+      const split = getPrefs(uid).distribute === 'split';
+      let n = 0;
+      for (const v of db.prepare('SELECT * FROM videos WHERE user_id = ? AND hidden = 0 ORDER BY id').all(uid)) {
+        if (split && db.prepare('SELECT 1 FROM tg_queue WHERE video_id = ?').get(v.id)) continue;
+        n += enqueue(v);
+      }
+      if (n) dispatchUser(uid).catch((e) => console.error('[telegram]', e.message));
+      return n;
+    } catch (e) { console.error('[telegram] backfill:', e.message); return 0; }
+  }
   // called whenever a video becomes visible to everyone
   function announce(videoId) {
     try {
@@ -341,7 +370,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
       if (!db.prepare("UPDATE tg_prefs SET last_slot = ? WHERE user_id = ? AND (last_slot IS NULL OR last_slot = '' OR last_slot < ?)").run(key, uid, key).changes) return;
       budget = prefs.per_slot;
     }
-    const rows = db.prepare("SELECT q.* FROM tg_queue q JOIN tg_targets t ON t.id = q.target_id WHERE q.user_id = ? AND q.status = 'pending' AND t.active = 1 ORDER BY q.id").all(uid);
+    const rows = db.prepare("SELECT q.* FROM tg_queue q JOIN tg_targets t ON t.id = q.target_id WHERE q.user_id = ? AND q.status = 'pending' AND t.active = 1 ORDER BY q.video_id DESC, q.id").all(uid); // newest videos first
     const byTarget = new Map();
     for (const r of rows) { if (!byTarget.has(r.target_id)) byTarget.set(r.target_id, []); byTarget.get(r.target_id).push(r); }
     for (const [targetId, list] of byTarget) {
@@ -383,7 +412,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
     const prefs = getPrefs(uid), at = nowParts();
     const sentToday = Object.fromEntries(db.prepare('SELECT d.target_id, d.sent FROM tg_daily d JOIN tg_targets t ON t.id = d.target_id WHERE t.user_id = ? AND d.day = ?').all(uid, at.day).map((r) => [r.target_id, r.sent]));
     const upcoming = db.prepare(`SELECT q.id, q.video_id AS videoId, v.caption, v.thumb, t.title AS target, q.error FROM tg_queue q JOIN videos v ON v.id = q.video_id JOIN tg_targets t ON t.id = q.target_id
-      WHERE q.user_id = ? AND q.status = 'pending' ORDER BY q.id LIMIT 20`).all(uid);
+      WHERE q.user_id = ? AND q.status = 'pending' ORDER BY q.video_id DESC, q.id LIMIT 20`).all(uid);
     const recent = db.prepare(`SELECT q.id, q.video_id AS videoId, v.caption, t.title AS target, q.status, q.error, q.sent_at AS sentAt FROM tg_queue q JOIN videos v ON v.id = q.video_id JOIN tg_targets t ON t.id = q.target_id
       WHERE q.user_id = ? AND q.status IN ('sent', 'failed', 'skipped') ORDER BY q.sent_at DESC LIMIT 10`).all(uid);
     let next = null;
