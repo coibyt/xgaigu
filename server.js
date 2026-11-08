@@ -168,6 +168,7 @@ function startSession(req, res, userId) {
 
 // ---------- uploads ----------
 const faststart = require('./src/faststart').create({ ffmpeg: FFMPEG, uploadDir: UPLOAD_DIR });
+const thumbs = require('./src/thumbs').create({ ffmpeg: FFMPEG, db, uploadDir: UPLOAD_DIR });
 const transcode = require('./src/transcode').create({ ffmpeg: FFMPEG, uploadDir: UPLOAD_DIR, db, afterNotSmaller: (stored) => faststart.enqueue(stored) });
 // old files: after start-up, one at a time, fix MP4/MOV files whose index is at the end (slow start)
 setTimeout(() => {
@@ -759,6 +760,7 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
       area.region, area.province, area.district, JSON.stringify(info), phone, nickname, place.lat, place.lng, hidden ? 1 : 0, hidden ? 'owner' : '', now());
   const newId = Number(r.lastInsertRowid);
   if (productId) db.prepare('UPDATE videos SET product_id = ? WHERE id = ?').run(productId, newId);
+  if (file && !thumb) thumbs.ensureThumb(newId).catch(() => {}); // a cover picked from the video itself
   if (file) setTimeout(() => transcode.enqueue('/uploads/' + file.filename, newId), 1500); // shrink for fast loading, in the background
   if (!hidden) telegram.announce(newId);
   res.json({ ok: true, id: newId, hidden });
@@ -1421,6 +1423,12 @@ const ASSET_V = (() => {
   for (const d of ['js', 'css']) { try { for (const f of fs.readdirSync(path.join(__dirname, 'public', d))) t = Math.max(t, fs.statSync(path.join(__dirname, 'public', d, f)).mtimeMs); } catch {} }
   return Math.round(t / 1000).toString(36);
 })();
+// the designed preview card of a video that has no picture
+app.get('/og/v/:id(\\d+).jpg', async (req, res) => {
+  const file = await thumbs.card(Number(req.params.id)).catch(() => '');
+  if (!file) return res.redirect(302, '/img/og-default.png');
+  res.set('Cache-Control', 'public, max-age=86400').type('jpg').sendFile(file);
+});
 function renderPage(req, res, v) {
   const base = (process.env.SITE_URL || req.protocol + '://' + req.get('host')).replace(/\/$/, '');
   const abs = (u) => (!u ? '' : /^https?:\/\//.test(u) ? u : base + u);
@@ -1429,7 +1437,9 @@ function renderPage(req, res, v) {
   const title = v ? cut(v.caption || 'Video của ' + v.user.name, 70) + ' – xgaigu' : 'xgaigu – Kết nối, video & livestream hẹn hò';
   const desc = v ? cut([v.caption, place && '📍 ' + place, v.user.name + (v.user.age ? ', ' + v.user.age : '')].filter(Boolean).join(' · '), 200)
     : 'Đăng video, làm quen, trò chuyện, xem livestream và đặt lịch hẹn gặp mặt an toàn. Dành cho người từ 18 tuổi.';
-  const image = v ? (abs(v.thumb) || (yt ? `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg` : '')) : '';
+  const image = v ? (abs(v.thumb) || (yt ? `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg` : '') || `${base}/og/v/${v.id}.jpg`) : '';
+  const isCard = !!v && image.endsWith('/og/v/' + v.id + '.jpg');
+  if (isCard && v.file) thumbs.ensureThumb(v.id).catch(() => {}); // next time the preview shows a frame of the video
   const url = v ? `${base}/v/${v.id}` : base + (req.path === '/' ? '/' : req.path);
   const tags = [
     `<title>${escHtml(title)}</title>`,
@@ -1441,7 +1451,8 @@ function renderPage(req, res, v) {
     `<meta property="og:title" content="${escHtml(title)}">`,
     `<meta property="og:description" content="${escHtml(desc)}">`,
     `<meta property="og:image" content="${escHtml(image || base + '/img/og-default.png')}">`,
-    ...(image ? [] : ['<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">']),
+    ...(image && !isCard ? [] : ['<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">']),
+    ...(v ? [`<meta property="og:image:alt" content="${escHtml(title)}">`] : []),
     ...(v && v.file ? [`<meta property="og:video" content="${escHtml(abs(v.file))}">`, `<meta property="og:video:secure_url" content="${escHtml(abs(v.file).replace(/^http:/, 'https:'))}">`,
       `<meta property="og:video:type" content="${v.file.endsWith('.webm') ? 'video/webm' : 'video/mp4'}">`] : []),
     '<meta name="twitter:card" content="summary_large_image">',
@@ -1458,7 +1469,7 @@ function renderPage(req, res, v) {
 }
 
 require('./src/live').install(app, { db, fail, clean, now, needUser, needAdmin, postLimiter, sse, send, publicUser, rmUpload, faststart, UPLOAD_DIR, VIDEO_TYPES, IMAGE_TYPES });
-telegram = require('./src/telegram').install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR });
+telegram = require('./src/telegram').install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, thumbs });
 const shop = require('./src/shop').install(app, { db, fail, clean, now, needUser, needAdmin, postLimiter, rmUpload, pushUser, listVideos, UPLOAD_DIR, IMAGE_TYPES });
 const seo = require('./src/seo').install(app, { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));

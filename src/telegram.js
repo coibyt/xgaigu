@@ -30,7 +30,7 @@ function parseTimes(str) {
   return [...new Set(out)].sort().slice(0, 8);
 }
 
-function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR }) {
+function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, thumbs }) {
   const getConf = (k) => { const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(k); return r ? r.value : ''; };
   const setConf = (obj) => { const st = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'); for (const [k, v] of Object.entries(obj)) st.run(k, String(v)); };
   const enabled = () => !!getConf('tg_bot_token');
@@ -352,8 +352,8 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR })
     if (caption.length > 1000) caption = `🎬 <b>${esc(v.nickname || owner.name)}</b>` + tail;
     const params = { chat_id: target.chat_id, parse_mode: 'HTML' };
     if (url.startsWith('https://')) params.reply_markup = { inline_keyboard: [[{ text: '▶ Xem video ngay', url }]] };
-    // the video's cover picture, else the member's profile picture, else Telegram's own preview of the link
-    const photo = localFile(v.thumb) || localFile(owner.avatar);
+    // the video's cover, else a frame picked from the video, else a designed card; Telegram's own preview as a last resort
+    const photo = localFile(v.thumb) || (thumbs ? await thumbs.pictureFile(v.id).catch(() => '') : '');
     if (photo) await call('sendPhoto', { ...params, caption }, undefined, { field: 'photo', path: photo });
     else await call('sendMessage', { ...params, text: caption, link_preview_options: { url, prefer_large_media: true, show_above_text: true } });
   }

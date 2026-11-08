@@ -1,0 +1,2 @@
+Be Vietnam Pro by Lâm Bảo, Tony Le and ViệtAnh Nguyễn — licensed under the SIL Open Font License 1.1 (https://openfontlicense.org).
+Used to draw text on link-preview cards (src/thumbs.js).
