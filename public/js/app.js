@@ -1014,8 +1014,17 @@ async function pageFeed(startId, home) {
   const seen = []; // home feed: ids already shown, so the random order never repeats a video
   // opened from an area page: play the rest of that area first (same order as its grid), then random videos from everywhere
   const ctx = startId && S.feedCtx && String(S.feedCtx.startId) === String(startId) ? S.feedCtx : null;
-  let queue = null;
-  if (ctx) {
+  let queue = null, others = null; // others: after a member's own videos, random videos of other members in the same area
+  if (ctx && ctx.kind === 'user') {
+    try {
+      const q = new URLSearchParams({ region: ctx.region || '', province: ctx.province || '', district: ctx.district || '' });
+      const { ids } = await api('/users/' + ctx.userId + '/video-ids?' + q);
+      const pos = ids.indexOf(Number(startId));
+      queue = pos >= 0 ? [...ids.slice(pos + 1), ...ids.slice(0, pos)] : ids.filter((x) => x !== Number(startId));
+      seen.push(Number(startId));
+      others = { ...Object.fromEntries(q), exclude: ctx.userId, from: startId };
+    } catch { queue = null; }
+  } else if (ctx) {
     try {
       const q = new URLSearchParams({ region: ctx.region, province: ctx.province, district: ctx.district, seed: ctx.seed });
       const { ids } = await api('/area-order?' + q);
@@ -1033,6 +1042,15 @@ async function pageFeed(startId, home) {
         videos.forEach((v) => { seen.push(v.id); box.append(slide(v)); });
         if (first) box.querySelectorAll('video').forEach((el, i) => { if (i < 2) el.preload = 'auto'; });
         first = false; loading = false; return;
+      }
+      if (others) { // the member's videos are done: other members of the same area, at random, never repeating
+        const { videos } = await api('/area-random?' + new URLSearchParams({ ...others, seen: seen.slice(-500).join(',') }));
+        if (videos.length) {
+          if (!others.told) { others.told = true; box.append(h('div', { class: 'slide' }, h('div', { class: 'endcap' }, 'Bạn đã xem hết video của người này 🎉', h('small', {}, 'Tiếp theo: video khác cùng khu vực ↓')))); }
+          videos.forEach((v) => { seen.push(v.id); box.append(slide(v)); });
+          first = false; loading = false; return;
+        }
+        others = null;
       }
       if (queue) home = true; // the area is finished: continue with random videos from everywhere (never repeating)
       const { videos } = home ? await api('/feed?limit=12&seen=' + seen.slice(-500).join(',') + '&pref=' + encodeURIComponent(Pref.param())) : await api('/videos' + (before ? '?before=' + before : ''));
@@ -1249,18 +1267,40 @@ async function pageUser(id) {
     if (v.selfHidden) c.append(h('span', { class: 'selfhid' }, 'Đang ẩn'));
     return c;
   };
-  // the member's videos, one numbered page at a time
+  // the member's videos, one numbered page at a time, optionally in one of their areas
   const userGrid = h('div', { class: 'tgrid' }), userPager = h('div', { class: 'pager' });
+  let area = { region: '', province: '', district: '' };
+  const areaQ = () => new URLSearchParams(area).toString();
+  const areaBar = h('div', { class: 'tk-areas' });
+  api('/users/' + user.id + '/areas').then(({ areas }) => {
+    if (!areas.length) return;
+    // provinces as chips; a chosen province with several districts shows them below
+    const provs = new Map();
+    for (const a of areas) { const k = a.region + '|' + a.province; if (!provs.has(k)) provs.set(k, { region: a.region, province: a.province, count: 0, districts: [] }); const p = provs.get(k); p.count += a.count; if (a.district) p.districts.push(a); }
+    const list = [...provs.values()].sort((a, b) => b.count - a.count);
+    const total = areas.reduce((n, a) => n + a.count, 0);
+    const paint = () => {
+      const chip = (label, n, on, pick) => h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), onclick: pick }, label, h('span', { class: 'tk-n' }, String(n)));
+      const choose = (a) => { area = a; paint(); goUser(1); };
+      const row1 = h('div', { class: 'row chips-scroll tk-arow' }, chip('Tất cả khu vực', total, !area.province, () => choose({ region: '', province: '', district: '' })),
+        list.map((p) => chip(p.province, p.count, area.province === p.province && area.region === p.region, () => choose({ region: p.region, province: p.province, district: '' }))));
+      const cur = list.find((p) => p.province === area.province && p.region === area.region);
+      const row2 = cur && cur.districts.length > 1 ? h('div', { class: 'row chips-scroll tk-arow sub' }, chip('Cả ' + cur.province, cur.count, !area.district, () => choose({ ...area, district: '' })),
+        cur.districts.map((d) => chip(d.district, d.count, area.district === d.district, () => choose({ ...area, district: d.district })))) : '';
+      areaBar.replaceChildren(h('div', { class: 'tk-alabel', html: icon('pin') + '<span>Khu vực của ' + esc(user.name) + '</span>' }), row1, row2);
+    };
+    paint();
+  }).catch(() => {});
   const goUser = async (p) => {
     userGrid.replaceChildren(h('div', { class: 'spin', style: 'grid-column:1/-1' }));
     try {
-      const d = await api('/users/' + user.id + '/videos-page?page=' + p);
+      const d = await api('/users/' + user.id + '/videos-page?page=' + p + '&' + areaQ());
       if (!d.total) userGrid.replaceChildren(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('p', {}, 'Chưa có video.')));
-      else userGrid.replaceChildren(...d.videos.map(cell));
+      else userGrid.replaceChildren(...d.videos.map((v) => { const c = cell(v); c.addEventListener('click', () => { S.feedCtx = { kind: 'user', userId: user.id, ...area, startId: v.id }; }); return c; }));
       renderPager(userPager, d.page, d.pages, (x) => { goUser(x); userGrid.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
     } catch (e) { userGrid.replaceChildren(); fail(e); }
   };
-  const videosNodes = [userGrid, userPager];
+  const videosNodes = [areaBar, userGrid, userPager];
   goUser(1);
   const panel = h('div', {}, ...videosNodes);
   let tabsEl = h('div', { class: 'tk-tabs' }, h('span', { class: 'on', html: icon('video') + '<span>Video (' + stats.videos + ')</span>' }));

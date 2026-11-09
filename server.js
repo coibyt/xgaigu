@@ -699,14 +699,54 @@ app.get('/api/area-videos', (req, res) => {
 });
 
 // A member's videos, newest first, one numbered page at a time (the owner also sees the videos they hid)
+// a member's videos, optionally in one area only (the owner also sees the videos they hid themselves)
+function userVideoWhere(uid, own, q) {
+  const area = readArea(q || {});
+  return {
+    where: "v.user_id = ? AND (v.hidden = 0 OR (v.hidden_by = 'owner' AND v.locked = 0 AND v.user_id = ?)) AND (? = '' OR v.region = ?) AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?)",
+    args: [uid, own, area.region, area.region, area.province, area.province, area.district, area.district],
+  };
+}
+// the areas a member has videos in (for the filter on their profile)
+app.get('/api/users/:id(\\d+)/areas', (req, res) => {
+  const uid = Number(req.params.id);
+  const rows = db.prepare(`SELECT region, province, district, COUNT(*) AS n FROM videos WHERE user_id = ? AND hidden = 0 AND region <> '' AND province <> ''
+    GROUP BY region, province, district ORDER BY n DESC`).all(uid);
+  res.json({ areas: rows.map((r) => ({ region: r.region, province: r.province, district: r.district || '', count: r.n })) });
+});
+// every id of a member's videos (in one area if asked), in the profile grid's order: used to play them one after another
+app.get('/api/users/:id(\\d+)/video-ids', (req, res) => {
+  const uid = Number(req.params.id), own = req.user && req.user.id === uid ? uid : 0;
+  const { where, args } = userVideoWhere(uid, own, req.query);
+  res.json({ ids: db.prepare('SELECT v.id FROM videos v WHERE ' + where + ' ORDER BY v.id DESC LIMIT 3000').all(...args).map((r) => r.id) });
+});
+// random videos of OTHER members in the same area (district, else province, else region), never repeating what was seen
+app.get('/api/area-random', (req, res) => {
+  let area = readArea(req.query);
+  if (!area.region && req.query.from) { const v = db.prepare('SELECT region, province, district FROM videos WHERE id = ?').get(Number(req.query.from)); if (v) area = readArea(v); }
+  const exclude = Number(req.query.exclude) || 0;
+  const seen = String(req.query.seen || '').split(',').map(Number).filter((n) => n > 0).slice(-800);
+  const seenList = ',' + seen.join(',') + ',';
+  const levels = [area.district && { ...area }, area.province && { ...area, district: '' }, area.region && { region: area.region, province: '', district: '' }].filter(Boolean);
+  for (const a of levels) {
+    const ids = db.prepare(`SELECT v.id FROM videos v JOIN users u ON u.id = v.user_id
+      WHERE v.hidden = 0 AND u.banned = 0 AND v.user_id <> ? AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?)
+        AND instr(?, ',' || v.id || ',') = 0 ORDER BY RANDOM() LIMIT 8`).all(exclude, a.region, a.province, a.province, a.district, a.district, seenList).map((r) => r.id);
+    if (ids.length) {
+      const byId = new Map(listVideos(req.user, { ids, limit: ids.length }).map((v) => [v.id, v]));
+      return res.json({ videos: ids.map((id) => byId.get(id)).filter(Boolean), area: a });
+    }
+  }
+  res.json({ videos: [], area: null });
+});
 app.get('/api/users/:id(\\d+)/videos-page', (req, res) => {
   const uid = Number(req.params.id);
   if (!db.prepare('SELECT 1 FROM users WHERE id = ? AND banned = 0').get(uid)) return fail(res, 404, 'Không tìm thấy người dùng');
   const own = req.user && req.user.id === uid ? uid : 0, size = pageSize();
-  const where = "v.user_id = ? AND (v.hidden = 0 OR (v.hidden_by = 'owner' AND v.locked = 0 AND v.user_id = ?))";
-  const total = db.prepare('SELECT COUNT(*) AS n FROM videos v WHERE ' + where).get(uid, own).n;
+  const { where, args } = userVideoWhere(uid, own, req.query);
+  const total = db.prepare('SELECT COUNT(*) AS n FROM videos v WHERE ' + where).get(...args).n;
   const pages = Math.max(1, Math.ceil(total / size)), page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
-  const ids = db.prepare('SELECT v.id FROM videos v WHERE ' + where + ' ORDER BY v.id DESC LIMIT ? OFFSET ?').all(uid, own, size, (page - 1) * size).map((r) => r.id);
+  const ids = db.prepare('SELECT v.id FROM videos v WHERE ' + where + ' ORDER BY v.id DESC LIMIT ? OFFSET ?').all(...args, size, (page - 1) * size).map((r) => r.id);
   const byId = new Map(ids.length ? listVideos(req.user, { ids, limit: ids.length }).map((v) => [v.id, v]) : []);
   res.json({ videos: ids.map((id) => byId.get(id)).filter(Boolean), total, page, pages, pageSize: size });
 });
