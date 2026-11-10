@@ -39,7 +39,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
   const maxTargets = () => Number(getConf('tg_max_targets')) || MAX_TARGETS;
   const allowed = (u) => !!u && !u.banned && (u.role === 'admin' || !!u.telegram_allowed);
 
-  async function call(method, params = {}, token = getConf('tg_bot_token'), file = null) {
+  async function call(method, params = {}, token = getConf('tg_bot_token'), file = null, timeoutMs = 20000) {
     if (!token) throw new TgError('Chưa cài bot Telegram.');
     let body; const headers = {};
     if (file) {
@@ -47,7 +47,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
       for (const [k, v] of Object.entries(params)) body.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
       body.append(file.field, new Blob([fs.readFileSync(file.path)]), path.basename(file.path));
     } else { headers['Content-Type'] = 'application/json'; body = JSON.stringify(params); }
-    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 20000);
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(`${API_BASE}/bot${token}/${method}`, { method: 'POST', headers, body, signal: ctrl.signal });
       const data = await res.json().catch(() => ({}));
@@ -60,18 +60,16 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
   }
 
   // ---------- admin: the site bot ----------
-  const hookUrl = (secret) => base() + '/telegram/webhook/' + secret;
+  // Messages to the bot (/connect, /start, "bot removed from the group") are fetched by the site with getUpdates instead of
+  // a webhook: the host's CDN may block or redirect Telegram's calls to the site (seen: "307 Temporary Redirect"), while
+  // calls from the site to Telegram always work. Only one server process polls at a time (a lock row in settings).
   async function setupBot(token, origin) {
     const me = await call('getMe', {}, token);
     if (!process.env.SITE_URL && origin) setConf({ tg_base: origin });
-    const secret = crypto.randomBytes(24).toString('hex');
     let webhookError = '';
-    if (base().startsWith('https://')) {
-      try {
-        await call('setWebhook', { url: hookUrl(secret), secret_token: secret, drop_pending_updates: true, allowed_updates: ['message', 'channel_post', 'my_chat_member'] }, token);
-      } catch (e) { webhookError = e.message; }
-    } else webhookError = 'Website chưa chạy bằng https nên Telegram không gửi được tin nhắn về (chỉ chạy được trên tên miền thật).';
-    setConf({ tg_bot_token: token, tg_bot_username: me.username || '', tg_bot_id: String(me.id), tg_hook_secret: secret });
+    try { await call('deleteWebhook', { drop_pending_updates: false }, token); } catch (e) { webhookError = e.message; }
+    setConf({ tg_bot_token: token, tg_bot_username: me.username || '', tg_bot_id: String(me.id), tg_hook_secret: crypto.randomBytes(24).toString('hex'), tg_poll_error: '' });
+    poll.kick();
     return { username: me.username, webhookError };
   }
   async function botStatus() {
@@ -79,9 +77,12 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
     const out = { username: getConf('tg_bot_username'), webhookOk: false, webhookError: '', pending: 0 };
     try {
       const info = await call('getWebhookInfo', {});
-      out.webhookOk = info.url === hookUrl(getConf('tg_hook_secret'));
-      out.webhookError = info.last_error_message || (out.webhookOk ? '' : 'Webhook chưa trỏ về website — bấm “Kết nối lại”.');
+      if (info.url) { await call('deleteWebhook', { drop_pending_updates: false }).catch(() => {}); poll.kick(); } // left over from the webhook version
       out.pending = info.pending_update_count || 0;
+      const last = Number(getConf('tg_last_poll')) || 0, err = getConf('tg_poll_error');
+      out.webhookOk = !info.url && Date.now() - last < 3 * 60_000 && !err;
+      out.webhookError = err ? 'Lỗi nhận tin từ Telegram: ' + err
+        : out.webhookOk ? '' : last ? 'Bot chưa nhận tin trong vài phút gần đây — bấm “Kết nối lại”.' : 'Bot đang khởi động — tải lại trang sau ít giây.';
     } catch (e) { out.webhookError = e.message; }
     out.targets = db.prepare('SELECT COUNT(*) AS n FROM tg_targets WHERE active = 1').get().n;
     out.allowedUsers = db.prepare("SELECT COUNT(*) AS n FROM users WHERE telegram_allowed = 1 AND role <> 'admin'").get().n;
@@ -100,7 +101,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
   });
   app.delete('/api/admin/telegram-bot', needAdmin, async (_req, res) => {
     try { if (enabled()) await call('deleteWebhook', {}); } catch {}
-    setConf({ tg_bot_token: '', tg_bot_username: '', tg_bot_id: '', tg_hook_secret: '' });
+    setConf({ tg_bot_token: '', tg_bot_username: '', tg_bot_id: '', tg_hook_secret: '', tg_offset: '0', tg_poll_error: '' });
     res.json({ ok: true });
   });
   // how many groups/channels each account may link
@@ -239,8 +240,43 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
     res.json({ ok: true, ...queueInfo(req.user.id) });
   });
 
-  // ---------- webhook ----------
+  // ---------- receiving messages: long polling (the webhook route below stays for setups that still point at it) ----------
   const reply = (chatId, text) => call('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }).catch(() => {});
+  const poll = (() => {
+    let running = false, wake = null;
+    // the lock value is "expiry:pid": a process renews its own lock or takes an expired one, so two processes never poll
+    // at once (Telegram would answer 409)
+    const take = () => {
+      db.prepare("INSERT INTO settings (key, value) VALUES ('tg_poll_lock', '0:0') ON CONFLICT(key) DO NOTHING").run();
+      const until = String(Date.now() + 70_000) + ':' + process.pid;
+      return db.prepare("UPDATE settings SET value = ? WHERE key = 'tg_poll_lock' AND (CAST(substr(value, 1, instr(value || ':', ':') - 1) AS INTEGER) < ? OR value LIKE ?)").run(until, Date.now(), '%:' + process.pid).changes > 0;
+    };
+    const sleep = (ms) => new Promise((r) => { wake = r; setTimeout(r, ms).unref(); });
+    async function loop() {
+      if (running) return; running = true;
+      try {
+        while (true) {
+          if (!enabled() || !take()) { await sleep(30_000); continue; }
+          try {
+            const offset = Number(getConf('tg_offset')) || 0;
+            const ups = await call('getUpdates', { offset, timeout: 25, allowed_updates: ['message', 'channel_post', 'my_chat_member'] }, undefined, null, 40_000);
+            setConf({ tg_last_poll: Date.now(), tg_poll_error: '' });
+            for (const up of ups) {
+              setConf({ tg_offset: up.update_id + 1 }); // move on first, so a broken update is never processed twice
+              try { await handleUpdate(up); } catch (e) { console.error('[telegram] update:', e.message); }
+            }
+          } catch (e) {
+            // 409: a webhook is still set, or another copy of the bot is polling
+            if (e.code === 409) await call('deleteWebhook', { drop_pending_updates: false }).catch(() => {});
+            setConf({ tg_poll_error: e.message.slice(0, 200), tg_last_poll: Date.now() });
+            await sleep(e.code === 401 ? 300_000 : 10_000);
+          }
+        }
+      } finally { running = false; }
+    }
+    setTimeout(loop, 3000).unref();
+    return { kick() { if (wake) wake(); loop(); } };
+  })();
   app.post('/telegram/webhook/:secret', async (req, res) => {
     const secret = getConf('tg_hook_secret');
     if (!secret || req.params.secret !== secret || req.get('X-Telegram-Bot-Api-Secret-Token') !== secret) return res.sendStatus(403);

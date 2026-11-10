@@ -183,7 +183,7 @@ function adminBox() {
       return;
     }
     const stat = (label, v) => h('div', { class: 'card', style: 'padding:12px 16px' }, h('div', { class: 'muted', style: 'font-size:13px' }, label), h('b', { style: 'font-size:22px' }, String(v)));
-    const reconnect = h('button', { type: 'button', class: 'btn sm', onclick: async () => { try { const r = await api('/admin/telegram-bot', { method: 'POST', body: { reconnect: true } }); toast(r.webhookError ? 'Lưu ý: ' + r.webhookError : 'Đã kết nối lại webhook'); load(); } catch (e) { fail(e); } } }, 'Kết nối lại');
+    const reconnect = h('button', { type: 'button', class: 'btn sm', onclick: async () => { try { const r = await api('/admin/telegram-bot', { method: 'POST', body: { reconnect: true } }); toast(r.webhookError ? 'Lưu ý: ' + r.webhookError : 'Đã kết nối lại bot'); load(); } catch (e) { fail(e); } } }, 'Kết nối lại');
     const remove = h('button', { type: 'button', class: 'btn sm ghost', onclick: async () => { if (!confirm('Gỡ bot @' + bot.username + '? Mọi thành viên sẽ ngừng tự đăng lên Telegram.')) return; try { await api('/admin/telegram-bot', { method: 'DELETE' }); toast('Đã gỡ bot'); load(); } catch (e) { fail(e); } } }, 'Gỡ bot');
     const change = h('details', { style: 'margin-top:12px' }, h('summary', { class: 'muted', style: 'cursor:pointer' }, 'Đổi sang bot khác'), h('div', { style: 'margin-top:10px' }, tokenForm('Lưu bot mới')));
     body.replaceChildren(h('div', { class: 'card', style: 'padding:18px' },
