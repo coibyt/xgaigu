@@ -549,7 +549,8 @@ function readInfo(b) {
   };
 }
 
-function listVideos(viewer, { userId, before, limit = 12, id, ids, region, province, district } = {}) {
+const feedCountry = (q) => { const c = String(q.country || '').toUpperCase(); return COUNTRY_RE.test(c) ? c : 'VN'; };
+function listVideos(viewer, { userId, before, limit = 12, id, ids, region, province, district, country } = {}) {
   const rows = db.prepare(
     `SELECT v.*, u.name AS u_name, u.avatar AS u_avatar, u.city AS u_city, u.birth_year AS u_by,
        u.show_phone AS u_sp, u.phone AS u_phone, u.verified AS u_verified,
@@ -559,11 +560,11 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
        (SELECT COALESCE(SUM(CASE a.kind WHEN 'view' THEN 1 ELSE 3 END), 0) FROM video_activity a WHERE a.video_id = v.id AND a.at > ?) AS heat
      FROM videos v JOIN users u ON u.id = v.user_id
      WHERE (v.hidden = 0 OR (v.hidden_by = 'owner' AND v.locked = 0 AND v.user_id = ?)) AND u.banned = 0 AND (? IS NULL OR v.user_id = ?) AND (? IS NULL OR v.id < ?)
-       AND (? IS NULL OR instr(?, ',' || v.id || ',') > 0) AND (? IS NULL OR v.id = ?) AND (? IS NULL OR v.region = ?) AND (? IS NULL OR v.province = ?) AND (? IS NULL OR v.district = ?)
+       AND (? IS NULL OR instr(?, ',' || v.id || ',') > 0) AND (? IS NULL OR v.id = ?) AND (? IS NULL OR v.region = ?) AND (? IS NULL OR v.province = ?) AND (? IS NULL OR v.district = ?) AND (? IS NULL OR COALESCE(v.country, 'VN') = ?)
      ORDER BY v.id DESC LIMIT ?`
   ).all(viewer ? viewer.id : 0, Date.now() - DAY_MS, viewer && ((userId != null && userId === viewer.id) || id != null) ? viewer.id : 0, userId ?? null, userId ?? null, before ?? null, before ?? null,
     ids ? ',' + ids.join(',') + ',' : null, ids ? ',' + ids.join(',') + ',' : null, id ?? null, id ?? null,
-    region || null, region || null, province || null, province || null, district || null, district || null, limit);
+    region || null, region || null, province || null, province || null, district || null, district || null, country || null, country || null, limit);
   const saveCount = new Map(), savedByMe = new Set();
   if (rows.length) {
     const marks = rows.map(() => '?').join(','), vids = rows.map((r) => r.id);
@@ -592,7 +593,7 @@ app.get('/api/videos', (req, res) => {
   const before = parseInt(req.query.before, 10) || null;
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 48);
   const area = readArea(req.query);
-  res.json({ videos: listVideos(req.user, { before, limit, ...area }) });
+  res.json({ videos: listVideos(req.user, { before, limit, ...area, country: area.region === 'qt' ? area.country || null : feedCountry(req.query) }) });
 });
 
 // Home feed: random order, but provinces the visitor shows interest in (searches, likes, comments) are much more likely to come up.
@@ -618,9 +619,10 @@ app.get('/api/feed', (req, res) => {
   }
   const top = Math.max(0, ...score.values());
   // candidates: up to 2000 of each group (verified / not verified), so both are always available for the admin's mix
+  const cc = feedCountry(req.query);
   const poolSql = (ver) => db.prepare(
     `SELECT v.id, v.province, v.badge, v.created_at, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
-     WHERE v.hidden = 0 AND u.banned = 0 AND (v.verified OR u.verified) = ? ORDER BY v.id DESC LIMIT 2000`).all(ver);
+     WHERE v.hidden = 0 AND u.banned = 0 AND (v.verified OR u.verified) = ? AND COALESCE(v.country, 'VN') = ? ORDER BY v.id DESC LIMIT 2000`).all(ver, cc);
   const pool = [...poolSql(1), ...poolSql(0)];
   const heatOf = new Map(db.prepare("SELECT video_id, SUM(CASE kind WHEN 'view' THEN 1 ELSE 3 END) AS h FROM video_activity WHERE at > ? GROUP BY video_id").all(Date.now() - DAY_MS).map((x) => [x.video_id, x.h]));
   const fc = feedConf();
@@ -768,7 +770,7 @@ app.get('/api/area-random', (req, res) => {
   const exclude = Number(req.query.exclude) || 0;
   const seen = String(req.query.seen || '').split(',').map(Number).filter((n) => n > 0).slice(-800);
   const seenList = ',' + seen.join(',') + ',';
-  const levels = [area.district && { ...area }, area.province && { ...area, district: '' }, area.region === 'qt' && area.country && { region: 'qt', country: area.country, province: '', district: '' }, area.region && { region: area.region, province: '', district: '' }].filter(Boolean);
+  const levels = [area.district && { ...area }, area.province && { ...area, district: '' }, area.region === 'qt' && area.country && { region: 'qt', country: area.country, province: '', district: '' }, area.region && area.region !== 'qt' && { region: area.region, province: '', district: '' }].filter(Boolean);
   for (const a of levels) {
     const ids = db.prepare(`SELECT v.id FROM videos v JOIN users u ON u.id = v.user_id
       WHERE v.hidden = 0 AND u.banned = 0 AND v.user_id <> ? AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) AND (? = '' OR COALESCE(v.country, 'VN') = ?)

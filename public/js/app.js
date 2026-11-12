@@ -1020,6 +1020,9 @@ async function pageFeed(startId, home) {
   // opened from an area page: play the rest of that area first (same order as its grid), then random videos from everywhere
   const ctx = startId && S.feedCtx && String(S.feedCtx.startId) === String(startId) ? S.feedCtx : null;
   let queue = null, others = null; // others: after a member's own videos, random videos of other members in the same area
+  // the country the feed stays in: Việt Nam, or the country of the area / video it was opened from
+  let cc = ctx && ctx.region === 'qt' && ctx.country ? ctx.country : 'VN', startVideo = null;
+  if (startId && cc === 'VN') { try { startVideo = (await api('/videos/' + startId)).video; if (startVideo.country && startVideo.country !== 'VN' && (!ctx || ctx.kind === 'user')) cc = startVideo.country; } catch {} }
   if (ctx && ctx.kind === 'user') {
     try {
       const q = new URLSearchParams({ region: ctx.region || '', province: ctx.province || '', district: ctx.district || '', country: ctx.country || '' });
@@ -1058,7 +1061,7 @@ async function pageFeed(startId, home) {
         others = null;
       }
       if (queue) home = true; // the area is finished: continue with random videos from everywhere (never repeating)
-      const { videos } = home ? await api('/feed?limit=12&seen=' + seen.slice(-500).join(',') + '&pref=' + encodeURIComponent(Pref.param())) : await api('/videos' + (before ? '?before=' + before : ''));
+      const { videos } = home ? await api('/feed?limit=12&country=' + cc + '&seen=' + seen.slice(-500).join(',') + '&pref=' + encodeURIComponent(Pref.param())) : await api('/videos?country=' + cc + (before ? '&before=' + before : ''));
       if (home) videos.forEach((v) => seen.push(v.id));
       if (!videos.length && first && home) { loading = false; main.innerHTML = ''; return pageHome(); }
       if (!videos.length) { done = true; box.append(h('div', { class: 'slide' }, h('div', { class: 'endcap' }, videos.length || !first ? 'Bạn đã xem hết video 🎉' : ''))); if (first) { box.innerHTML = ''; box.append(emptyFeed()); } }
@@ -1076,7 +1079,7 @@ async function pageFeed(startId, home) {
     if (first === cur) { const m = cur.querySelector('video'); if (m) { m.currentTime = 0; m.play().catch(() => {}); } } else if (first) first.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   if (startId && !box.querySelector(`[data-id="${startId}"]`)) {
-    try { const { video } = await api('/videos/' + startId); if (box.querySelector('.empty')) box.innerHTML = ''; box.prepend(slide(video)); } catch {}
+    try { const video = startVideo || (await api('/videos/' + startId)).video; if (box.querySelector('.empty')) box.innerHTML = ''; box.prepend(slide(video)); } catch {}
   }
   if (startId) { const t = box.querySelector(`[data-id="${startId}"]`); if (t) { t.scrollIntoView(); setTimeout(() => t.scrollIntoView(), 250); } }
   { const t = startId ? box.querySelector(`[data-id="${startId}"]`) : box.querySelector('.slide[data-id]'); if (t) Hearts.watch(t.dataset.id, t); } // live hearts of the first video right away
