@@ -243,31 +243,41 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
   // ---------- receiving messages: long polling (the webhook route below stays for setups that still point at it) ----------
   const reply = (chatId, text) => call('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }).catch(() => {});
   const poll = (() => {
-    let running = false, wake = null;
-    // the lock value is "expiry:pid": a process renews its own lock or takes an expired one, so two processes never poll
-    // at once (Telegram would answer 409)
+    let running = false, wake = null, conflicts = 0;
+    // The lock value is "expiry:instance". The instance is a random id, not the process id: on the host, separate copies
+    // of the app can have the same process id, and then they all believed they held the lock and polled together
+    // (Telegram answered 409 "terminated by other getUpdates request").
+    const me = crypto.randomBytes(6).toString('hex');
     const take = () => {
       db.prepare("INSERT INTO settings (key, value) VALUES ('tg_poll_lock', '0:0') ON CONFLICT(key) DO NOTHING").run();
-      const until = String(Date.now() + 70_000) + ':' + process.pid;
-      return db.prepare("UPDATE settings SET value = ? WHERE key = 'tg_poll_lock' AND (CAST(substr(value, 1, instr(value || ':', ':') - 1) AS INTEGER) < ? OR value LIKE ?)").run(until, Date.now(), '%:' + process.pid).changes > 0;
+      const until = String(Date.now() + 70_000) + ':' + me;
+      return db.prepare("UPDATE settings SET value = ? WHERE key = 'tg_poll_lock' AND (CAST(substr(value, 1, instr(value || ':', ':') - 1) AS INTEGER) < ? OR value LIKE ?)").run(until, Date.now(), '%:' + me).changes > 0;
     };
     const sleep = (ms) => new Promise((r) => { wake = r; setTimeout(r, ms).unref(); });
     async function loop() {
       if (running) return; running = true;
       try {
         while (true) {
-          if (!enabled() || !take()) { await sleep(30_000); continue; }
+          if (!enabled() || !take()) { conflicts = 0; await sleep(30_000); continue; }
           try {
             const offset = Number(getConf('tg_offset')) || 0;
             const ups = await call('getUpdates', { offset, timeout: 25, allowed_updates: ['message', 'channel_post', 'my_chat_member'] }, undefined, null, 40_000);
+            conflicts = 0;
             setConf({ tg_last_poll: Date.now(), tg_poll_error: '' });
             for (const up of ups) {
               setConf({ tg_offset: up.update_id + 1 }); // move on first, so a broken update is never processed twice
               try { await handleUpdate(up); } catch (e) { console.error('[telegram] update:', e.message); }
             }
           } catch (e) {
-            // 409: a webhook is still set, or another copy of the bot is polling
-            if (e.code === 409) await call('deleteWebhook', { drop_pending_updates: false }).catch(() => {});
+            if (e.code === 409) {
+              // A single 409 is normal right after the lock moves to this copy (the previous one's request is still open
+              // for up to 25 s). Only when it keeps happening is something else reading this bot's messages.
+              conflicts++;
+              if (conflicts === 1) await call('deleteWebhook', { drop_pending_updates: false }).catch(() => {});
+              if (conflicts >= 4) setConf({ tg_poll_error: 'Có một phần mềm hoặc website khác đang dùng cùng bot này để nhận tin (Telegram chỉ cho một nơi nhận tin). Hãy gỡ token bot này khỏi nơi đó, hoặc tạo bot riêng cho xgaigu.', tg_last_poll: Date.now() });
+              await sleep(Math.min(120_000, 5_000 * conflicts));
+              continue;
+            }
             setConf({ tg_poll_error: e.message.slice(0, 200), tg_last_poll: Date.now() });
             await sleep(e.code === 401 ? 300_000 : 10_000);
           }
