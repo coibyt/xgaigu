@@ -442,7 +442,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
   // a short summary of the post: the description, then the key details shown on the video page
   function summary(v, owner, descLen) {
     let info = {}; try { info = JSON.parse(v.info || '{}') || {}; } catch {}
-    const where = [v.district, v.province].filter(Boolean).join(', ');
+    const where = [v.district, v.province, (v.country && v.country !== 'VN' ? (() => { try { return new Intl.DisplayNames(['vi'], { type: 'region' }).of(v.country); } catch { return v.country; } })() : '')].filter(Boolean).join(', ');
     const facts = [
       [info.birthYear && '🎂 ' + (new Date().getFullYear() - info.birthYear) + ' tuổi', info.height && '📏 ' + info.height + ' cm', info.weight && '⚖️ ' + info.weight + ' kg'].filter(Boolean).join(' · '),
       [info.origin && '🏡 Quê: ' + cut(info.origin, 40), info.occupation && '💼 ' + cut(info.occupation, 40)].filter(Boolean).join(' · '),

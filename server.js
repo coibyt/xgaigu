@@ -436,13 +436,13 @@ const geoCache = new Map();
 let geoChain = Promise.resolve();
 const geoLimiter = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false });
 app.get('/api/geocode', geoLimiter, (req, res) => {
-  const q = clean(req.query.q, 120);
+  const q = clean(req.query.q, 120), cc = COUNTRY_RE.test(String(req.query.country || '').toUpperCase()) ? String(req.query.country).toLowerCase() : 'vn';
   if (q.length < 3) return res.json({ suggestions: [] });
-  const key = q.toLowerCase();
+  const key = cc + '|' + q.toLowerCase();
   if (geoCache.has(key)) return res.json({ suggestions: geoCache.get(key) });
   geoChain = geoChain.then(async () => {
     try {
-      const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=vn&accept-language=vi&q=' + encodeURIComponent(q);
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=' + cc + '&accept-language=vi,en&q=' + encodeURIComponent(q);
       const r = await fetch(url, { headers: { 'User-Agent': 'xgaigu.com (contact: ' + (ADMIN_EMAIL || 'admin@xgaigu.com') + ')' }, signal: AbortSignal.timeout(8000) });
       const data = r.ok ? await r.json() : [];
       const out = data.map((x) => {
@@ -456,6 +456,39 @@ app.get('/api/geocode', geoLimiter, (req, res) => {
     } catch { res.json({ suggestions: [] }); }
     await new Promise((ok) => setTimeout(ok, 1100));
   });
+});
+
+// state / city suggestions for countries other than Việt Nam (Photon, the OpenStreetMap search made for typing)
+const placeCache = new Map();
+app.get('/api/place-suggest', geoLimiter, async (req, res) => {
+  const cc = String(req.query.country || '').toUpperCase(), kind = req.query.kind === 'city' ? 'city' : 'state';
+  const q = clean(req.query.q, 80), within = clean(req.query.within, 80);
+  if (!COUNTRY_RE.test(cc) || q.length < 2) return res.json({ suggestions: [] });
+  const key = [cc, kind, q.toLowerCase(), within.toLowerCase()].join('|');
+  if (placeCache.has(key)) return res.json({ suggestions: placeCache.get(key) });
+  try {
+    const layers = kind === 'state' ? ['state', 'city'] : ['city', 'district', 'county', 'locality']; // big cities (Bangkok, Singapore…) are their own province
+    const url = 'https://photon.komoot.io/api/?limit=50&lang=en&q=' + encodeURIComponent(q + (kind === 'city' && within ? ', ' + within : '')) + layers.map((l) => '&layer=' + l).join('');
+    const r = await fetch(url, { headers: { 'User-Agent': 'xgaigu.com' }, signal: AbortSignal.timeout(8000) });
+    const data = r.ok ? await r.json() : { features: [] };
+    const seen = new Set(), out = [];
+    for (const f of data.features || []) {
+      const p = f.properties || {};
+      if (String(p.countrycode || '').toUpperCase() !== cc || !p.name) continue;
+      if (!layers.includes(p.type) || (p.osm_key !== 'place' && p.osm_key !== 'boundary')) continue; // places only, not buildings, condos or shops
+      const state = kind === 'city' ? p.state || '' : '';
+      const lw = within.toLowerCase(), ls = state.toLowerCase();
+      if (kind === 'city' && lw && ls && !ls.includes(lw) && !lw.includes(ls)) continue; // 'Chon Buri' matches 'Chon Buri Province'
+      const k = (p.name + '|' + state).toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k); out.push({ name: p.name, state, rank: p.type === 'state' ? 0 : 1 });
+      if (out.length >= 8) break;
+    }
+    out.sort((a, b) => a.rank - b.rank); out.forEach((x) => delete x.rank);
+    if (placeCache.size > 2000) placeCache.delete(placeCache.keys().next().value);
+    placeCache.set(key, out);
+    res.json({ suggestions: out });
+  } catch { res.json({ suggestions: [] }); }
 });
 
 app.get('/api/users/:id', (req, res) => {
@@ -487,12 +520,19 @@ app.get('/api/users/:id/phone', needUser, (req, res) => {
 // ---------- videos ----------
 // Region → province → district list (served to the client as /data/vn-geo.json); used to validate what uploaders pick.
 const GEO = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'data', 'vn-geo.json'), 'utf8'));
+const COUNTRY_RE = /^[A-Z]{2}$/;
+const countryName = (() => { let dn = null; try { dn = new Intl.DisplayNames(['vi'], { type: 'region' }); } catch {} return (c) => { try { return (dn && dn.of(c)) || c; } catch { return c; } }; })();
 function readArea(b) {
+  const cc = String(b.country || '').toUpperCase();
+  if ((COUNTRY_RE.test(cc) && cc !== 'VN') || b.region === 'qt') {
+    const province = clean(b.province, 80);
+    return { region: province ? 'qt' : '', province, district: province ? clean(b.district, 80) : '', country: COUNTRY_RE.test(cc) ? cc : '' };
+  }
   const region = Object.keys(GEO).includes(b.region) ? b.region : '';
   const prov = region ? GEO[region].find((p) => p[0] === b.province) : null;
   const province = prov ? prov[0] : '';
   const district = prov && prov[1].includes(b.district) ? b.district : '';
-  return { region, province, district };
+  return { region, province, district, country: 'VN' };
 }
 
 // Details an uploader can attach to a video (all optional; phone is stored separately and only released to signed-in viewers).
@@ -535,7 +575,7 @@ function listVideos(viewer, { userId, before, limit = 12, id, ids, region, provi
     return {
       product: cards.get(r.product_id) || null,
       id: r.id, caption: r.caption, file: r.file, url: r.url, thumb: r.thumb || '', createdAt: r.created_at,
-      region: r.region || '', province: r.province || '', district: r.district || '', info,
+      region: r.region || '', province: r.province || '', district: r.district || '', country: r.country || 'VN', countryName: r.country && r.country !== 'VN' ? countryName(r.country) : '', info,
       hasPhone: !!(r.v_phone || (r.u_sp && r.u_phone)),
       // the real view count is for admins only; everybody else sees no view numbers at all
       ...(viewer && viewer.role === 'admin' ? { views: r.views || 0, heat: r.heat } : {}),
@@ -710,9 +750,9 @@ function userVideoWhere(uid, own, q) {
 // the areas a member has videos in (for the filter on their profile)
 app.get('/api/users/:id(\\d+)/areas', (req, res) => {
   const uid = Number(req.params.id);
-  const rows = db.prepare(`SELECT region, province, district, COUNT(*) AS n FROM videos WHERE user_id = ? AND hidden = 0 AND region <> '' AND province <> ''
-    GROUP BY region, province, district ORDER BY n DESC`).all(uid);
-  res.json({ areas: rows.map((r) => ({ region: r.region, province: r.province, district: r.district || '', count: r.n })) });
+  const rows = db.prepare(`SELECT region, province, district, COALESCE(country, 'VN') AS country, COUNT(*) AS n FROM videos WHERE user_id = ? AND hidden = 0 AND region <> '' AND province <> ''
+    GROUP BY region, province, district, COALESCE(country, 'VN') ORDER BY n DESC`).all(uid);
+  res.json({ areas: rows.map((r) => ({ region: r.region, province: r.province, district: r.district || '', country: r.country, countryName: r.country !== 'VN' ? countryName(r.country) : '', count: r.n })) });
 });
 // every id of a member's videos (in one area if asked), in the profile grid's order: used to play them one after another
 app.get('/api/users/:id(\\d+)/video-ids', (req, res) => {
@@ -723,7 +763,7 @@ app.get('/api/users/:id(\\d+)/video-ids', (req, res) => {
 // random videos of OTHER members in the same area (district, else province, else region), never repeating what was seen
 app.get('/api/area-random', (req, res) => {
   let area = readArea(req.query);
-  if (!area.region && req.query.from) { const v = db.prepare('SELECT region, province, district FROM videos WHERE id = ?').get(Number(req.query.from)); if (v) area = readArea(v); }
+  if (!area.region && req.query.from) { const v = db.prepare('SELECT region, province, district, country FROM videos WHERE id = ?').get(Number(req.query.from)); if (v) area = readArea(v); }
   const exclude = Number(req.query.exclude) || 0;
   const seen = String(req.query.seen || '').split(',').map(Number).filter((n) => n > 0).slice(-800);
   const seenList = ',' + seen.join(',') + ',';
@@ -786,7 +826,7 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
   if (file && !VIDEO_TYPES[file.mimetype]) { dropAll(); return fail(res, 400, 'Chỉ nhận video MP4/WebM/MOV'); }
   if (!file && !/^https:\/\/\S+$/.test(url)) { dropAll(); return fail(res, 400, 'Hãy chọn file video hoặc dán liên kết https'); }
   const area = readArea(req.body);
-  if (!area.region || !area.province) { dropAll(); return fail(res, 400, 'Vui lòng chọn khu vực (miền và tỉnh/thành) của video'); }
+  if (!area.region || !area.province) { dropAll(); return fail(res, 400, area.country && area.country !== 'VN' ? 'Vui lòng nhập tỉnh / bang / thành phố của video' : 'Vui lòng chọn khu vực (miền và tỉnh/thành) của video'); }
   if (file) url = '';
   const info = readInfo(req.body);
   const phone = clean(req.body.phone, 20).replace(/[^\d+]/g, '');
@@ -799,6 +839,7 @@ app.post('/api/videos', needUser, postLimiter, upload.fields([{ name: 'file', ma
     .run(req.user.id, caption, file ? '/uploads/' + file.filename : '', url, thumb ? '/uploads/' + thumb.filename : '',
       area.region, area.province, area.district, JSON.stringify(info), phone, nickname, place.lat, place.lng, hidden ? 1 : 0, hidden ? 'owner' : '', now());
   const newId = Number(r.lastInsertRowid);
+  db.prepare('UPDATE videos SET country = ? WHERE id = ?').run(area.country || 'VN', newId);
   if (productId) db.prepare('UPDATE videos SET product_id = ? WHERE id = ?').run(productId, newId);
   if (file && !thumb) thumbs.ensureThumb(newId).catch(() => {}); // a cover picked from the video itself
   if (file) setTimeout(() => transcode.enqueueNew('/uploads/' + file.filename, newId), 1500); // shrink for fast loading, in the background
@@ -1173,7 +1214,7 @@ const adminVideoRow = (id) => {
      FROM videos v JOIN users u ON u.id = v.user_id WHERE v.id = ?`).get(id);
   if (!r) return null;
   let info = {}; try { info = JSON.parse(r.info || '{}'); } catch {}
-  return { id: r.id, caption: r.caption, nickname: r.nickname, phone: r.v_phone, file: r.file, url: r.url, thumb: r.thumb, region: r.region, province: r.province, district: r.district,
+  return { id: r.id, caption: r.caption, nickname: r.nickname, phone: r.v_phone, file: r.file, url: r.url, thumb: r.thumb, region: r.region, province: r.province, district: r.district, country: r.country || 'VN',
     info, productId: r.product_id || null, views: r.views || 0, badge: r.badge || '', verified: !!r.verified, accountVerified: !!r.u_verified, likes: r.likes, comments: r.comments, created_at: r.created_at, status: r.locked ? 'banned' : r.hidden ? (r.hidden_by === 'owner' ? 'self' : 'hidden') : 'visible', note: r.mod_note || '',
     owner: { id: r.user_id, email: r.u_email, name: r.u_name } };
 };
@@ -1340,6 +1381,7 @@ const saveVideoEdit = (req, res, id) => {
     if (pid === false) return fail(res, 400, 'Sản phẩm gắn kèm không thuộc gian hàng của chủ video');
     db.prepare('UPDATE videos SET product_id = ? WHERE id = ?').run(pid, id);
   }
+  db.prepare('UPDATE videos SET country = ? WHERE id = ?').run(area.country || 'VN', id);
   db.prepare('UPDATE videos SET caption = ?, nickname = ?, v_phone = ?, region = ?, province = ?, district = ?, info = ? WHERE id = ?')
     .run(clean(req.body.caption, 300), clean(req.body.nickname, 40), clean(req.body.phone, 20).replace(/[^\d+]/g, ''), area.region, area.province, area.district, JSON.stringify(readInfo(req.body)), id);
   res.json({ ok: true, video: adminVideoRow(id) });

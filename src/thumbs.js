@@ -172,7 +172,7 @@ function create({ ffmpeg, db, uploadDir, log = console.log }) {
   function cardText(v, owner) {
     let info = {}; try { info = JSON.parse(v.info || '{}') || {}; } catch {}
     const name = clean(v.nickname || owner.name) || 'xgaigu';
-    const area = clean([v.district, v.province].filter(Boolean).join(' · ')) || 'xgaigu.com';
+    const area = clean([v.district, v.province, (v.country && v.country !== 'VN' ? (() => { try { return new Intl.DisplayNames(['vi'], { type: 'region' }).of(v.country); } catch { return v.country; } })() : '')].filter(Boolean).join(' · ')) || 'xgaigu.com';
     const facts = [info.birthYear && (new Date().getFullYear() - info.birthYear) + ' tuổi', info.height && info.height + ' cm', info.weight && info.weight + ' kg', info.origin && 'Quê ' + clean(info.origin)].filter(Boolean).join('  •  ');
     const caption = wrap(v.caption || 'Video mới trên xgaigu. Bấm vào để xem ngay và làm quen nhé!', 36, facts ? 3 : 4);
     return { name: name.length > 24 ? name.slice(0, 23) + '…' : name, area: area.length > 44 ? area.slice(0, 43) + '…' : area, facts, caption };

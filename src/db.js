@@ -305,6 +305,7 @@ for (const [col, ddl] of [
   ['thumb_try', 'thumb_try INTEGER DEFAULT 0'],
   ['opt_level', 'opt_level INTEGER DEFAULT 0'],
   ['opt_claim', 'opt_claim INTEGER DEFAULT 0'],
+  ['country', "country TEXT DEFAULT 'VN'"],
   ['mod_note', "mod_note TEXT DEFAULT ''"],
 ]) if (!videoCols.includes(col)) db.exec('ALTER TABLE videos ADD COLUMN ' + ddl);
 

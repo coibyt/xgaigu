@@ -651,3 +651,13 @@ main:focus,main:focus-visible{outline:none}
 .tk-n{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:rgba(255,255,255,.14);font-size:11.5px;font-weight:700}
 .chip.on .tk-n{background:rgba(0,0,0,.2)}
 .endcap small{display:block;margin-top:8px;font-size:14px;font-weight:500;opacity:.8}
+/* country + area of a video */
+.geo-wrap{display:grid;gap:10px}
+.geo-country{position:relative;display:block}
+.geo-country .geo-flag{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--muted);pointer-events:none}
+.geo-country .geo-flag svg{width:18px;height:18px}
+.geo-country select{padding-left:42px;font-weight:600}
+.geo-row[hidden],.geo-hint[hidden]{display:none}
+.geo-intl{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:760px){.geo-intl{grid-template-columns:1fr}}
+.geo-hint{margin-top:-4px}

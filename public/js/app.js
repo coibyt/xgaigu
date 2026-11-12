@@ -168,7 +168,7 @@ function placePicker(init = {}) {
   const input = h('input', { placeholder: 'Nhập địa chỉ hoặc khu vực, VD: Quận 1, TP.HCM', autocomplete: 'off', maxlength: 200, value: val.address || val.city, role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': 'false' });
   const list = h('ul', { class: 'suggest', role: 'listbox', hidden: true });
   const note = h('small', { class: 'muted' }, val.lat != null ? '✓ Đã chọn vị trí' : hint);
-  let t, seq = 0;
+  let t, seq = 0, country = 'VN'; // suggestions come from this country
   const hide = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); };
   const pick = (sg) => {
     val.address = sg.displayName; val.city = sg.city || sg.displayName.split(',')[0]; val.lat = sg.lat; val.lng = sg.lng;
@@ -181,7 +181,7 @@ function placePicker(init = {}) {
     const my = ++seq;
     t = setTimeout(async () => {
       try {
-        const { suggestions } = await api('/geocode?q=' + encodeURIComponent(input.value.trim()));
+        const { suggestions } = await api('/geocode?country=' + country + '&q=' + encodeURIComponent(input.value.trim()));
         if (my !== seq) return;
         list.innerHTML = '';
         if (!suggestions.length) list.append(h('li', { class: 'none' }, 'Không tìm thấy địa điểm phù hợp'));
@@ -191,7 +191,12 @@ function placePicker(init = {}) {
     }, 450);
   });
   input.addEventListener('blur', () => setTimeout(hide, 250));
-  return { el: h('div', { class: 'picker' }, input, list, note), get: () => ({ ...val }) };
+  const setCountry = (c) => {
+    if (c === country) return;
+    country = c;
+    input.placeholder = c === 'VN' ? 'Nhập địa chỉ hoặc khu vực, VD: Quận 1, TP.HCM' : 'Nhập địa chỉ ở ' + countryName(c) + ', VD: tên đường, thành phố';
+  };
+  return { el: h('div', { class: 'picker' }, input, list, note), get: () => ({ ...val }), setCountry };
 }
 
 // ---------- video calls (1-to-1, WebRTC; signaling goes through the server's SSE channel) ----------
@@ -993,7 +998,7 @@ function slide(v) {
     h('div', { class: 'player' }, media, attachLoader(media), h('div', { class: 'heart-layer', 'aria-hidden': 'true' }), mute,
       h('div', { class: 'meta' }, vflags(v),
         h('a', { class: 'who', href: '#/u/' + v.user.id }, avatar(v.user, 'md'), h('span', {}, v.user.name + (v.user.age ? ', ' + v.user.age : ''))),
-        (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province : v.user.city) }),
+        (v.province || v.user.city) && h('div', { class: 'loc', html: icon('pin') + esc(v.province ? (v.district ? v.district + ', ' : '') + v.province + (v.countryName ? ', ' + v.countryName : '') : v.user.city) }),
         v.product && window.XGShop && window.XGShop.videoCard(v),
         h('button', { class: 'infobtn', type: 'button', onclick: () => openInfo(v), html: icon('info') + 'Xem thông tin' }),
         v.caption && h('p', { class: 'cap', translate: 'no' }, v.caption))),
@@ -1269,21 +1274,21 @@ async function pageUser(id) {
   };
   // the member's videos, one numbered page at a time, optionally in one of their areas
   const userGrid = h('div', { class: 'tgrid' }), userPager = h('div', { class: 'pager' });
-  let area = { region: '', province: '', district: '' };
+  let area = { region: '', province: '', district: '', country: '' };
   const areaQ = () => new URLSearchParams(area).toString();
   const areaBar = h('div', { class: 'tk-areas' });
   api('/users/' + user.id + '/areas').then(({ areas }) => {
     if (!areas.length) return;
     // provinces as chips; a chosen province with several districts shows them below
     const provs = new Map();
-    for (const a of areas) { const k = a.region + '|' + a.province; if (!provs.has(k)) provs.set(k, { region: a.region, province: a.province, count: 0, districts: [] }); const p = provs.get(k); p.count += a.count; if (a.district) p.districts.push(a); }
+    for (const a of areas) { const k = a.region + '|' + a.province; if (!provs.has(k)) provs.set(k, { region: a.region, province: a.province, country: a.country, countryName: a.countryName, count: 0, districts: [] }); const p = provs.get(k); p.count += a.count; if (a.district) p.districts.push(a); }
     const list = [...provs.values()].sort((a, b) => b.count - a.count);
     const total = areas.reduce((n, a) => n + a.count, 0);
     const paint = () => {
       const chip = (label, n, on, pick) => h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), onclick: pick }, label, h('span', { class: 'tk-n' }, String(n)));
       const choose = (a) => { area = a; paint(); goUser(1); };
-      const row1 = h('div', { class: 'row chips-scroll tk-arow' }, chip('Tất cả khu vực', total, !area.province, () => choose({ region: '', province: '', district: '' })),
-        list.map((p) => chip(p.province, p.count, area.province === p.province && area.region === p.region, () => choose({ region: p.region, province: p.province, district: '' }))));
+      const row1 = h('div', { class: 'row chips-scroll tk-arow' }, chip('Tất cả khu vực', total, !area.province, () => choose({ region: '', province: '', district: '', country: '' })),
+        list.map((p) => chip(p.province + (p.countryName ? ' · ' + p.countryName : ''), p.count, area.province === p.province && area.region === p.region, () => choose({ region: p.region, province: p.province, district: '', country: p.country || 'VN' }))));
       const cur = list.find((p) => p.province === area.province && p.region === area.region);
       const row2 = cur && cur.districts.length > 1 ? h('div', { class: 'row chips-scroll tk-arow sub' }, chip('Cả ' + cur.province, cur.count, !area.district, () => choose({ ...area, district: '' })),
         cur.districts.map((d) => chip(d.district, d.count, area.district === d.district, () => choose({ ...area, district: d.district })))) : '';
@@ -1416,17 +1421,95 @@ const REGION_NAMES = { bac: 'Miền Bắc', trung: 'Miền Trung', nam: 'Miền 
 let geoData = null;
 async function loadGeo() { if (!geoData) geoData = await (await fetch('/data/vn-geo.json')).json(); return geoData; }
 
-function geoPicker(init = {}) {
+// every country (ISO 3166-1), named in Vietnamese by the browser; Việt Nam first
+const COUNTRY_CODES = ('AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ '
+  + 'DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ '
+  + 'LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW '
+  + 'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW').split(' ');
+let countryList = null;
+function countries() {
+  if (countryList) return countryList;
+  let dn = null; try { dn = new Intl.DisplayNames(['vi'], { type: 'region' }); } catch {}
+  const name = (c) => { try { return (dn && dn.of(c)) || c; } catch { return c; } };
+  const rest = COUNTRY_CODES.filter((c) => c !== 'VN').map((c) => [c, name(c)]).sort((a, b) => a[1].localeCompare(b[1], 'vi'));
+  return (countryList = [['VN', 'Việt Nam'], ...rest]);
+}
+const countryName = (c) => (countries().find((x) => x[0] === c) || [c, c])[1];
+
+// a text box with suggestions fetched while typing (states / cities of a country)
+function suggestBox({ placeholder, fetchList }) {
+  const input = h('input', { placeholder, autocomplete: 'off', maxlength: 80, role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': 'false' });
+  const list = h('ul', { class: 'suggest', role: 'listbox', hidden: true });
+  let t, seq = 0;
+  const hide = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); };
+  input.addEventListener('input', () => {
+    clearTimeout(t);
+    if (input.value.trim().length < 2) return hide();
+    const my = ++seq;
+    t = setTimeout(async () => {
+      try {
+        const items = await fetchList(input.value.trim());
+        if (my !== seq) return;
+        list.replaceChildren(...(items.length ? items.map((x) => h('li', { role: 'option', tabindex: '0', onclick: () => { input.value = x.value; hide(); input.dispatchEvent(new Event('change')); }, onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.click(); } } },
+          h('span', { html: icon('pin') }), h('span', {}, x.label))) : [h('li', { class: 'none' }, 'Không có gợi ý — bạn vẫn có thể gõ tên rồi tiếp tục')]));
+        list.hidden = false; input.setAttribute('aria-expanded', 'true');
+      } catch { hide(); }
+    }, 350);
+  });
+  input.addEventListener('blur', () => setTimeout(hide, 250));
+  return { el: h('div', { class: 'picker' }, input, list), input };
+}
+
+// area of a video: Việt Nam = region / province / district lists; with { countries: true } any other country can be
+// chosen, and then its state and city are typed with suggestions
+function geoPicker(init = {}, { countries: withCountry = false, onCountry } = {}) {
   const reg = h('select', { name: 'region', 'aria-label': 'Miền', disabled: true }, h('option', { value: '' }, 'Chọn miền'));
   const prov = h('select', { name: 'province', 'aria-label': 'Tỉnh / thành phố', disabled: true }, h('option', { value: '' }, 'Chọn tỉnh / thành phố'));
   const dist = h('select', { name: 'district', 'aria-label': 'Quận / huyện', disabled: true }, h('option', { value: '' }, 'Chọn quận / huyện (không bắt buộc)'));
   const fill = (sel, first, items) => { sel.replaceChildren(h('option', { value: '' }, first), ...items.map((x) => h('option', { value: x }, x))); sel.disabled = !items.length; };
-  loadGeo().then((geo) => {
+  const ready = loadGeo().then((geo) => {
     Object.keys(REGION_NAMES).forEach((k) => reg.append(h('option', { value: k }, REGION_NAMES[k]))); reg.disabled = false;
     reg.addEventListener('change', () => { fill(prov, 'Chọn tỉnh / thành phố', reg.value ? geo[reg.value].map((p) => p[0]) : []); fill(dist, 'Chọn quận / huyện (không bắt buộc)', []); });
     prov.addEventListener('change', () => { const p = reg.value && geo[reg.value].find((x) => x[0] === prov.value); fill(dist, 'Chọn quận / huyện (không bắt buộc)', p ? p[1] : []); });
   }).catch(() => toast('Không tải được danh sách khu vực', true));
-  return { el: h('div', { class: 'geo-row' }, reg, prov, dist) };
+  const vnRow = h('div', { class: 'geo-row' }, reg, prov, dist);
+  const setVN = (v) => ready.then(() => {
+    const fire = (el) => el.dispatchEvent(new Event('change'));
+    if (v.region && v.region !== 'qt') { reg.value = v.region; fire(reg); if (v.province) { prov.value = v.province; fire(prov); if (v.district) dist.value = v.district; } }
+  });
+  if (!withCountry) return { el: vnRow, set: setVN, country: () => 'VN' };
+
+  const cSel = h('select', { name: 'country', 'aria-label': 'Quốc gia' }, countries().map(([c, n]) => h('option', { value: c }, n)));
+  const suggest = async (kind, q) => {
+    const p = new URLSearchParams({ country: cSel.value, kind, q, within: kind === 'city' ? sProv.input.value.trim() : '' });
+    const { suggestions } = await api('/place-suggest?' + p);
+    return suggestions.map((x) => ({ value: x.name, label: x.state && x.state !== x.name ? x.name + ', ' + x.state : x.name }));
+  };
+  const sProv = suggestBox({ placeholder: 'Tỉnh / bang / thành phố *', fetchList: (q) => suggest('state', q) });
+  const sDist = suggestBox({ placeholder: 'Quận / huyện / thành phố (không bắt buộc)', fetchList: (q) => suggest('city', q) });
+  const intlRow = h('div', { class: 'geo-row geo-intl', hidden: true }, sProv.el, sDist.el);
+  const hint = h('small', { class: 'muted geo-hint', hidden: true }, 'Gõ vài chữ đầu để chọn gợi ý tỉnh / thành phố của nước này.');
+  // only the fields that are showing are sent with the form
+  const sync = () => {
+    const vn = cSel.value === 'VN';
+    vnRow.hidden = !vn; intlRow.hidden = vn; hint.hidden = vn;
+    [[reg, 'region'], [prov, 'province'], [dist, 'district']].forEach(([el, n]) => (vn ? el.setAttribute('name', n) : el.removeAttribute('name')));
+    if (vn) { sProv.input.removeAttribute('name'); sDist.input.removeAttribute('name'); } else { sProv.input.setAttribute('name', 'province'); sDist.input.setAttribute('name', 'district'); }
+    if (onCountry) onCountry(cSel.value);
+  };
+  cSel.addEventListener('change', () => { sProv.input.value = ''; sDist.input.value = ''; sync(); });
+  sProv.input.addEventListener('change', () => { sDist.input.value = ''; });
+  sync();
+  return {
+    el: h('div', { class: 'geo-wrap' }, h('label', { class: 'geo-country' }, h('span', { class: 'geo-flag', html: icon('globe') }), cSel), vnRow, intlRow, hint),
+    country: () => cSel.value,
+    set(v) {
+      const cc = v.country && v.country !== 'VN' ? v.country : 'VN';
+      cSel.value = cc; sync();
+      if (cc === 'VN') return setVN(v);
+      sProv.input.value = v.province || ''; sDist.input.value = v.district || '';
+    },
+  };
 }
 
 // "Sở thích": one line with "Xem thêm"; tap to read all of it (it can be very long)
@@ -1458,8 +1541,9 @@ function openInfo(v) {
   const enc = encodeURIComponent, go = () => { m && m.close(); };
   const areaLink = (label, href) => h('a', { class: 'area-link', href, onclick: go }, label);
   const areaParts = [];
-  if (v.region && v.province && v.district) areaParts.push(areaLink(v.district, `#/regions/${v.region}/${enc(v.province)}/${enc(v.district)}`));
-  if (v.region && v.province) areaParts.push(areaLink(v.province, `#/regions/${v.region}/${enc(v.province)}`));
+  if (v.region === 'qt') areaParts.push(h('span', {}, [v.district, v.province, v.countryName].filter(Boolean).join(', ')));
+  if (v.region !== 'qt' && v.region && v.province && v.district) areaParts.push(areaLink(v.district, `#/regions/${v.region}/${enc(v.province)}/${enc(v.district)}`));
+  if (v.region !== 'qt' && v.region && v.province) areaParts.push(areaLink(v.province, `#/regions/${v.region}/${enc(v.province)}`));
   if (v.region && REGION_NAMES[v.region]) areaParts.push(areaLink(REGION_NAMES[v.region], '#/regions/' + v.region));
   const areaNode = areaParts.length ? h('span', {}, areaParts.flatMap((a, k) => (k ? [', ', a] : [a]))) : '';
   const rows = [
@@ -1653,7 +1737,7 @@ async function pageUpload() {
   let previewUrl = null;
   const me = S.user;
   const addrPicker = placePicker({ address: me.address, city: me.city, lat: me.hasLocation ? 0 : null });
-  const geoSel = geoPicker({ region: '', province: '', district: '' });
+  const geoSel = geoPicker({}, { countries: true, onCountry: (c) => addrPicker.setCountry(c) });
   const geoBox = h('div', { class: 'f', id: 'geo-box' },
     h('span', { style: 'display:block;margin-bottom:6px;color:#d9cce6;font-size:14px;font-weight:600' }, 'Video thuộc khu vực nào? *'), geoSel.el);
   const nickBox = h('label', { class: 'f' }, h('span', {}, 'Biệt danh hiển thị trên video'),
@@ -1893,7 +1977,7 @@ async function adminVideoDialog(id, onChange, own = false) {
   badgeSel.addEventListener('change', async () => { try { v = (await api('/admin/videos/' + v.id + '/badge', { method: 'POST', body: { badge: badgeSel.value } })).video; toast('Đã cập nhật huy hiệu'); onChange && onChange(); } catch (e) { fail(e); } });
   const verChk = h('input', { type: 'checkbox', checked: !!v.verified });
   verChk.addEventListener('change', async () => { try { v = (await api('/admin/videos/' + v.id + '/verified', { method: 'POST', body: { verified: verChk.checked } })).video; toast(v.verified ? 'Đã gắn huy hiệu ĐÃ XÁC MINH' : 'Đã gỡ huy hiệu xác minh'); onChange && onChange(); } catch (e) { verChk.checked = !verChk.checked; fail(e); } });
-  const geo = geoPicker();
+  const geo = geoPicker({}, { countries: true });
   const input = (name, label, val, attrs = {}) => h('label', { class: 'f' }, h('span', {}, label), h('input', { name, value: val == null ? '' : val, ...attrs }));
   const i = v.info || {};
   const f = h('form', {},
@@ -1930,12 +2014,7 @@ async function adminVideoDialog(id, onChange, own = false) {
       h('button', { class: 'btn sm live', type: 'button', onclick: () => setStatus('banned') }, 'Cấm xuất bản'),
       h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!confirm('XOÁ vĩnh viễn video này? Không thể khôi phục.')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); toast('Đã xoá video'); m.close(); onChange && onChange(); } catch (e) { fail(e); } } }, 'Xoá')),
     own ? null : h('label', { class: 'check verify-tick' }, verChk, h('span', {}, h('b', {}, 'Đã xác minh'), ' – hiện huy hiệu xác minh nổi bật trên video này (chỉ admin được chọn)' + (v.accountVerified ? '. Lưu ý: tài khoản chủ video đã được xác minh nên mọi video của họ đều có huy hiệu.' : ''))), own ? null : h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), own ? null : note, h('div', { style: 'height:12px' }), f), { wide: true });
-  // fill the area selects once the region list has loaded
-  loadGeo().then((g) => {
-    const [reg, prov, dist] = geo.el.querySelectorAll('select');
-    const fire = (el) => el.dispatchEvent(new Event('change'));
-    if (v.region) { reg.value = v.region; fire(reg); if (v.province) { prov.value = v.province; fire(prov); if (v.district) dist.value = v.district; } }
-  }).catch(() => {});
+  geo.set(v); // fills the country and area once the lists have loaded
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(f));
