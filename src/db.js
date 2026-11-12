@@ -173,6 +173,7 @@ CREATE TABLE IF NOT EXISTS tg_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_tg_queue_user ON tg_queue(user_id, status);
 CREATE TABLE IF NOT EXISTS tg_daily (target_id INTEGER NOT NULL, day TEXT NOT NULL, sent INTEGER DEFAULT 0, PRIMARY KEY (target_id, day));
+CREATE TABLE IF NOT EXISTS tg_ar_seen (chat_id TEXT NOT NULL, user_id TEXT NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (chat_id, user_id, kind));
 CREATE TABLE IF NOT EXISTS live_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   stream_id INTEGER NOT NULL, user_id INTEGER NOT NULL, kind TEXT NOT NULL,

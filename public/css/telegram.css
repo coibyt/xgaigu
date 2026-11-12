@@ -74,3 +74,14 @@
   .tg-gact .btn{flex:1}
 }
 .tg-limit{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 18px;margin-top:12px}
+/* admin: automatic replies */
+.tg-ar{padding:18px;margin-top:12px;display:grid;gap:12px;--tg:#2aabee}
+.tg-ar textarea{width:100%;resize:vertical}
+.tg-chk{width:18px!important;height:18px;min-height:0!important;padding:0!important;accent-color:#2aabee;flex:none}
+.tg-ar-note{font-size:13px;margin-top:-6px}
+.tg-rules{display:grid;gap:10px;margin-bottom:10px}
+.tg-rule{display:flex;gap:8px;align-items:flex-start;padding:10px;border-radius:14px;background:var(--surface2);border:1px solid var(--line)}
+.tg-rule-f{flex:1;display:grid;gap:8px;min-width:0}
+.tg-ar-try{border-top:1px solid var(--line);padding-top:14px;margin:4px 0 0}
+.tg-ar-out{margin-top:10px;padding:12px 14px;border-radius:14px;background:rgba(42,171,238,.1);border:1px solid rgba(42,171,238,.3);white-space:pre-wrap}
+.tg-ar-out p{margin-top:4px}

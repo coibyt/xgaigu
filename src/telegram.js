@@ -292,11 +292,14 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
     const msg = up.message || up.channel_post;
     if (!msg || typeof msg.text !== 'string') return;
     const text = msg.text.trim();
-    if (/^\/start\b/.test(text) && msg.chat.type === 'private') {
-      return reply(msg.chat.id, `Xin chào! Để tự động đăng video từ xgaigu vào nhóm của bạn:\n1. Vào ${esc(base())}/#/me → “Tự động đăng lên Telegram” và lấy mã.\n2. Thêm @${esc(getConf('tg_bot_username'))} vào nhóm (hoặc làm quản trị viên kênh).\n3. Gửi <code>/connect MÃ</code> trong nhóm/kênh đó.`);
-    }
+    const howTo = `Để tự động đăng video từ xgaigu vào nhóm của bạn:\n1. Vào ${esc(base())}/#/me → “Tự động đăng lên Telegram” và lấy mã.\n2. Thêm @${esc(getConf('tg_bot_username'))} vào nhóm (hoặc làm quản trị viên kênh).\n3. Gửi <code>/connect MÃ</code> trong nhóm/kênh đó.`;
+    if (/^\/(ketnoi|huongdan)\b/i.test(text) || /^\/connect\s*$/i.test(text)) return reply(msg.chat.id, howTo);
     const m = /^\/connect(?:@[A-Za-z0-9_]+)?\s+(XG-[A-Z0-9]{6})\b/i.exec(text);
-    if (!m) return;
+    if (!m) {
+      if (await autoReply(msg, text)) return;
+      if (/^\/start\b/.test(text) && msg.chat.type === 'private') return reply(msg.chat.id, 'Xin chào! ' + howTo);
+      return;
+    }
     if (msg.chat.type === 'private') return reply(msg.chat.id, 'Hãy gửi lệnh /connect trong nhóm hoặc kênh muốn nhận video, không phải trong tin nhắn riêng.');
     const code = db.prepare('SELECT * FROM tg_codes WHERE code = ? AND expires_at > ?').get(m[1].toUpperCase(), now());
     if (!code) return reply(msg.chat.id, '❌ Mã kết nối không đúng hoặc đã hết hạn. Hãy lấy mã mới trên trang Tài khoản.');
@@ -307,8 +310,82 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
     return reply(msg.chat.id, `✅ Đã kết nối nhóm này với tài khoản <b>${esc(u.name)}</b> trên xgaigu. Video mới sẽ được tự động đăng vào đây.`);
   }
 
+  // ---------- automatic replies to customers (texts set by the admin) ----------
+  // Private chats: a welcome on /start, keyword rules, and a default reply (at most once per person every few hours).
+  // Groups (optional): only keyword rules, and only for messages the bot can see — by default Telegram shows a bot just
+  // commands, mentions and replies to it, unless its privacy mode is turned off in @BotFather.
+  const AR_DEFAULT = { enabled: false, welcome: '', fallback: '', fallbackHours: 6, groups: false, rules: [], buttonText: '', buttonUrl: '' };
+  const arConf = () => { let s = {}; try { s = JSON.parse(getConf('tg_autoreply') || '{}') || {}; } catch {} return { ...AR_DEFAULT, ...s }; };
+  const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
+  function readAutoReply(b) {
+    const txt = (v, n) => String(v || '').replace(/\r/g, '').slice(0, n).trim();
+    const rules = (Array.isArray(b.rules) ? b.rules : []).map((r) => ({ keys: txt(r.keys, 300), reply: txt(r.reply, 2000) })).filter((r) => r.keys && r.reply).slice(0, 30);
+    const url = txt(b.buttonUrl, 300);
+    return {
+      enabled: !!b.enabled, welcome: txt(b.welcome, 2000), fallback: txt(b.fallback, 2000),
+      fallbackHours: Math.min(168, Math.max(0, Math.round(Number(b.fallbackHours) || 0))), groups: !!b.groups, rules,
+      buttonText: url ? txt(b.buttonText, 40) || 'Vào xgaigu' : '', buttonUrl: /^https:\/\/\S+$/.test(url) ? url : '',
+    };
+  }
+  // which reply a message gets: { kind, text } or null
+  function pickReply(c, text, isPrivate) {
+    const t = fold(text);
+    if (isPrivate && /^\/start\b/.test(t)) return c.welcome ? { kind: 'welcome', text: c.welcome } : null;
+    for (const [i, r] of c.rules.entries()) {
+      const keys = r.keys.split(/[,;\n]/).map(fold).filter(Boolean);
+      if (keys.some((k) => t.includes(k))) return { kind: 'rule' + i, text: r.reply };
+    }
+    return isPrivate && c.fallback ? { kind: 'fallback', text: c.fallback } : null;
+  }
+  const fill = (s, from) => esc(s).replace(/\{ten\}/gi, esc((from && (from.first_name || from.username)) || 'bạn')).replace(/\{website\}/gi, esc(base() || 'xgaigu.com'));
+  async function autoReply(msg, text) {
+    const c = arConf();
+    if (!c.enabled || !msg.chat || msg.chat.type === 'channel' || (msg.from && msg.from.is_bot)) return false;
+    const isPrivate = msg.chat.type === 'private';
+    if (!isPrivate && !c.groups) return false;
+    const r = pickReply(c, text, isPrivate);
+    if (!r) return false;
+    // no flooding: the default reply once per person per N hours, the same keyword reply once per person per 2 minutes,
+    // and nothing faster than one reply every 3 seconds per person
+    const who = String(msg.from ? msg.from.id : msg.chat.id), chat = String(msg.chat.id);
+    // times are those of the messages, so a backlog read after a restart is judged as the customer sent it
+    const at = msg.date ? msg.date * 1000 : Date.now();
+    const last = (kind) => (db.prepare('SELECT at FROM tg_ar_seen WHERE chat_id = ? AND user_id = ? AND kind = ?').get(chat, who, kind) || {}).at || 0;
+    if (at - last('any') < 3000) return true;
+    if (r.kind === 'fallback' && at - last('fallback') < c.fallbackHours * 3600_000) return true;
+    if (r.kind.startsWith('rule') && at - last(r.kind) < 120_000) return true;
+    if (Date.now() - at > 24 * 3600_000) return true; // too old to answer
+    const mark = (kind) => db.prepare('INSERT INTO tg_ar_seen (chat_id, user_id, kind, at) VALUES (?,?,?,?) ON CONFLICT(chat_id, user_id, kind) DO UPDATE SET at = excluded.at').run(chat, who, kind, at);
+    mark('any'); mark(r.kind);
+    const params = { chat_id: msg.chat.id, text: fill(r.text, msg.from), parse_mode: 'HTML', disable_web_page_preview: false };
+    if (!isPrivate) params.reply_parameters = { message_id: msg.message_id, allow_sending_without_reply: true };
+    if (c.buttonUrl) params.reply_markup = { inline_keyboard: [[{ text: c.buttonText, url: c.buttonUrl }]] };
+    try {
+      await call('sendMessage', params);
+      const day = nowParts().day; let st = {}; try { st = JSON.parse(getConf('tg_ar_stats') || '{}'); } catch {}
+      setConf({ tg_ar_stats: JSON.stringify(st.day === day ? { day, n: st.n + 1, total: (st.total || 0) + 1 } : { day, n: 1, total: (st.total || 0) + 1 }) });
+    } catch (e) { console.error('[telegram] auto reply:', e.message); }
+    return true;
+  }
+  app.get('/api/admin/telegram-autoreply', needAdmin, (_req, res) => {
+    let st = {}; try { st = JSON.parse(getConf('tg_ar_stats') || '{}'); } catch {}
+    res.json({ autoreply: arConf(), today: st.day === nowParts().day ? st.n : 0, total: st.total || 0, bot: getConf('tg_bot_username') });
+  });
+  app.put('/api/admin/telegram-autoreply', needAdmin, (req, res) => {
+    const c = readAutoReply(req.body || {});
+    if (c.enabled && !c.welcome && !c.fallback && !c.rules.length) return fail(res, 400, 'Hãy nhập ít nhất lời chào, câu trả lời mặc định hoặc một quy tắc từ khoá');
+    setConf({ tg_autoreply: JSON.stringify(c) });
+    res.json({ ok: true, autoreply: c });
+  });
+  // "what would the bot answer?" for the admin page (uses the settings sent, saved or not)
+  app.post('/api/admin/telegram-autoreply/test', needAdmin, (req, res) => {
+    const c = readAutoReply(req.body.autoreply || {}), text = String(req.body.text || '').slice(0, 500);
+    const r = pickReply(c, text, req.body.where !== 'group');
+    res.json({ reply: r ? fill(r.text, { first_name: 'Lan' }).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&') : null, kind: r ? r.kind : null });
+  });
+
   // ---------- queue: limits, schedules, distribution ----------
-  const getPrefs = (uid) => ({ ...DEFAULT_PREFS, ...(db.prepare('SELECT * FROM tg_prefs WHERE user_id = ?').get(uid) || {}), user_id: uid });
+  const getPrefs =(uid) => ({ ...DEFAULT_PREFS, ...(db.prepare('SELECT * FROM tg_prefs WHERE user_id = ?').get(uid) || {}), user_id: uid });
 
   // put a video in the queue for the owner's groups; returns how many rows were added
   function enqueue(v, manual = false) {

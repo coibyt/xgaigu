@@ -147,7 +147,63 @@ function accountCard() {
 function adminBox() {
   const body = h('div');
   const box = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Bot Telegram tự đăng video'),
-    h('p', { class: 'muted', style: 'margin-bottom:14px' }, 'Thành viên được cho phép (cột “Gửi Telegram” trong danh sách thành viên) sẽ kết nối nhóm của họ với bot này; mọi video của họ (có sẵn và đăng mới) tự vào hàng chờ và được gửi vào nhóm.'), body, limitForm());
+    h('p', { class: 'muted', style: 'margin-bottom:14px' }, 'Thành viên được cho phép (cột “Gửi Telegram” trong danh sách thành viên) sẽ kết nối nhóm của họ với bot này; mọi video của họ (có sẵn và đăng mới) tự vào hàng chờ và được gửi vào nhóm.'), body, limitForm(), autoReplyCard());
+  // automatic replies to customers who write to the bot
+  function autoReplyCard() {
+    const card = h('div', { class: 'card tg-ar' });
+    api('/admin/telegram-autoreply').then((d) => {
+      const c = d.autoreply;
+      const chk = (v) => h('input', { type: 'checkbox', checked: !!v, class: 'tg-chk' });
+      const area = (v, ph, rows = 3) => { const t = h('textarea', { rows, maxlength: 2000, placeholder: ph }); t.value = v || ''; return t; };
+      const enabled = chk(c.enabled), groups = chk(c.groups);
+      const welcome = area(c.welcome, 'VD: Chào {ten} 👋 Cảm ơn bạn đã nhắn cho xgaigu! Xem video mới nhất tại {website}');
+      const fallback = area(c.fallback, 'VD: Cảm ơn {ten} đã nhắn tin. Admin sẽ trả lời bạn sớm nhất. Trong lúc chờ, mời bạn xem video tại {website}');
+      const hours = h('input', { type: 'number', min: 0, max: 168, value: c.fallbackHours, class: 'tg-num' });
+      const bText = h('input', { maxlength: 40, placeholder: 'Chữ trên nút, VD: Xem video ngay', value: c.buttonText || '', style: 'flex:1;min-width:160px' });
+      const bUrl = h('input', { maxlength: 300, placeholder: 'https://xgaigu.com', value: c.buttonUrl || '', style: 'flex:2;min-width:200px' });
+      const rulesBox = h('div', { class: 'tg-rules' });
+      const ruleRow = (r = { keys: '', reply: '' }) => {
+        const keys = h('input', { maxlength: 300, placeholder: 'Từ khoá, cách nhau bằng dấu phẩy. VD: giá, bao nhiêu, phí', value: r.keys });
+        const rep = area(r.reply, 'Câu trả lời khi tin nhắn có một trong các từ khoá trên', 2);
+        const row = h('div', { class: 'tg-rule' }, h('div', { class: 'tg-rule-f' }, keys, rep),
+          h('button', { type: 'button', class: 'iconbtn', 'aria-label': 'Xoá quy tắc', title: 'Xoá quy tắc', onclick: () => row.remove() }, '×'));
+        row.read = () => ({ keys: keys.value, reply: rep.value });
+        return row;
+      };
+      (c.rules.length ? c.rules : [{ keys: '', reply: '' }]).forEach((r) => rulesBox.append(ruleRow(r)));
+      const addRule = h('button', { type: 'button', class: 'btn sm', onclick: () => rulesBox.append(ruleRow()) }, '+ Thêm quy tắc từ khoá');
+      const read = () => ({ enabled: enabled.checked, groups: groups.checked, welcome: welcome.value, fallback: fallback.value, fallbackHours: hours.value,
+        buttonText: bText.value, buttonUrl: bUrl.value, rules: [...rulesBox.children].map((r) => r.read()) });
+      const save = h('button', { type: 'button', class: 'btn primary' }, 'Lưu tự động trả lời');
+      save.addEventListener('click', async () => { save.disabled = true; try { await api('/admin/telegram-autoreply', { method: 'PUT', body: read() }); toast(enabled.checked ? 'Đã bật tự động trả lời' : 'Đã lưu (đang tắt tự động trả lời)'); } catch (e) { fail(e); } finally { save.disabled = false; } });
+      // try a message
+      const tIn = h('input', { placeholder: 'Gõ thử một tin nhắn của khách, VD: cho mình hỏi giá', style: 'flex:1;min-width:200px' });
+      const tWhere = h('select', { style: 'width:auto' }, h('option', { value: 'private' }, 'Nhắn riêng'), h('option', { value: 'group' }, 'Trong nhóm'));
+      const tOut = h('div', { class: 'tg-ar-out', hidden: true });
+      const tryIt = async () => {
+        try {
+          const r = await api('/admin/telegram-autoreply/test', { method: 'POST', body: { autoreply: { ...read(), enabled: true }, text: tIn.value, where: tWhere.value } });
+          tOut.hidden = false;
+          tOut.replaceChildren(r.reply ? h('div', {}, h('small', { class: 'muted' }, { welcome: 'Lời chào', fallback: 'Trả lời mặc định' }[r.kind] || 'Quy tắc từ khoá #' + (Number(String(r.kind).slice(4)) + 1)), h('p', {}, r.reply)) : h('p', { class: 'muted' }, 'Bot sẽ không trả lời tin nhắn này.'));
+        } catch (e) { fail(e); }
+      };
+      tIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); tryIt(); } });
+      card.replaceChildren(
+        h('div', { class: 'tg-btitle' }, h('h3', { style: 'font-size:17px' }, '💬 Tự động trả lời khách'), h('small', { class: 'muted' }, 'Hôm nay đã trả lời ' + d.today + ' tin · tổng ' + d.total)),
+        h('label', { class: 'tg-inline' }, enabled, h('b', {}, 'Bật tự động trả lời')),
+        h('p', { class: 'muted tg-ar-note' }, 'Khách nhắn riêng cho bot' + (d.bot ? ' @' + d.bot : '') + ' sẽ được trả lời tự động. Dùng {ten} để chèn tên khách, {website} để chèn địa chỉ website.'),
+        h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Lời chào (khi khách bấm Start / bắt đầu chat với bot)'), welcome),
+        h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Trả lời theo từ khoá'), h('small', { class: 'muted', style: 'display:block;margin:-4px 0 8px' }, 'Tin nhắn có từ khoá nào thì gửi câu trả lời đó (không phân biệt hoa thường, có dấu hay không dấu). Quy tắc ở trên được ưu tiên.'), rulesBox, addRule),
+        h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Trả lời mặc định (tin nhắn không khớp từ khoá nào)'), fallback,
+          h('label', { class: 'tg-inline', style: 'margin-top:8px;font-size:14px' }, 'Mỗi khách nhận câu này tối đa 1 lần trong ', hours, ' giờ')),
+        h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Nút bấm dưới mỗi câu trả lời (không bắt buộc)'), h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, bText, bUrl)),
+        h('label', { class: 'tg-inline', style: 'font-size:14px' }, groups, 'Trả lời cả trong nhóm khi tin nhắn khớp từ khoá'),
+        h('small', { class: 'muted', style: 'display:block;margin:-6px 0 4px' }, 'Trong nhóm, Telegram chỉ cho bot thấy tin nhắc tới bot hoặc trả lời bot. Muốn bot đọc mọi tin trong nhóm: vào @BotFather → /setprivacy → chọn bot → Disable.'),
+        h('div', {}, save),
+        h('div', { class: 'tg-field tg-ar-try' }, h('div', { class: 'tg-label' }, 'Thử trước'), h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, tIn, tWhere, h('button', { type: 'button', class: 'btn sm', onclick: tryIt }, 'Thử')), tOut));
+    }).catch(() => card.remove());
+    return card;
+  }
   // how many groups each account may link
   function limitForm() {
     const inp = h('input', { type: 'number', min: 1, max: 500, class: 'tg-num', 'aria-label': 'Số nhóm tối đa mỗi tài khoản' });
