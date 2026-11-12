@@ -111,3 +111,7 @@
 .tg-vbar i{position:absolute;left:0;top:4px;bottom:4px;border-radius:6px;background:rgba(56,189,248,.18)}
 .tg-vbar .tg-n{position:relative}
 @media (max-width:480px){.tg-trow{grid-template-columns:minmax(0,1fr) 60px 36px 70px;gap:6px;font-size:13px;padding:8px 6px}.tg-tile b{font-size:22px}}
+
+.tg-gact .tg-now{background:linear-gradient(135deg,#2aabee,#1d8fd1);border-color:transparent;color:#fff}
+.tg-gact .tg-now:hover{filter:brightness(1.08)}
+.tg-sendnow .tg-pick{margin-top:4px}

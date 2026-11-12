@@ -62,6 +62,7 @@ function accountCard() {
             h('span', { class: 'tg-bar' }, h('i', { style: 'width:' + Math.min(100, sent / limit * 100) + '%' }))),
           t.lastError ? h('small', { class: 'tg-err' }, '⚠ ' + t.lastError) : ''),
         h('div', { class: 'tg-gact' },
+          h('button', { type: 'button', class: 'btn sm tg-now', onclick: () => sendNow(t) }, '🚀 Gửi ngay'),
           h('button', { type: 'button', class: 'btn sm', onclick: () => act(() => api('/me/telegram/targets/' + t.id + '/test', { method: 'POST' }), 'Đã gửi tin thử vào ' + t.title) }, 'Gửi thử'),
           h('button', { type: 'button', class: 'btn sm', onclick: () => act(() => api('/me/telegram/targets/' + t.id + '/active', { method: 'POST', body: { active: !t.active } }), t.active ? 'Đã tạm dừng ' + t.title : 'Đã bật lại ' + t.title) }, t.active ? 'Tạm dừng' : 'Bật lại'),
           h('button', { type: 'button', class: 'btn sm ghost', onclick: () => { if (confirm('Gỡ kết nối nhóm ' + t.title + '? Các bài đang chờ gửi vào nhóm này sẽ bị huỷ.')) act(() => api('/me/telegram/targets/' + t.id, { method: 'DELETE' }), 'Đã gỡ ' + t.title); } }, 'Gỡ')));
@@ -150,6 +151,28 @@ function accountCard() {
         h('div', { class: 'tg-list' }, d.recent.map((q) => h('div', { class: 'tg-item' }, h('span', { class: 'tg-pill ' + (STATUS[q.status] || ['', ''])[1] }, (STATUS[q.status] || [q.status])[0]),
           h('div', {}, h('a', { href: '/v/' + q.videoId, target: '_blank' }, short(q.caption)), h('small', { class: 'muted' }, '→ ' + q.target + (q.sentAt ? ' · ' + new Date(q.sentAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '')),
             q.status === 'failed' && q.error ? h('small', { class: 'tg-err' }, q.error) : ''))))) : '');
+  }
+  // send right now to one group: the next video waiting for it, or a chosen one
+  async function sendNow(t) {
+    let d; try { d = await api('/me/telegram/videos?target=' + t.id); } catch (e) { return fail(e); }
+    let picked = 0;
+    const send = async (btn, videoId) => {
+      btn.disabled = true; const old = btn.textContent; btn.textContent = 'Đang gửi…';
+      try { const r = await api('/me/telegram/targets/' + t.id + '/send', { method: 'POST', body: videoId ? { videoId } : {} }); toast('Đã gửi vào ' + t.title + ': ' + short(r.caption, 40)); m.close(); load(); }
+      catch (e) { fail(e); btn.disabled = false; btn.textContent = old; }
+    };
+    const nextBtn = h('button', { type: 'button', class: 'btn primary', style: 'width:100%', disabled: !d.waiting }, d.waiting ? '⚡ Gửi bài kế tiếp trong hàng chờ' : 'Hàng chờ của nhóm này đang trống');
+    nextBtn.addEventListener('click', () => send(nextBtn, 0));
+    const go = h('button', { type: 'button', class: 'btn', style: 'width:100%', disabled: true }, 'Chọn một video ở trên');
+    go.addEventListener('click', () => send(go, picked));
+    const TAG = { sent: 'đã gửi nhóm này', pending: 'đang chờ', failed: 'lần trước bị lỗi', skipped: '', cancelled: '' };
+    const nm = 'tgsn' + t.id;
+    const list = d.videos.length ? h('div', { class: 'tg-pick' }, d.videos.map((v) => h('label', { class: 'tg-item' },
+      h('input', { type: 'radio', name: nm, onchange: () => { picked = v.id; go.disabled = false; go.textContent = '🚀 Gửi video này ngay'; } }), thumbOf(v.thumb),
+      h('div', {}, h('span', {}, short(v.caption, 60)), h('small', { class: 'muted' }, new Date(v.createdAt).toLocaleDateString('vi-VN') + (TAG[v.here] ? ' · ' + TAG[v.here] : '')))))) : h('p', { class: 'muted' }, 'Bạn chưa có video công khai nào.');
+    const m = modal(h('div', { class: 'tg-sendnow' }, h('h3', { style: 'margin-bottom:4px' }, '🚀 Gửi ngay vào ' + t.title),
+      h('p', { class: 'muted', style: 'margin-bottom:12px;font-size:14px' }, 'Gửi luôn vào riêng nhóm này, không cần chờ giờ hẹn. ' + (d.waiting ? 'Nhóm đang có ' + d.waiting + ' bài chờ gửi.' : '')),
+      nextBtn, h('div', { class: 'tg-or' }, h('span', {}, 'hoặc chọn video')), list, go));
   }
   async function pickVideos() {
     let d; try { d = await api('/me/telegram/videos'); } catch (e) { return fail(e); }

@@ -226,6 +226,30 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
     try { await sendTest(t, userRow(req.user.id)); db.prepare("UPDATE tg_targets SET last_error = '' WHERE id = ?").run(t.id); res.json({ ok: true }); }
     catch (e) { db.prepare('UPDATE tg_targets SET last_error = ? WHERE id = ?').run(e.message.slice(0, 250), t.id); fail(res, 400, 'Không gửi được: ' + e.message); }
   });
+  app.post('/api/me/telegram/targets/:id(\\d+)/send', needUser, async (req, res) => {
+    if (!mine(req, res)) return; const t = targetOf(req, res); if (!t) return;
+    const owner = userRow(req.user.id), day = nowParts().day, vid = Number(req.body.videoId) || 0;
+    let row;
+    if (vid) {
+      const v = db.prepare('SELECT id FROM videos WHERE id = ? AND user_id = ? AND hidden = 0').get(vid, req.user.id);
+      if (!v) return fail(res, 404, 'Không tìm thấy video này hoặc video đang ẩn.');
+      db.prepare("INSERT INTO tg_queue (user_id, video_id, target_id, status, created_at) VALUES (?,?,?, 'pending', ?) ON CONFLICT(video_id, target_id) DO NOTHING").run(req.user.id, vid, t.id, now());
+      row = db.prepare('SELECT * FROM tg_queue WHERE video_id = ? AND target_id = ?').get(vid, t.id);
+      if (row.status === 'sending') return fail(res, 409, 'Video này đang được gửi vào nhóm, hãy đợi một chút.');
+      if (row.status !== 'pending') { db.prepare("UPDATE tg_queue SET status = 'pending', error = '' WHERE id = ?").run(row.id); row.status = 'pending'; } // send again
+    } else {
+      row = db.prepare("SELECT * FROM tg_queue WHERE target_id = ? AND user_id = ? AND status = 'pending' ORDER BY video_id DESC, id LIMIT 1").get(t.id, req.user.id);
+      if (!row) return fail(res, 400, 'Nhóm này không còn bài nào trong hàng chờ. Hãy chọn một video để gửi.');
+    }
+    const wasActive = t.active;
+    if (!wasActive) db.prepare('UPDATE tg_targets SET active = 1 WHERE id = ?').run(t.id); // a paused group can still get a manual send
+    const ok = await sendRow(row, owner, day).catch(() => false);
+    if (!wasActive) db.prepare('UPDATE tg_targets SET active = 0 WHERE id = ? AND active = 1').run(t.id);
+    if (!ok) { const r = db.prepare('SELECT error FROM tg_queue WHERE id = ?').get(row.id); return fail(res, 400, 'Không gửi được: ' + ((r && r.error) || 'lỗi không rõ')); }
+    db.prepare('INSERT INTO tg_daily (target_id, day, sent) VALUES (?, ?, 1) ON CONFLICT(target_id, day) DO UPDATE SET sent = sent + 1').run(t.id, day);
+    const v = db.prepare('SELECT caption FROM videos WHERE id = ?').get(row.video_id);
+    res.json({ ok: true, videoId: row.video_id, caption: v ? v.caption : '' });
+  });
   app.post('/api/me/telegram/targets/:id(\\d+)/active', needUser, (req, res) => {
     const t = targetOf(req, res); if (!t) return;
     db.prepare("UPDATE tg_targets SET active = ?, last_error = CASE WHEN ? THEN '' ELSE last_error END WHERE id = ?").run(req.body.active ? 1 : 0, req.body.active ? 1 : 0, t.id);
@@ -265,7 +289,10 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
     if (!mine(req, res)) return;
     const rows = db.prepare('SELECT id, caption, thumb, created_at FROM videos WHERE user_id = ? AND hidden = 0 ORDER BY id DESC LIMIT 60').all(req.user.id);
     const queued = new Set(db.prepare('SELECT DISTINCT video_id FROM tg_queue WHERE user_id = ?').all(req.user.id).map((r) => r.video_id));
-    res.json({ videos: rows.map((v) => ({ id: v.id, caption: v.caption, thumb: v.thumb, createdAt: v.created_at, queued: queued.has(v.id) })) });
+    const tid = Number(req.query.target) || 0;
+    const here = new Map(tid ? db.prepare('SELECT q.video_id, q.status FROM tg_queue q JOIN tg_targets t ON t.id = q.target_id WHERE q.target_id = ? AND t.user_id = ?').all(tid, req.user.id).map((r) => [r.video_id, r.status]) : []);
+    res.json({ videos: rows.map((v) => ({ id: v.id, caption: v.caption, thumb: v.thumb, createdAt: v.created_at, queued: queued.has(v.id), here: here.get(v.id) || '' })),
+      waiting: tid ? db.prepare("SELECT COUNT(*) AS n FROM tg_queue WHERE target_id = ? AND user_id = ? AND status = 'pending'").get(tid, req.user.id).n : 0 });
   });
   app.post('/api/me/telegram/queue', needUser, (req, res) => {
     if (!mine(req, res)) return;
