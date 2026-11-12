@@ -85,3 +85,29 @@
 .tg-ar-try{border-top:1px solid var(--line);padding-top:14px;margin:4px 0 0}
 .tg-ar-out{margin-top:10px;padding:12px 14px;border-radius:14px;background:rgba(42,171,238,.1);border:1px solid rgba(42,171,238,.3);white-space:pre-wrap}
 .tg-ar-out p{margin-top:4px}
+
+/* statistics */
+.tg-stats .tg-btitle{flex-wrap:wrap;gap:10px}
+.tg-ranges{display:flex;gap:6px;flex-wrap:wrap}
+.tg-ranges .chip{padding:6px 12px;font-size:13px}
+.tg-note{font-size:12.5px;margin:6px 0 12px}
+.tg-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.tg-tile{border-radius:16px;padding:14px 12px;display:grid;gap:2px;border:1px solid var(--line,rgba(255,255,255,.08));background:var(--surface-2,rgba(255,255,255,.03))}
+.tg-tile b{font-size:26px;line-height:1.1}
+.tg-tile small{color:var(--muted);font-size:12px;line-height:1.3}
+.tg-tico{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:14px;font-weight:700;margin-bottom:4px}
+.tg-tile.ok .tg-tico{background:rgba(34,197,94,.16);color:#4ade80}
+.tg-tile.bad .tg-tico{background:rgba(239,68,68,.16);color:#f87171}
+.tg-tile.view .tg-tico{background:rgba(56,189,248,.16);color:#38bdf8}
+.tg-table{display:grid;gap:2px;margin-bottom:10px}
+.tg-trow{display:grid;grid-template-columns:minmax(0,1fr) 72px 48px 92px;gap:8px;align-items:center;padding:9px 10px;border-radius:10px;font-size:14px}
+.tg-trow:nth-child(even){background:rgba(255,255,255,.03)}
+.tg-thead{font-size:12px;color:var(--muted);padding-top:2px;padding-bottom:2px}
+.tg-thead span:not(:first-child),.tg-trow > .tg-n{text-align:right}
+.tg-tname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tg-n{font-weight:700;font-variant-numeric:tabular-nums}
+.tg-n.ok{color:#4ade80}.tg-n.bad{color:#f87171}.tg-n.view{color:#38bdf8}.tg-n.zero{color:var(--muted);font-weight:500}
+.tg-vbar{position:relative;display:flex;justify-content:flex-end;align-items:center;height:22px}
+.tg-vbar i{position:absolute;left:0;top:4px;bottom:4px;border-radius:6px;background:rgba(56,189,248,.18)}
+.tg-vbar .tg-n{position:relative}
+@media (max-width:480px){.tg-trow{grid-template-columns:minmax(0,1fr) 60px 36px 70px;gap:6px;font-size:13px;padding:8px 6px}.tg-tile b{font-size:22px}}

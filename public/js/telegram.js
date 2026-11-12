@@ -16,8 +16,37 @@ function accountCard() {
     const head = h('div', { class: 'tg-head' }, h('span', { class: 'tg-logo', html: PLANE }), h('div', {}, h('h3', {}, 'Tự động đăng lên Telegram'),
       h('p', { class: 'muted' }, 'Mọi video của bạn, cả video đang có và video đăng mới, được tự xếp vào hàng chờ và bot gửi vào nhóm/kênh Telegram của bạn theo số bài và giờ bạn chọn.')));
     if (!d.allowed) { card.replaceChildren(head, h('div', { class: 'notice tg-off' }, '🔒 Tài khoản của bạn chưa được bật chức năng này. Hãy liên hệ quản trị viên để được cho phép.')); return; }
-    card.replaceChildren(head, groupsBlock(d), prefsBlock(d), queueBlock(d));
+    card.replaceChildren(head, statsBlock(), groupsBlock(d), prefsBlock(d), queueBlock(d));
   };
+  // --- statistics ---
+  let range = 'today';
+  function statsBlock() {
+    const RANGES = [['today', 'Hôm nay'], ['yesterday', 'Hôm qua'], ['7', '7 ngày'], ['30', '30 ngày']];
+    const body = h('div', { class: 'tg-stats-body' }, h('div', { class: 'spin' }));
+    const tabs = h('div', { class: 'tg-ranges' });
+    const fmtDay = (d) => d.slice(8, 10) + '/' + d.slice(5, 7);
+    const paint = async () => {
+      tabs.replaceChildren(...RANGES.map(([k, label]) => h('button', { type: 'button', class: 'chip' + (range === k ? ' on' : ''), onclick: () => { range = k; paint(); } }, label)));
+      let s; try { s = await api('/me/telegram/stats?range=' + range); } catch (e) { body.replaceChildren(h('p', { class: 'muted' }, e.message)); return; }
+      const tile = (cls, ico, label, n) => h('div', { class: 'tg-tile ' + cls }, h('span', { class: 'tg-tico' }, ico), h('b', {}, n.toLocaleString('vi-VN')), h('small', {}, label));
+      const tiles = h('div', { class: 'tg-tiles' }, tile('ok', '✓', 'Đăng thành công', s.total.sent), tile('bad', '✕', 'Bị lỗi', s.total.failed), tile('view', '👁', 'Lượt xem từ Telegram', s.total.views));
+      const num = (n, cls) => h('span', { class: 'tg-n ' + (n ? cls : 'zero') }, String(n));
+      const head = (first) => h('div', { class: 'tg-trow tg-thead' }, h('span', {}, first), h('span', {}, 'Thành công'), h('span', {}, 'Lỗi'), h('span', {}, 'Lượt xem'));
+      const groupsTbl = s.groups.length ? h('div', { class: 'tg-table' }, head('Nhóm / kênh'), s.groups.map((g) => h('div', { class: 'tg-trow' },
+        h('span', { class: 'tg-tname' }, (g.type === 'channel' ? '📢 ' : '👥 ') + g.title), num(g.sent, 'ok'), num(g.failed, 'bad'), num(g.views, 'view')))) : '';
+      const maxV = Math.max(1, ...s.days.map((d) => d.views));
+      const daysTbl = s.days.length > 1 ? h('details', { class: 'tg-recent', open: range === '7' }, h('summary', {}, 'Theo từng ngày'),
+        h('div', { class: 'tg-table' }, head('Ngày'), s.days.map((d) => h('div', { class: 'tg-trow' },
+          h('span', { class: 'tg-tname' }, fmtDay(d.day)), num(d.sent, 'ok'), num(d.failed, 'bad'),
+          h('span', { class: 'tg-vbar' }, h('i', { style: 'width:' + Math.round(d.views / maxV * 100) + '%' }), num(d.views, 'view')))))) : '';
+      const errs = s.errors.length ? h('details', { class: 'tg-recent' }, h('summary', {}, 'Lỗi gần đây'), h('div', { class: 'tg-list' }, s.errors.map((e) =>
+        h('div', { class: 'tg-item' }, h('span', { class: 'tg-pill bad' }, '✕'), h('div', {}, h('a', { href: '/v/' + e.videoId, target: '_blank' }, 'Video #' + e.videoId), h('small', { class: 'muted' }, '→ ' + e.target + ' · ' + new Date(e.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })), h('small', { class: 'tg-err' }, e.error)))))) : '';
+      body.replaceChildren(tiles, groupsTbl, daysTbl, errs);
+    };
+    paint();
+    return h('div', { class: 'tg-block tg-stats' }, h('div', { class: 'tg-btitle' }, h('h4', {}, '📊 Thống kê'), tabs),
+      h('p', { class: 'muted tg-note' }, 'Lượt xem = số người bấm vào link video trong nhóm/kênh đó (mỗi người tính 1 lần cho mỗi video mỗi ngày).'), body);
+  }
   // --- groups ---
   function groupsBlock(d) {
     const limit = d.prefs.daily_limit;

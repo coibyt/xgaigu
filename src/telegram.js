@@ -145,6 +145,50 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
     return t;
   };
 
+  // a visit that came from a Telegram post: counted for that group (link-preview robots are not people)
+  const BOT_UA = /bot|crawl|spider|preview|facebookexternalhit|whatsapp|zalo|slurp|curl|wget|python|headless/i;
+  app.get('/v/:id(\\d+)', (req, res, next) => {
+    const tid = Number(req.query.tg);
+    if (tid > 0 && !BOT_UA.test(req.get('user-agent') || '')) {
+      try {
+        const vid = Number(req.params.id);
+        if (db.prepare('SELECT 1 FROM tg_targets t JOIN videos v ON v.user_id = t.user_id WHERE t.id = ? AND v.id = ?').get(tid, vid)) {
+          const did = crypto.createHash('sha1').update((req.ip || '') + '|' + (req.get('user-agent') || '')).digest('hex').slice(0, 16);
+          db.prepare('INSERT INTO tg_views (target_id, video_id, day, did, at) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING').run(tid, vid, nowParts().day, did, now());
+        }
+      } catch (e) { console.error('[telegram] view:', e.message); }
+    }
+    next();
+  });
+
+  // the member's numbers: sent, failed and views, per day and per group, for today / yesterday / the last 7 or 30 days
+  app.get('/api/me/telegram/stats', needUser, (req, res) => {
+    const uid = req.user.id, range = ['today', 'yesterday', '7', '30'].includes(req.query.range) ? req.query.range : 'today';
+    const dayAgo = (n) => nowParts(Date.now() - n * 86400_000).day;
+    const from = range === 'today' ? dayAgo(0) : range === 'yesterday' ? dayAgo(1) : dayAgo(Number(range) - 1);
+    const to = range === 'yesterday' ? dayAgo(1) : dayAgo(0);
+    const targets = db.prepare('SELECT id, title, type, username FROM tg_targets WHERE user_id = ? ORDER BY id').all(uid);
+    const sent = db.prepare('SELECT target_id AS t, day, COUNT(*) AS n FROM tg_log WHERE user_id = ? AND ok = 1 AND day BETWEEN ? AND ? GROUP BY target_id, day').all(uid, from, to);
+    const failed = db.prepare(`SELECT l.target_id AS t, l.day, COUNT(*) AS n FROM tg_log l WHERE l.user_id = ? AND l.ok = 0 AND l.day BETWEEN ? AND ?
+      AND NOT EXISTS (SELECT 1 FROM tg_log s WHERE s.ok = 1 AND s.target_id = l.target_id AND s.video_id = l.video_id AND s.day >= l.day) GROUP BY l.target_id, l.day`).all(uid, from, to);
+    const views = db.prepare(`SELECT w.target_id AS t, w.day, COUNT(*) AS n FROM tg_views w JOIN tg_targets g ON g.id = w.target_id
+      WHERE g.user_id = ? AND w.day BETWEEN ? AND ? GROUP BY w.target_id, w.day`).all(uid, from, to);
+    const days = new Map(), groups = new Map(targets.map((t) => [t.id, { ...t, sent: 0, failed: 0, views: 0 }]));
+    const add = (rows, k) => rows.forEach((r) => {
+      if (!days.has(r.day)) days.set(r.day, { day: r.day, sent: 0, failed: 0, views: 0 });
+      days.get(r.day)[k] += r.n;
+      if (groups.has(r.t)) groups.get(r.t)[k] += r.n;
+    });
+    add(sent, 'sent'); add(failed, 'failed'); add(views, 'views');
+    const list = []; // every day of the range, newest first, also the empty ones
+    const count = range === '7' ? 7 : range === '30' ? 30 : 1, skip = range === 'yesterday' ? 1 : 0;
+    for (let i = 0; i < count; i++) { const d = dayAgo(skip + i); list.push(days.get(d) || { day: d, sent: 0, failed: 0, views: 0 }); }
+    const total = list.reduce((a, x) => ({ sent: a.sent + x.sent, failed: a.failed + x.failed, views: a.views + x.views }), { sent: 0, failed: 0, views: 0 });
+    const errors = db.prepare(`SELECT l.error, l.at, l.video_id AS videoId, g.title AS target FROM tg_log l JOIN tg_targets g ON g.id = l.target_id
+      WHERE l.user_id = ? AND l.ok = 0 AND l.day BETWEEN ? AND ? ORDER BY l.at DESC LIMIT 5`).all(uid, from, to);
+    res.json({ range, from, to, total, days: list, groups: [...groups.values()].sort((a, b) => b.views - a.views || b.sent - a.sent), errors });
+  });
+
   app.get('/api/me/telegram', needUser, (req, res) => {
     const u = userRow(req.user.id);
     if (!enabled()) return res.json({ enabled: false });
@@ -467,7 +511,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
   }
   const localFile = (p) => { if (!p || !p.startsWith('/uploads/')) return ''; const f = path.join(UPLOAD_DIR, path.basename(p)); return fs.existsSync(f) ? f : ''; };
   async function postVideo(target, v, owner) {
-    const url = base() + '/v/' + v.id;
+    const url = base() + '/v/' + v.id + (target.id ? '?tg=' + target.id : '');
     const tail = `\n\n👉 <b>Nhấp vào link để xem video:</b>\n${esc(url)}`;
     // Telegram allows 1024 characters under a photo: shorten the description until it fits
     let caption = '';
@@ -489,11 +533,15 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
     if (!t || !t.active) { db.prepare("UPDATE tg_queue SET status = 'pending', sent_at = 0 WHERE id = ?").run(row.id); return false; }
     try {
       await postVideo(t, v, owner);
+      db.prepare('INSERT INTO tg_log (user_id, target_id, video_id, day, ok, at) VALUES (?,?,?,?,1,?)').run(row.user_id, t.id, v.id, nowParts().day, now());
       db.prepare("UPDATE tg_queue SET status = 'sent', sent_day = ?, sent_at = ?, error = '' WHERE id = ?").run(day, now(), row.id);
       db.prepare("UPDATE tg_targets SET last_post_at = ?, last_error = '' WHERE id = ?").run(now(), t.id);
       return true;
     } catch (e) {
       const gone = e.code === 403 || /chat not found|kicked|not a member/i.test(e.message); // bot removed, blocked, or the group is gone
+      const d = nowParts().day;
+      if (!db.prepare('SELECT 1 FROM tg_log WHERE target_id = ? AND video_id = ? AND day = ? AND ok = 0').get(t.id, v.id, d))
+        db.prepare('INSERT INTO tg_log (user_id, target_id, video_id, day, ok, error, at) VALUES (?,?,?,?,0,?,?)').run(row.user_id, t.id, v.id, d, e.message.slice(0, 250), now());
       db.prepare('UPDATE tg_targets SET last_error = ?, active = CASE WHEN ? THEN 0 ELSE active END WHERE id = ?').run(e.message.slice(0, 250), gone ? 1 : 0, t.id);
       db.prepare('UPDATE tg_queue SET status = ?, sent_at = 0, error = ? WHERE id = ?').run(gone ? 'failed' : 'pending', e.message.slice(0, 250), row.id);
       return false;
@@ -544,6 +592,8 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
         lastPrune = Date.now();
         db.prepare("DELETE FROM tg_queue WHERE status IN ('skipped', 'failed', 'cancelled') AND created_at < ?").run(now() - 30 * 86400_000);
         db.prepare('DELETE FROM tg_daily WHERE day < ?').run(nowParts(Date.now() - 30 * 86400_000).day);
+        db.prepare('DELETE FROM tg_log WHERE day < ?').run(nowParts(Date.now() - 95 * 86400_000).day);
+        db.prepare('DELETE FROM tg_views WHERE day < ?').run(nowParts(Date.now() - 95 * 86400_000).day);
         db.prepare('DELETE FROM tg_codes WHERE expires_at < ?').run(now());
       }
     } finally { dispatching = false; }
