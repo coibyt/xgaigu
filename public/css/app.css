@@ -294,6 +294,8 @@ table.t{width:100%;border-collapse:collapse}.t th,.t td{text-align:left;padding:
 .region-card.bac{background:linear-gradient(135deg,rgba(139,92,246,.22),var(--surface))}
 .region-card.trung{background:linear-gradient(135deg,rgba(255,107,74,.22),var(--surface))}
 .region-card.nam{background:linear-gradient(135deg,rgba(255,46,126,.22),var(--surface))}
+.region-card.qt{background:linear-gradient(135deg,rgba(56,189,248,.2),var(--surface))}
+.cflag{margin-right:10px;font-size:.95em}
 .prov-card{padding:16px 18px;display:grid;gap:4px;position:relative;transition:border-color .2s,background .2s}
 .prov-card:hover{border-color:rgba(255,46,126,.5)}
 .prov-card.has{border-color:rgba(255,46,126,.35)}

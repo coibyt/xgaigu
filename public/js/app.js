@@ -1022,7 +1022,7 @@ async function pageFeed(startId, home) {
   let queue = null, others = null; // others: after a member's own videos, random videos of other members in the same area
   if (ctx && ctx.kind === 'user') {
     try {
-      const q = new URLSearchParams({ region: ctx.region || '', province: ctx.province || '', district: ctx.district || '' });
+      const q = new URLSearchParams({ region: ctx.region || '', province: ctx.province || '', district: ctx.district || '', country: ctx.country || '' });
       const { ids } = await api('/users/' + ctx.userId + '/video-ids?' + q);
       const pos = ids.indexOf(Number(startId));
       queue = pos >= 0 ? [...ids.slice(pos + 1), ...ids.slice(0, pos)] : ids.filter((x) => x !== Number(startId));
@@ -1031,7 +1031,7 @@ async function pageFeed(startId, home) {
     } catch { queue = null; }
   } else if (ctx) {
     try {
-      const q = new URLSearchParams({ region: ctx.region, province: ctx.province, district: ctx.district, seed: ctx.seed });
+      const q = new URLSearchParams({ region: ctx.region, province: ctx.province, district: ctx.district, country: ctx.country || '', seed: ctx.seed });
       const { ids } = await api('/area-order?' + q);
       const pos = ids.indexOf(Number(startId));
       queue = pos >= 0 ? [...ids.slice(pos + 1), ...ids.slice(0, pos)] : ids.filter((x) => x !== Number(startId));
@@ -1592,7 +1592,60 @@ function areaTile(v) {
     h('span', { class: 'tviews', html: isAdmin() ? icon('play') + fmtCount(v.views || 0) : icon('heart') + fmtCount(v.likes || 0) }));
 }
 
+const flagOf = (cc) => String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.charCodeAt(0)));
+
+// a country other than Việt Nam: its states / cities that have videos → districts → videos
+async function pageCountry(cc, prov, dist) {
+  if (prov) Pref.bump(prov, 1.5);
+  const { areas: all } = await api('/areas');
+  const areas = all.filter((x) => x.region === 'qt' && x.country === cc);
+  const cname = (areas[0] && areas[0].countryName) || countryName(cc);
+  const enc = encodeURIComponent, sum = (f) => areas.filter(f).reduce((n, x) => n + x.n, 0);
+  document.title = (prov ? (dist ? dist + ', ' : '') + prov + ' – ' : '') + cname + ' – làm quen & hẹn hò | xgaigu';
+  const crumb = [h('a', { href: '#/regions' }, 'Khu vực'), h('span', {}, ' › '), h('a', { href: '#/regions/' + cc }, flagOf(cc) + ' ' + cname)];
+  if (prov) crumb.push(h('span', {}, ' › '), h('a', { href: `#/regions/${cc}/${enc(prov)}` }, prov));
+  if (dist) crumb.push(h('span', {}, ' › '), h('span', {}, dist));
+  const wrap = h('div', { class: 'wrap', style: 'padding:28px 0' }, h('p', { class: 'crumbs' }, crumb));
+  if (!prov) {
+    const provs = new Map();
+    areas.forEach((x) => { const p = provs.get(x.province) || { name: x.province, n: 0, ds: new Set() }; p.n += x.n; if (x.district) p.ds.add(x.district); provs.set(x.province, p); });
+    const filter = h('input', { placeholder: 'Tìm tỉnh / thành phố…', 'aria-label': 'Tìm tỉnh' });
+    const grid = h('div', { class: 'grid g4 prov-grid' });
+    const draw = () => {
+      const q = filter.value.trim().toLowerCase();
+      grid.replaceChildren(...[...provs.values()].filter((p) => p.name.toLowerCase().includes(q)).sort((a, b) => b.n - a.n).map((p) =>
+        h('a', { class: 'card prov-card has', href: `#/regions/${cc}/${enc(p.name)}` }, h('b', {}, p.name), h('span', { class: 'muted' }, p.ds.size ? p.ds.size + ' quận/huyện' : 'Tất cả video'), h('span', { class: 'badge', style: 'margin:0' }, p.n))));
+      if (!grid.children.length) grid.append(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('h3', {}, 'Chưa có video ở ' + cname)));
+    };
+    filter.addEventListener('input', draw); draw();
+    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, h('span', { class: 'cflag' }, flagOf(cc)), cname), provs.size > 8 ? h('div', { class: 'filters' }, filter) : '', grid);
+  } else {
+    const ds = new Map();
+    areas.filter((x) => x.province === prov && x.district).forEach((x) => ds.set(x.district, (ds.get(x.district) || 0) + x.n));
+    const chips = ds.size ? h('div', { class: 'ed-chips chips-wrap', style: 'margin:14px 0 18px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${cc}/${enc(prov)}` }, 'Tất cả', h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, sum((x) => x.province === prov))),
+      [...ds.entries()].sort((a, b) => b[1] - a[1]).map(([d, n]) => h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${cc}/${enc(prov)}/${enc(d)}` }, d, h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)))) : h('div', { style: 'height:14px' });
+    const grid = h('div', { class: 'tgrid area-grid' });
+    const count = h('span', { class: 'muted', style: 'font-size:14px;margin-left:8px;font-weight:500' });
+    const pagerEl = h('div', { class: 'pager' });
+    wrap.append(h('h2', { class: 'title' }, dist || prov, count), chips, grid, pagerEl);
+    const seed = Math.floor(Math.random() * 1e9);
+    const go = async (page) => {
+      grid.replaceChildren(h('div', { class: 'spin', style: 'grid-column:1/-1' }));
+      try {
+        const d = await api('/area-videos?' + new URLSearchParams({ page, seed, region: 'qt', country: cc, province: prov, district: dist || '' }));
+        count.textContent = d.total ? '· ' + d.total + ' video' : '';
+        if (!d.total) grid.replaceChildren(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('div', { class: 'ico', html: icon('video') }), h('h3', {}, 'Chưa có video ở khu vực này'), h('a', { class: 'btn primary', style: 'margin-top:12px', href: '#/upload' }, 'Đăng video')));
+        else grid.replaceChildren(...d.videos.map((v) => { const t = areaTile(v); t.addEventListener('click', () => { S.feedCtx = { region: 'qt', country: cc, province: prov, district: dist || '', seed, startId: v.id }; }); return t; }));
+        renderPager(pagerEl, d.page, d.pages, (p) => { go(p); wrap.querySelector('h2.title').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      } catch (e) { grid.replaceChildren(); fail(e); }
+    };
+    go(1);
+  }
+  main.append(wrap, footer());
+}
+
 async function pageRegions(reg, prov, dist) {
+  if (reg && /^[A-Z]{2}$/.test(reg)) return pageCountry(reg, prov, dist);
   if (prov) Pref.bump(prov, 1.5);
   const infoQ = new URLSearchParams({ region: reg || '', province: prov || '', district: dist || '' });
   const [geo, { areas }, info] = await Promise.all([loadGeo(), api('/areas'), reg ? api('/area-info?' + infoQ).catch(() => null) : null]);
@@ -1609,6 +1662,16 @@ async function pageRegions(reg, prov, dist) {
     wrap.append(h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Chọn khu vực'),
       h('div', { class: 'grid g3' }, Object.keys(REGION_NAMES).sort((a, b) => sum((x) => x.region === b) - sum((x) => x.region === a)).map((k) => h('a', { class: 'card region-card ' + k, href: '#/regions/' + k },
         h('h3', {}, REGION_NAMES[k]), h('p', { class: 'muted' }, geo[k].length + ' tỉnh / thành phố'), h('span', { class: 'status st-accepted' }, sum((x) => x.region === k) + ' video')))));
+    // other countries that have videos, most videos first
+    const byCc = new Map();
+    areas.filter((x) => x.region === 'qt' && x.country && x.country !== 'VN').forEach((x) => {
+      const c = byCc.get(x.country) || { cc: x.country, name: x.countryName || countryName(x.country), n: 0, provs: new Set() };
+      c.n += x.n; c.provs.add(x.province); byCc.set(x.country, c);
+    });
+    const cs = [...byCc.values()].sort((a, b) => b.n - a.n);
+    if (cs.length) wrap.append(h('h2', { class: 'title', style: 'margin:34px 0 20px' }, 'Quốc gia khác'),
+      h('div', { class: 'grid g3' }, cs.map((c) => h('a', { class: 'card region-card qt', href: '#/regions/' + c.cc },
+        h('h3', {}, h('span', { class: 'cflag' }, flagOf(c.cc)), c.name), h('p', { class: 'muted' }, c.provs.size + ' tỉnh / thành phố'), h('span', { class: 'status st-accepted' }, c.n + ' video')))));
   } else if (!prov) {
     const filter = h('input', { placeholder: 'Tìm tỉnh / thành phố…', 'aria-label': 'Tìm tỉnh' });
     const grid = h('div', { class: 'grid g4 prov-grid' });

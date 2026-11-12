@@ -522,6 +522,7 @@ app.get('/api/users/:id/phone', needUser, (req, res) => {
 const GEO = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'data', 'vn-geo.json'), 'utf8'));
 const COUNTRY_RE = /^[A-Z]{2}$/;
 const countryName = (() => { let dn = null; try { dn = new Intl.DisplayNames(['vi'], { type: 'region' }); } catch {} return (c) => { try { return (dn && dn.of(c)) || c; } catch { return c; } }; })();
+const areaCc = (a) => (a.region === 'qt' ? a.country || '' : '');
 function readArea(b) {
   const cc = String(b.country || '').toUpperCase();
   if ((COUNTRY_RE.test(cc) && cc !== 'VN') || b.region === 'qt') {
@@ -690,8 +691,8 @@ function areaOrder(area, seed) {
   const size = pageSize(), rnd = seededRandom(seed || Date.now());
   const rows = db.prepare(
     `SELECT v.id, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
-     WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) ORDER BY v.id`
-  ).all(area.region, area.province, area.province, area.district, area.district);
+     WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) AND (? = '' OR COALESCE(v.country, 'VN') = ?) ORDER BY v.id`
+  ).all(area.region, area.province, area.province, area.district, area.district, areaCc(area), areaCc(area));
   const shuffle = (list) => { for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; } return list; };
   const ver = shuffle(rows.filter((r) => r.ver).map((r) => r.id)), oth = shuffle(rows.filter((r) => !r.ver).map((r) => r.id));
   const share = feedConf().verifiedShare, order = [];
@@ -721,8 +722,8 @@ app.get('/api/area-videos', (req, res) => {
   const size = pageSize(), rnd = seededRandom(req.query.seed || Date.now());
   const rows = db.prepare(
     `SELECT v.id, (v.verified OR u.verified) AS ver FROM videos v JOIN users u ON u.id = v.user_id
-     WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) ORDER BY v.id`
-  ).all(area.region, area.province, area.province, area.district, area.district);
+     WHERE v.hidden = 0 AND u.banned = 0 AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) AND (? = '' OR COALESCE(v.country, 'VN') = ?) ORDER BY v.id`
+  ).all(area.region, area.province, area.province, area.district, area.district, areaCc(area), areaCc(area));
   const shuffle = (list) => { for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; } return list; };
   const ver = shuffle(rows.filter((r) => r.ver).map((r) => r.id)), oth = shuffle(rows.filter((r) => !r.ver).map((r) => r.id));
   const share = feedConf().verifiedShare, order = [];
@@ -743,8 +744,8 @@ app.get('/api/area-videos', (req, res) => {
 function userVideoWhere(uid, own, q) {
   const area = readArea(q || {});
   return {
-    where: "v.user_id = ? AND (v.hidden = 0 OR (v.hidden_by = 'owner' AND v.locked = 0 AND v.user_id = ?)) AND (? = '' OR v.region = ?) AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?)",
-    args: [uid, own, area.region, area.region, area.province, area.province, area.district, area.district],
+    where: "v.user_id = ? AND (v.hidden = 0 OR (v.hidden_by = 'owner' AND v.locked = 0 AND v.user_id = ?)) AND (? = '' OR v.region = ?) AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) AND (? = '' OR COALESCE(v.country, 'VN') = ?)",
+    args: [uid, own, area.region, area.region, area.province, area.province, area.district, area.district, areaCc(area), areaCc(area)],
   };
 }
 // the areas a member has videos in (for the filter on their profile)
@@ -767,11 +768,11 @@ app.get('/api/area-random', (req, res) => {
   const exclude = Number(req.query.exclude) || 0;
   const seen = String(req.query.seen || '').split(',').map(Number).filter((n) => n > 0).slice(-800);
   const seenList = ',' + seen.join(',') + ',';
-  const levels = [area.district && { ...area }, area.province && { ...area, district: '' }, area.region && { region: area.region, province: '', district: '' }].filter(Boolean);
+  const levels = [area.district && { ...area }, area.province && { ...area, district: '' }, area.region === 'qt' && area.country && { region: 'qt', country: area.country, province: '', district: '' }, area.region && { region: area.region, province: '', district: '' }].filter(Boolean);
   for (const a of levels) {
     const ids = db.prepare(`SELECT v.id FROM videos v JOIN users u ON u.id = v.user_id
-      WHERE v.hidden = 0 AND u.banned = 0 AND v.user_id <> ? AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?)
-        AND instr(?, ',' || v.id || ',') = 0 ORDER BY RANDOM() LIMIT 8`).all(exclude, a.region, a.province, a.province, a.district, a.district, seenList).map((r) => r.id);
+      WHERE v.hidden = 0 AND u.banned = 0 AND v.user_id <> ? AND v.region = ? AND (? = '' OR v.province = ?) AND (? = '' OR v.district = ?) AND (? = '' OR COALESCE(v.country, 'VN') = ?)
+        AND instr(?, ',' || v.id || ',') = 0 ORDER BY RANDOM() LIMIT 8`).all(exclude, a.region, a.province, a.province, a.district, a.district, areaCc(a), areaCc(a), seenList).map((r) => r.id);
     if (ids.length) {
       const byId = new Map(listVideos(req.user, { ids, limit: ids.length }).map((v) => [v.id, v]));
       return res.json({ videos: ids.map((id) => byId.get(id)).filter(Boolean), area: a });
@@ -800,10 +801,10 @@ app.put('/api/admin/page-size', needAdmin, (req, res) => {
 // How many videos each region / province / district has (powers the "Khu vực" browser).
 app.get('/api/areas', (_req, res) => {
   const rows = db.prepare(
-    `SELECT v.region, v.province, v.district, COUNT(*) AS n FROM videos v JOIN users u ON u.id = v.user_id
-     WHERE v.hidden = 0 AND u.banned = 0 AND v.region != '' GROUP BY v.region, v.province, v.district`
+    `SELECT v.region, v.province, v.district, COALESCE(v.country, 'VN') AS country, COUNT(*) AS n FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.hidden = 0 AND u.banned = 0 AND v.region != '' GROUP BY v.region, v.province, v.district, COALESCE(v.country, 'VN')`
   ).all();
-  res.json({ areas: rows });
+  res.json({ areas: rows.map((r) => (r.region === 'qt' ? { ...r, countryName: countryName(r.country) } : r)) });
 });
 
 app.get('/api/videos/:id(\\d+)/phone', needUser, (req, res) => {
