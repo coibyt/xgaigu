@@ -564,7 +564,7 @@ const Install = (() => {
 
 // ---------- nav ----------
 const NAV = [
-  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/shop', 'Mua sắm', 'home'], ['#/regions', 'Khu vực', 'pin'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/live', 'Livestream', 'live'],
+  ['#/', 'Trang chủ', 'home'], ['#/feed', 'Video', 'play'], ['#/shop', 'Mua sắm', 'home'], ['#/regions', 'Khu vực', 'pin'], ['#/nearby', 'Quanh đây', 'pin'], ['#/people', 'Làm quen', 'users'], ['#/groups', 'Nhóm Chat', 'users'], ['#/live', 'Livestream', 'live'],
 ];
 function renderNav() {
   const cur = location.hash || '#/';
@@ -595,7 +595,7 @@ function renderNav() {
   tb.append(
     tab('#/', 'Trang chủ', 'home'), tab('#/feed', 'Video', 'play'),
     h('a', { href: S.user ? '#/upload' : '#/', 'aria-label': 'Đăng video', onclick: (e) => { if (!S.user) { e.preventDefault(); openAuth('register'); } } }, h('span', { class: 'plus', html: icon('plus') })),
-    tab('#/live', 'Live', 'live'),
+    tab('#/groups', 'Nhóm Chat', 'users'),
     S.user ? tab('#/messages', 'Chat', 'msg', h('span', { html: icon('msg') })) : tab('#/nearby', 'Quanh đây', 'pin'));
   if (S.user && S.unread > 0) tb.children[4].append(h('span', { class: 'badge' }, S.unread));
 }
@@ -2472,7 +2472,7 @@ async function route() {
   const page = async () => {
     main.innerHTML = '';
     const [a, b] = seg;
-    main.classList.toggle('nopad', !a || a === 'feed' || a === 'messages' || (a === 'live' && !!b));
+    main.classList.toggle('nopad', !a || a === 'feed' || a === 'messages' || (a === 'live' && !!b) || (a === 'groups' && /^\d+$/.test(b || '')));
     if (!a) return pageFeed(null, true);
     if (a === 'welcome') return pageHome();
     if (a === 'feed') return pageFeed(b);
@@ -2487,6 +2487,7 @@ async function route() {
     if (a === 'dates') return pageDates();
     if (a === 'live') return b ? window.XGLive.pageStream(b, /host=1/.test(query || '')) : window.XGLive.pageLive();
     if (a === 'golive') return window.XGLive.pageGoLive();
+    if (a === 'groups') return window.XGGroups.page(b, seg[2]);
     if (a === 'terms') return pageTerms();
     if (a === 'install') return pageInstall();
     if (a === 'reset') return pageReset(query);
