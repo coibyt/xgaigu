@@ -263,7 +263,8 @@ app.post('/api/register', authLimiter, wrap(async (req, res) => {
   const email = clean(req.body.email, 120).toLowerCase();
   const password = String(req.body.password || '');
   const name = clean(req.body.name, 40);
-  const birthYear = parseInt(req.body.birthYear, 10);
+  const ageIn = parseInt(req.body.age, 10);
+  const birthYear = ageIn > 0 ? currentYear() - ageIn : parseInt(req.body.birthYear, 10);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail(res, 400, 'Email không hợp lệ');
   if (password.length < 8) return fail(res, 400, 'Mật khẩu tối thiểu 8 ký tự');
   if (name.length < 2) return fail(res, 400, 'Vui lòng nhập tên hiển thị');
@@ -539,7 +540,8 @@ function readArea(b) {
 // Details an uploader can attach to a video (all optional; phone is stored separately and only released to signed-in viewers).
 function readInfo(b) {
   const int = (v, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
-  const by = int(b.birthYear, currentYear() - 100, currentYear() - 18);
+  const ageIn = parseInt(b.age, 10);
+  const by = int(ageIn > 0 ? currentYear() - ageIn : b.birthYear, currentYear() - 100, currentYear() - 18);
   const interestsText = clean(Array.isArray(b.interests) ? b.interests.join(', ') : String(b.interests || '').replace(/\r/g, ''), 8000);
   return {
     birthYear: by, height: int(b.height, 120, 230), weight: int(b.weight, 30, 200),
