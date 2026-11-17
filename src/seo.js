@@ -126,26 +126,37 @@ function install(app, ctx) {
   const saved = (a) => db.prepare('SELECT title, description, keywords, intro FROM area_seo WHERE key = ?').get(keyOf(a)) || null;
 
   // ---------- the admin's own keywords, added to every area ----------
-  const GLOBAL_DEFAULTS = { keywords: '', inTitle: true, inDesc: true, inIntro: true, inKeywords: true, titleCount: 1 };
-  const globalConf = () => { let g = {}; try { g = JSON.parse(getConf('seo_global') || '{}') || {}; } catch {} return { ...GLOBAL_DEFAULTS, ...g }; };
-  // "{khu vực}" in a keyword becomes the area's name ("gái xinh {khu vực}" -> "gái xinh Bangkok")
-  const globalWords = (a, g) => [...new Set(String(g.keywords || '').split(/[,\n]/).map((k) => k.trim()).filter(Boolean)
-    .map((k) => k.replace(/\{\s*(khu vực|khu vuc|area)\s*\}/gi, nameOf(a))))].slice(0, 30);
+  const SET_DEFAULTS = { keywords: '', inTitle: true, inDesc: true, inIntro: true, inKeywords: true, titleCount: 1, withName: false, scope: 'all', areas: [] };
+  const cleanSet = (x) => ({ ...SET_DEFAULTS, ...x, areas: Array.isArray(x && x.areas) ? x.areas : [] });
+  // stored as { sets: [...] }; the first version was a single set for every area
+  const globalConf = () => {
+    let g = {}; try { g = JSON.parse(getConf('seo_global') || '{}') || {}; } catch {}
+    if (Array.isArray(g.sets)) return { sets: g.sets.map(cleanSet) };
+    return { sets: g.keywords ? [cleanSet({ ...g, scope: 'all' })] : [] };
+  };
+  const inScope = (set, a) => {
+    if (set.scope !== 'some') return true;
+    const key = keyOf(a);
+    return set.areas.some((k) => key === k || key.startsWith(k + '|'));
+  };
+  // "{khu vực}" in a keyword becomes the area's name ("giá rẻ {khu vực}" -> "giá rẻ Bangkok"); withName adds the name to every keyword
+  const AREA_TAG = /\{\s*(khu vực|khu vuc|area)\s*\}/gi;
+  const setWords = (a, set) => String(set.keywords || '').split(/[,\n]/).map((k) => k.trim()).filter(Boolean)
+    .map((k) => (/\{\s*(khu vực|khu vuc|area)\s*\}/i.test(k) ? k.replace(AREA_TAG, nameOf(a)) : set.withName ? k + ' ' + nameOf(a) : k));
   const has = (text, k) => String(text).toLowerCase().includes(k.toLowerCase());
   function withGlobal(a, c) {
-    const g = globalConf(), words = globalWords(a, g);
-    if (!words.length) return c;
+    const sets = globalConf().sets.filter((s) => inScope(s, a));
+    if (!sets.length) return c;
+    const pick = (flag) => [...new Set(sets.filter((s) => s[flag]).flatMap((s) => setWords(a, s)))].slice(0, 40);
     const out = { ...c };
-    if (g.inTitle) {
-      const add = words.filter((k) => !has(out.title, k)).slice(0, Math.max(0, Math.min(5, Number(g.titleCount) || 0)));
-      if (add.length) {
-        const m = /^(.*?)(\s*\|\s*xgaigu\s*)$/i.exec(out.title);
-        out.title = m ? m[1] + ' – ' + add.join(' – ') + m[2] : out.title + ' – ' + add.join(' – ');
-      }
+    const titleWords = [...new Set(sets.filter((s) => s.inTitle).flatMap((s) => setWords(a, s).filter((k) => !has(out.title, k)).slice(0, Math.max(0, Math.min(5, Number(s.titleCount) || 0)))))];
+    if (titleWords.length) {
+      const m = /^(.*?)(\s*\|\s*xgaigu\s*)$/i.exec(out.title);
+      out.title = m ? m[1] + ' – ' + titleWords.join(' – ') + m[2] : out.title + ' – ' + titleWords.join(' – ');
     }
-    if (g.inDesc) { const add = words.filter((k) => !has(out.description, k)); if (add.length) { const base = out.description.replace(/\s*$/, ''); out.description = base + (/[.!?…]$/.test(base) ? ' ' : '. ') + add.join(', ') + '.'; } }
-    if (g.inIntro) { const add = words.filter((k) => !has(out.intro, k)); if (add.length) out.intro = out.intro.replace(/\s*$/, '') + '\n\nTìm kiếm liên quan: ' + add.join(', ') + '.'; }
-    if (g.inKeywords) { const add = words.filter((k) => !out.keywords.split(',').some((x) => x.trim().toLowerCase() === k.toLowerCase())); if (add.length) out.keywords = [out.keywords, ...add].filter(Boolean).join(', '); }
+    { const add = pick('inDesc').filter((k) => !has(out.description, k)); if (add.length) { const base = out.description.replace(/\s*$/, ''); out.description = base + (/[.!?…]$/.test(base) ? ' ' : '. ') + add.join(', ') + '.'; } }
+    { const add = pick('inIntro').filter((k) => !has(out.intro, k)); if (add.length) out.intro = out.intro.replace(/\s*$/, '') + '\n\nTìm kiếm liên quan: ' + add.join(', ') + '.'; }
+    { const add = pick('inKeywords').filter((k) => !out.keywords.split(',').some((x) => x.trim().toLowerCase() === k.toLowerCase())); if (add.length) out.keywords = [out.keywords, ...add].filter(Boolean).join(', '); }
     return out;
   }
   function content(a, rows) {
@@ -334,11 +345,16 @@ ${countries.size ? `<h2>Quốc gia khác</h2><ul class="seo-links">${[...countri
   // the admin's own keywords for every area
   app.get('/api/admin/seo-global', needAdmin, (_req, res) => res.json(globalConf()));
   app.put('/api/admin/seo-global', needAdmin, (req, res) => {
-    const b = req.body || {};
-    const keywords = String(b.keywords || '').replace(/\r/g, '').split(/[,\n]/).map((k) => clean(k, 80)).filter(Boolean).slice(0, 30).join(', ');
-    const g = { keywords, inTitle: !!b.inTitle, inDesc: !!b.inDesc, inIntro: !!b.inIntro, inKeywords: !!b.inKeywords, titleCount: Math.max(0, Math.min(5, parseInt(b.titleCount, 10) || 0)) };
-    db.prepare("INSERT INTO settings (key, value) VALUES ('seo_global', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(g));
-    res.json(g);
+    const list = Array.isArray(req.body && req.body.sets) ? req.body.sets.slice(0, 20) : [];
+    const sets = list.map((b) => ({
+      keywords: String(b.keywords || '').replace(/\r/g, '').split(/[,\n]/).map((k) => clean(k, 80)).filter(Boolean).slice(0, 30).join(', '),
+      inTitle: !!b.inTitle, inDesc: !!b.inDesc, inIntro: !!b.inIntro, inKeywords: !!b.inKeywords, withName: !!b.withName,
+      titleCount: Math.max(0, Math.min(5, parseInt(b.titleCount, 10) || 0)),
+      scope: b.scope === 'some' ? 'some' : 'all',
+      areas: [...new Set((Array.isArray(b.areas) ? b.areas : []).map((k) => clean(k, 200)).filter(Boolean))].slice(0, 300),
+    })).filter((x) => x.keywords);
+    db.prepare("INSERT INTO settings (key, value) VALUES ('seo_global', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify({ sets }));
+    res.json({ sets });
   });
 
   // ---------- crawlable home page content ----------
