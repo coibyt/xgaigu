@@ -148,15 +148,16 @@ function install(app, ctx) {
     const sets = globalConf().sets.filter((s) => inScope(s, a));
     if (!sets.length) return c;
     const pick = (flag) => [...new Set(sets.filter((s) => s[flag]).flatMap((s) => setWords(a, s)))].slice(0, 40);
-    const out = { ...c };
+    const out = { ...c, added: { title: [], description: [], intro: [], keywords: [] } };
     const titleWords = [...new Set(sets.filter((s) => s.inTitle).flatMap((s) => setWords(a, s).filter((k) => !has(out.title, k)).slice(0, Math.max(0, Math.min(5, Number(s.titleCount) || 0)))))];
     if (titleWords.length) {
+      out.added.title = titleWords;
       const m = /^(.*?)(\s*\|\s*xgaigu\s*)$/i.exec(out.title);
       out.title = m ? m[1] + ' – ' + titleWords.join(' – ') + m[2] : out.title + ' – ' + titleWords.join(' – ');
     }
-    { const add = pick('inDesc').filter((k) => !has(out.description, k)); if (add.length) { const base = out.description.replace(/\s*$/, ''); out.description = base + (/[.!?…]$/.test(base) ? ' ' : '. ') + add.join(', ') + '.'; } }
-    { const add = pick('inIntro').filter((k) => !has(out.intro, k)); if (add.length) out.intro = out.intro.replace(/\s*$/, '') + '\n\nTìm kiếm liên quan: ' + add.join(', ') + '.'; }
-    { const add = pick('inKeywords').filter((k) => !out.keywords.split(',').some((x) => x.trim().toLowerCase() === k.toLowerCase())); if (add.length) out.keywords = [out.keywords, ...add].filter(Boolean).join(', '); }
+    { const add = pick('inDesc').filter((k) => !has(out.description, k)); out.added.description = add; if (add.length) { const base = out.description.replace(/\s*$/, ''); out.description = base + (/[.!?…]$/.test(base) ? ' ' : '. ') + add.join(', ') + '.'; } }
+    { const add = pick('inIntro').filter((k) => !has(out.intro, k)); out.added.intro = add; if (add.length) out.intro = out.intro.replace(/\s*$/, '') + '\n\nTìm kiếm liên quan: ' + add.join(', ') + '.'; }
+    { const add = pick('inKeywords').filter((k) => !out.keywords.split(',').some((x) => x.trim().toLowerCase() === k.toLowerCase())); out.added.keywords = add; if (add.length) out.keywords = [out.keywords, ...add].filter(Boolean).join(', '); }
     return out;
   }
   function content(a, rows) {

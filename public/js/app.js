@@ -2428,6 +2428,9 @@ async function pageAdmin() {
     keywords: h('textarea', { rows: 2, maxlength: 600, placeholder: 'Từ khóa, cách nhau bằng dấu phẩy' }), intro: h('textarea', { rows: 10, maxlength: 6000, placeholder: 'Nội dung giới thiệu khu vực. Để trống một dòng giữa các đoạn.' }) };
   const seoInfo = h('p', { class: 'muted', style: 'font-size:14px;margin:8px 0 12px' }, 'Chọn quốc gia và khu vực ở trên (Việt Nam: ít nhất là miền; nước khác: chọn nước, có thể gõ thêm tỉnh / thành phố) để sửa.');
   const seoPrev = h('div', { class: 'seo-prev', hidden: true });
+  // under each box: the admin's own keywords that are added automatically when the page is shown
+  const seoAdd = Object.fromEntries(['title', 'description', 'keywords', 'intro'].map((k) => [k, h('small', { class: 'seo-add', hidden: true })]));
+  const paintAdd = (added) => { for (const [k, el] of Object.entries(seoAdd)) { const w = (added && added[k]) || []; el.hidden = !w.length; el.textContent = w.length ? '➕ Tự thêm khi hiển thị: ' + w.join(', ') : ''; } };
   const counter = (el, n) => { const c = h('small', { class: 'muted' }); const u = () => { c.textContent = el.value.length + ' ký tự' + (n ? ' (nên ≤ ' + n + ')' : ''); c.style.color = n && el.value.length > n ? '#fbbf24' : ''; }; el.addEventListener('input', u); u(); return [c, u]; };
   const [cTitle, uTitle] = counter(sf.title, 60), [cDesc, uDesc] = counter(sf.description, 160);
   let seoDef = null, seoUrl = '';
@@ -2447,7 +2450,7 @@ async function pageAdmin() {
       // pre-filled with the ready-made text (real, editable values); saved text wins when the admin has written their own
       sf.title.value = s.title || d.defaults.title; sf.description.value = s.description || d.defaults.description; sf.keywords.value = s.keywords || d.defaults.keywords; sf.intro.value = s.intro || d.defaults.intro;
       sf.title.placeholder = d.defaults.title; sf.description.placeholder = d.defaults.description; sf.keywords.placeholder = d.defaults.keywords; sf.intro.placeholder = d.defaults.intro;
-      uTitle(); uDesc();
+      uTitle(); uDesc(); paintAdd(d.final && d.final.added);
       seoInfo.textContent = d.saved ? 'Khu vực này đang dùng nội dung bạn đã viết.' : 'Đang dùng nội dung mẫu có sẵn (đã điền trong các ô). Cần thì sửa trực tiếp rồi bấm Lưu. Nếu bạn không bấm Lưu, trang vẫn dùng mẫu này và số video tự cập nhật.';
       seoView.href = d.url; seoView.hidden = false;
       if (b.region === 'qt' && !d.total && !d.saved) seoInfo.textContent += ' Nơi này chưa có video: trang chỉ hiện trên Google sau khi bạn bấm Lưu hoặc khi có người đăng video ở đây.';
@@ -2459,8 +2462,8 @@ async function pageAdmin() {
   geoSeo.el.addEventListener('change', () => setTimeout(loadSeo, 0));
   geoSeo.el.addEventListener('input', (e) => { if (e.target.tagName === 'INPUT') { clearTimeout(seoT); seoT = setTimeout(loadSeo, 800); } });
   const seoForm = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-    h('label', { class: 'f' }, h('span', {}, 'Tiêu đề SEO'), sf.title, cTitle), h('label', { class: 'f' }, h('span', {}, 'Mô tả SEO (meta description)'), sf.description, cDesc),
-    h('label', { class: 'f' }, h('span', {}, 'Từ khóa'), sf.keywords), h('label', { class: 'f' }, h('span', {}, 'Nội dung giới thiệu khu vực'), sf.intro),
+    h('label', { class: 'f' }, h('span', {}, 'Tiêu đề SEO'), sf.title, cTitle, seoAdd.title), h('label', { class: 'f' }, h('span', {}, 'Mô tả SEO (meta description)'), sf.description, cDesc, seoAdd.description),
+    h('label', { class: 'f' }, h('span', {}, 'Từ khóa'), sf.keywords, seoAdd.keywords), h('label', { class: 'f' }, h('span', {}, 'Nội dung giới thiệu khu vực'), sf.intro, seoAdd.intro),
     h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
       h('button', { class: 'btn primary', type: 'button', onclick: async () => { const b = seoBody(); if (!b.region) return toast('Hãy chọn khu vực', true); try { await api('/admin/area-seo', { method: 'PUT', body: { ...b, title: sf.title.value, description: sf.description.value, keywords: sf.keywords.value, intro: sf.intro.value } }); toast('Đã lưu nội dung SEO'); loadSeo(); } catch (e) { fail(e); } } }, 'Lưu'),
       h('button', { class: 'btn', type: 'button', onclick: () => { if (!seoDef) return toast('Hãy chọn khu vực', true); sf.title.value = seoDef.title; sf.description.value = seoDef.description; sf.keywords.value = seoDef.keywords; sf.intro.value = seoDef.intro; uTitle(); uDesc(); } }, 'Điền nội dung mẫu để sửa'),
