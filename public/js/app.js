@@ -1598,10 +1598,29 @@ function areaTile(v) {
 const flagOf = (cc) => String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.charCodeAt(0)));
 
 // a country other than Việt Nam: its states / cities that have videos → districts → videos
+// the admin's keyword in front of area names ("Phuket" -> "Giá rẻ Phuket"), same rule as the server's SEO pages
+let seoNamesP = null, seoNamesAt = 0;
+async function seoNamer() {
+  if (!seoNamesP || Date.now() - seoNamesAt > 60_000) { seoNamesAt = Date.now(); seoNamesP = api('/seo-names').catch(() => ({ sets: [] })); }
+  const { sets } = await seoNamesP;
+  const tag = /\{\s*(khu vực|khu vuc|area)\s*\}/gi;
+  return (key, name) => {
+    const set = (sets || []).find((x) => x.scope !== 'some' || (x.areas || []).some((k) => key === k || key.startsWith(k + '|')));
+    if (!set) return name;
+    if (new RegExp(tag.source, 'i').test(set.word)) return set.word.replace(tag, name);
+    return name.toLowerCase().includes(set.word.toLowerCase()) ? name : set.word + ' ' + name;
+  };
+}
+// show the area's real address (its SEO page), keeping the app route after "#"
+function showAreaUrl(url) {
+  try { if (url && location.pathname !== url) history.replaceState(history.state, '', url + location.search + location.hash); } catch {}
+}
+
 async function pageCountry(cc, prov, dist) {
   if (prov) Pref.bump(prov, 1.5);
   const infoQ = new URLSearchParams({ region: 'qt', country: cc, province: prov || '', district: dist || '' });
-  const [{ areas: all }, info] = await Promise.all([api('/areas'), api('/area-info?' + infoQ).catch(() => null)]);
+  const [{ areas: all }, info, lab] = await Promise.all([api('/areas'), api('/area-info?' + infoQ).catch(() => null), seoNamer()]);
+  if (info) showAreaUrl(info.url);
   const areas = all.filter((x) => x.region === 'qt' && x.country === cc);
   const seoBox = (i) => (i ? h('section', { class: 'seo-box' }, h('div', { class: 'seo-intro' }, i.intro), h('div', { class: 'facts', style: 'margin-top:14px' }, i.keywords.map((k) => h('span', { class: 'fact tag' }, k)))) : null);
   const cname = (areas[0] && areas[0].countryName) || countryName(cc);
@@ -1619,20 +1638,20 @@ async function pageCountry(cc, prov, dist) {
     const draw = () => {
       const q = filter.value.trim().toLowerCase();
       grid.replaceChildren(...[...provs.values()].filter((p) => p.name.toLowerCase().includes(q)).sort((a, b) => b.n - a.n).map((p) =>
-        h('a', { class: 'card prov-card has', href: `#/regions/${cc}/${enc(p.name)}` }, h('b', {}, p.name), h('span', { class: 'muted' }, p.ds.size ? p.ds.size + ' quận/huyện' : 'Tất cả video'), h('span', { class: 'badge', style: 'margin:0' }, p.n))));
+        h('a', { class: 'card prov-card has', href: `#/regions/${cc}/${enc(p.name)}` }, h('b', {}, lab('qt|' + cc + '|' + p.name, p.name)), h('span', { class: 'muted' }, p.ds.size ? p.ds.size + ' quận/huyện' : 'Tất cả video'), h('span', { class: 'badge', style: 'margin:0' }, p.n))));
       if (!grid.children.length) grid.append(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('h3', {}, 'Chưa có video ở ' + cname)));
     };
     filter.addEventListener('input', draw); draw();
-    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, h('span', { class: 'cflag' }, flagOf(cc)), cname), provs.size > 8 ? h('div', { class: 'filters' }, filter) : '', grid, seoBox(info));
+    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, h('span', { class: 'cflag' }, flagOf(cc)), lab('qt|' + cc, cname)), provs.size > 8 ? h('div', { class: 'filters' }, filter) : '', grid, seoBox(info));
   } else {
     const ds = new Map();
     areas.filter((x) => x.province === prov && x.district).forEach((x) => ds.set(x.district, (ds.get(x.district) || 0) + x.n));
     const chips = ds.size ? h('div', { class: 'ed-chips chips-wrap', style: 'margin:14px 0 18px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${cc}/${enc(prov)}` }, 'Tất cả', h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, sum((x) => x.province === prov))),
-      [...ds.entries()].sort((a, b) => b[1] - a[1]).map(([d, n]) => h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${cc}/${enc(prov)}/${enc(d)}` }, d, h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)))) : h('div', { style: 'height:14px' });
+      [...ds.entries()].sort((a, b) => b[1] - a[1]).map(([d, n]) => h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${cc}/${enc(prov)}/${enc(d)}` }, lab('qt|' + cc + '|' + prov + '|' + d, d), h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)))) : h('div', { style: 'height:14px' });
     const grid = h('div', { class: 'tgrid area-grid' });
     const count = h('span', { class: 'muted', style: 'font-size:14px;margin-left:8px;font-weight:500' });
     const pagerEl = h('div', { class: 'pager' });
-    wrap.append(h('h2', { class: 'title' }, dist || prov, count), chips, grid, pagerEl, seoBox(info));
+    wrap.append(h('h2', { class: 'title' }, lab(['qt', cc, prov, dist].filter(Boolean).join('|'), dist || prov), count), chips, grid, pagerEl, seoBox(info));
     const seed = Math.floor(Math.random() * 1e9);
     const go = async (page) => {
       grid.replaceChildren(h('div', { class: 'spin', style: 'grid-column:1/-1' }));
@@ -1653,7 +1672,8 @@ async function pageRegions(reg, prov, dist) {
   if (reg && /^[A-Z]{2}$/.test(reg)) return pageCountry(reg, prov, dist);
   if (prov) Pref.bump(prov, 1.5);
   const infoQ = new URLSearchParams({ region: reg || '', province: prov || '', district: dist || '' });
-  const [geo, { areas }, info] = await Promise.all([loadGeo(), api('/areas'), reg ? api('/area-info?' + infoQ).catch(() => null) : null]);
+  const [geo, { areas }, info, lab] = await Promise.all([loadGeo(), api('/areas'), reg ? api('/area-info?' + infoQ).catch(() => null) : null, seoNamer()]);
+  showAreaUrl(info ? info.url : '/khu-vuc');
   document.title = info ? info.title : 'Làm quen & hẹn hò theo khu vực – Bắc, Trung, Nam | xgaigu';
   const seoBox = (i) => (i ? h('section', { class: 'seo-box' }, h('div', { class: 'seo-intro' }, i.intro), h('div', { class: 'facts', style: 'margin-top:14px' }, i.keywords.map((k) => h('span', { class: 'fact tag' }, k)))) : null);
   const sum = (f) => areas.filter(f).reduce((n, x) => n + x.n, 0);
@@ -1666,7 +1686,7 @@ async function pageRegions(reg, prov, dist) {
   if (!reg || !geo[reg]) {
     wrap.append(h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Chọn khu vực'),
       h('div', { class: 'grid g3' }, Object.keys(REGION_NAMES).sort((a, b) => sum((x) => x.region === b) - sum((x) => x.region === a)).map((k) => h('a', { class: 'card region-card ' + k, href: '#/regions/' + k },
-        h('h3', {}, REGION_NAMES[k]), h('p', { class: 'muted' }, geo[k].length + ' tỉnh / thành phố'), h('span', { class: 'status st-accepted' }, sum((x) => x.region === k) + ' video')))));
+        h('h3', {}, lab(k, REGION_NAMES[k])), h('p', { class: 'muted' }, geo[k].length + ' tỉnh / thành phố'), h('span', { class: 'status st-accepted' }, sum((x) => x.region === k) + ' video')))));
     // other countries that have videos, most videos first
     const byCc = new Map();
     areas.filter((x) => x.region === 'qt' && x.country && x.country !== 'VN').forEach((x) => {
@@ -1676,7 +1696,7 @@ async function pageRegions(reg, prov, dist) {
     const cs = [...byCc.values()].sort((a, b) => b.n - a.n);
     if (cs.length) wrap.append(h('h2', { class: 'title', style: 'margin:34px 0 20px' }, 'Quốc gia khác'),
       h('div', { class: 'grid g3' }, cs.map((c) => h('a', { class: 'card region-card qt', href: '#/regions/' + c.cc },
-        h('h3', {}, h('span', { class: 'cflag' }, flagOf(c.cc)), c.name), h('p', { class: 'muted' }, c.provs.size + ' tỉnh / thành phố'), h('span', { class: 'status st-accepted' }, c.n + ' video')))));
+        h('h3', {}, h('span', { class: 'cflag' }, flagOf(c.cc)), lab('qt|' + c.cc, c.name)), h('p', { class: 'muted' }, c.provs.size + ' tỉnh / thành phố'), h('span', { class: 'status st-accepted' }, c.n + ' video')))));
   } else if (!prov) {
     const filter = h('input', { placeholder: 'Tìm tỉnh / thành phố…', 'aria-label': 'Tìm tỉnh' });
     const grid = h('div', { class: 'grid g4 prov-grid' });
@@ -1684,21 +1704,21 @@ async function pageRegions(reg, prov, dist) {
       const q = filter.value.trim().toLowerCase(); grid.replaceChildren();
       [...geo[reg]].filter((p) => p[0].toLowerCase().includes(q)).sort((a, b) => sum((x) => x.region === reg && x.province === b[0]) - sum((x) => x.region === reg && x.province === a[0])).forEach(([name, ds]) => {
         const n = sum((x) => x.region === reg && x.province === name);
-        grid.append(h('a', { class: 'card prov-card' + (n ? ' has' : ''), href: `#/regions/${reg}/${enc(name)}` }, h('b', {}, name), h('span', { class: 'muted' }, ds.length + ' quận/huyện'), n > 0 && h('span', { class: 'badge', style: 'margin:0' }, n)));
+        grid.append(h('a', { class: 'card prov-card' + (n ? ' has' : ''), href: `#/regions/${reg}/${enc(name)}` }, h('b', {}, lab(reg + '|' + name, name)), h('span', { class: 'muted' }, ds.length + ' quận/huyện'), n > 0 && h('span', { class: 'badge', style: 'margin:0' }, n)));
       });
     };
     filter.addEventListener('input', draw); draw();
-    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, REGION_NAMES[reg]), h('div', { class: 'filters' }, filter), grid, seoBox(info));
+    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, lab(reg, REGION_NAMES[reg])), h('div', { class: 'filters' }, filter), grid, seoBox(info));
   } else {
     const p = geo[reg].find((x) => x[0] === prov);
     if (!p) { wrap.append(h('div', { class: 'empty' }, h('h3', {}, 'Không tìm thấy khu vực'))); main.append(wrap); return; }
     const chips = h('div', { class: 'ed-chips chips-wrap', style: 'margin:14px 0 18px' }, h('a', { class: 'chip' + (!dist ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}` }, 'Tất cả'),
-      [...p[1]].sort((a, b) => sum((x) => x.province === prov && x.district === b) - sum((x) => x.province === prov && x.district === a)).map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, d, n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
+      [...p[1]].sort((a, b) => sum((x) => x.province === prov && x.district === b) - sum((x) => x.province === prov && x.district === a)).map((d) => { const n = sum((x) => x.province === prov && x.district === d); return h('a', { class: 'chip' + (dist === d ? ' on' : ''), href: `#/regions/${reg}/${enc(prov)}/${enc(d)}` }, lab(reg + '|' + prov + '|' + d, d), n > 0 && h('span', { class: 'badge', style: 'margin:0 0 0 4px' }, n)); }));
     const grid = h('div', { class: 'tgrid area-grid' });
     const count = h('span', { class: 'muted', style: 'font-size:14px;margin-left:8px;font-weight:500' });
     const pagerEl = h('div', { class: 'pager' });
     const first = h('div', { class: 'spin' });
-    wrap.append(h('h2', { class: 'title' }, dist || prov, count), chips, first, grid, pagerEl, seoBox(info));
+    wrap.append(h('h2', { class: 'title' }, lab([reg, prov, dist].filter(Boolean).join('|'), dist || prov), count), chips, first, grid, pagerEl, seoBox(info));
     const seed = Math.floor(Math.random() * 1e9); // new random order on each visit, kept while moving between pages
     const go = async (page) => {
       grid.replaceChildren(h('div', { class: 'spin', style: 'grid-column:1/-1' }));
@@ -2510,13 +2530,13 @@ async function pageAdmin() {
         chk(s.withName, 'Tự ghép tên khu vực sau mỗi từ khóa (VD "Giá rẻ" → "Giá rẻ Bangkok")', (v) => { s.withName = v; }),
         h('div', { style: 'display:grid;gap:6px' }, h('small', { class: 'muted' }, 'Thêm vào:'),
           chk(s.inTitle, 'Tiêu đề SEO', (v) => { s.inTitle = v; }), h('label', { class: 'muted', style: 'font-size:13px;margin-left:28px' }, 'Số từ khóa của bộ này đưa vào tiêu đề: ', cnt),
-          chk(s.inDesc, 'Mô tả SEO', (v) => { s.inDesc = v; }), chk(s.inIntro, 'Nội dung giới thiệu khu vực', (v) => { s.inIntro = v; }), chk(s.inKeywords, 'Ô từ khóa', (v) => { s.inKeywords = v; })),
+          chk(s.inDesc, 'Mô tả SEO', (v) => { s.inDesc = v; }), chk(s.inIntro, 'Nội dung giới thiệu khu vực', (v) => { s.inIntro = v; }), chk(s.inKeywords, 'Ô từ khóa', (v) => { s.inKeywords = v; }), chk(s.inName, 'Trước tên khu vực hiện trên web và trang SEO (VD "Giá rẻ Phuket", chỉ dùng từ khóa đầu tiên)', (v) => { s.inName = v; })),
         h('div', { style: 'display:grid;gap:6px' }, h('small', { class: 'muted' }, 'Áp dụng cho:'), scopeOpt('all', 'Tất cả khu vực (Việt Nam và các nước)'), scopeOpt('some', 'Chỉ những khu vực tôi chọn')),
         pickBox);
     }));
   };
   api('/admin/seo-global').then((g) => { kwSets = (g.sets || []).map((s) => ({ ...s, areas: [...(s.areas || [])] })); if (!kwSets.length) kwSets.push(newSet()); drawSets(); }).catch((e) => console.error('seo keyword sets:', e));
-  const newSet = () => ({ keywords: '', inTitle: true, inDesc: true, inIntro: true, inKeywords: true, titleCount: 1, withName: false, scope: 'all', areas: [] });
+  const newSet = () => ({ keywords: '', inName: true, inTitle: true, inDesc: true, inIntro: true, inKeywords: true, titleCount: 1, withName: false, scope: 'all', areas: [] });
   const globalCard = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px;margin-bottom:16px;border-color:rgba(232,211,166,.35)' },
     h('b', {}, '🔑 Từ khóa riêng của bạn'),
     h('p', { class: 'muted', style: 'font-size:13.5px' }, 'Gõ từ khóa riêng, VD "Giá rẻ", rồi chọn áp dụng cho tất cả khu vực hay chỉ những khu vực bạn chọn. Từ khóa tự được thêm vào tiêu đề SEO, mô tả SEO, ô từ khóa và nội dung giới thiệu của các khu vực đó, cả nội dung mẫu lẫn nội dung bạn đã viết. Viết {khu vực} trong từ khóa để tự thay bằng tên nơi đó. Từ khóa đã có sẵn trong nội dung thì không thêm lần nữa.'),
@@ -2545,6 +2565,7 @@ async function route() {
   const page = async () => {
     main.innerHTML = '';
     const [a, b] = seg;
+    if (a !== 'regions' && /^\/khu-vuc(\/|$)/.test(location.pathname)) { try { history.replaceState(history.state, '', '/' + location.search + location.hash); } catch {} }
     main.classList.toggle('nopad', !a || a === 'feed' || a === 'messages' || (a === 'live' && !!b) || (a === 'groups' && /^\d+$/.test(b || '')));
     if (!a) return pageFeed(null, true);
     if (a === 'welcome') return pageHome();

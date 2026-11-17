@@ -79,10 +79,10 @@ function install(app, ctx) {
         if (!name) continue;
         m.set(name, (m.get(name) || 0) + x.n);
       }
-      return byCount([...m].map(([name, n]) => ({ name, n, url: urlOf(a.level === 'country' ? { ...a, level: 'province', province: name } : { ...a, level: 'district', district: name }) })));
+      return byCount([...m].map(([name, n]) => { const area = a.level === 'country' ? { ...a, level: 'province', province: name } : { ...a, level: 'district', district: name }; return { name, n, area, url: urlOf(area) }; }));
     }
-    if (a.level === 'region') return byCount(GEO[a.region].map(([p]) => ({ name: p, url: urlOf({ level: 'province', region: a.region, province: p }), n: sumWhere(rows, (x) => x.region === a.region && x.province === p) })));
-    if (a.level === 'province') return byCount(GEO[a.region].find((p) => p[0] === a.province)[1].map((d) => ({ name: d, url: urlOf({ level: 'district', region: a.region, province: a.province, district: d }), n: sumWhere(rows, (x) => x.province === a.province && x.district === d) })));
+    if (a.level === 'region') return byCount(GEO[a.region].map(([p]) => ({ name: p, area: { level: 'province', region: a.region, province: p }, url: urlOf({ level: 'province', region: a.region, province: p }), n: sumWhere(rows, (x) => x.region === a.region && x.province === p) })));
+    if (a.level === 'province') return byCount(GEO[a.region].find((p) => p[0] === a.province)[1].map((d) => ({ name: d, area: { level: 'district', region: a.region, province: a.province, district: d }, url: urlOf({ level: 'district', region: a.region, province: a.province, district: d }), n: sumWhere(rows, (x) => x.province === a.province && x.district === d) })));
     return [];
   }
   const totalOf = (a, rows) => sumWhere(rows, inArea(a));
@@ -126,7 +126,7 @@ function install(app, ctx) {
   const saved = (a) => db.prepare('SELECT title, description, keywords, intro FROM area_seo WHERE key = ?').get(keyOf(a)) || null;
 
   // ---------- the admin's own keywords, added to every area ----------
-  const SET_DEFAULTS = { keywords: '', inTitle: true, inDesc: true, inIntro: true, inKeywords: true, titleCount: 1, withName: false, scope: 'all', areas: [] };
+  const SET_DEFAULTS = { keywords: '', inTitle: true, inDesc: true, inIntro: true, inKeywords: true, inName: true, titleCount: 1, withName: false, scope: 'all', areas: [] };
   const cleanSet = (x) => ({ ...SET_DEFAULTS, ...x, areas: Array.isArray(x && x.areas) ? x.areas : [] });
   // stored as { sets: [...] }; the first version was a single set for every area
   const globalConf = () => {
@@ -160,6 +160,20 @@ function install(app, ctx) {
     { const add = pick('inKeywords').filter((k) => !out.keywords.split(',').some((x) => x.trim().toLowerCase() === k.toLowerCase())); out.added.keywords = add; if (add.length) out.keywords = [out.keywords, ...add].filter(Boolean).join(', '); }
     return out;
   }
+  // the area's name with the admin's keyword in front ("Phuket" -> "Giá rẻ Phuket"), from the first set that covers it
+  const firstWord = (s) => String(s.keywords || '').split(/[,\n]/).map((k) => k.trim()).find(Boolean) || '';
+  function labelOf(a, name) {
+    const set = globalConf().sets.find((s) => s.inName && firstWord(s) && inScope(s, a));
+    if (!set) return name;
+    const w = firstWord(set);
+    if (/\{\s*(khu vực|khu vuc|area)\s*\}/i.test(w)) return w.replace(AREA_TAG, name);
+    return has(name, w) ? name : w + ' ' + name;
+  }
+  // the same rule for the app's own area pages
+  app.get('/api/seo-names', (_req, res) => {
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ sets: globalConf().sets.filter((s) => s.inName && firstWord(s)).map((s) => ({ word: firstWord(s), scope: s.scope, areas: s.areas })) });
+  });
   function content(a, rows) {
     const d = defaults(a, rows), s = saved(a) || {};
     return withGlobal(a, { title: s.title || d.title, description: s.description || d.description, keywords: s.keywords || d.keywords, intro: s.intro || d.intro });
@@ -214,7 +228,7 @@ function install(app, ctx) {
 
   // ---------- page shell ----------
   const baseOf = (req) => (process.env.SITE_URL || req.protocol + '://' + req.get('host')).replace(/\/$/, '');
-  function shell(req, { title, description, keywords, canonical, ld, route, main }) {
+  function shell(req, { title, description, keywords, canonical, ld, route, main, image }) {
     const base = baseOf(req);
     let html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
     html = html.replace(/<title>[\s\S]*?<\/title>\s*/, '').replace(/<meta name="description"[^>]*>\s*/, '').replace(/<meta property="og:[^>]*>\s*/g, '');
@@ -228,7 +242,8 @@ function install(app, ctx) {
       `<meta property="og:url" content="${escHtml(base + canonical)}">`,
       `<meta property="og:title" content="${escHtml(title)}">`,
       `<meta property="og:description" content="${escHtml(description)}">`,
-      `<meta property="og:image" content="${escHtml(base + '/img/og-default.png')}">`,
+      `<meta property="og:image" content="${escHtml(base + (image || '/img/og-default.png'))}">`,
+      `<meta name="twitter:image" content="${escHtml(base + (image || '/img/og-default.png'))}">`,
       '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">',
       '<meta name="twitter:card" content="summary_large_image">',
       `<meta name="twitter:title" content="${escHtml(title)}">`,
@@ -261,14 +276,14 @@ function install(app, ctx) {
     const rows = counts(), c = content(a, rows), kids = children(a, rows), name = isTop(a) ? nameOf(a) : fullName(a);
     const vids = listVideos(null, { region: a.region, province: a.province || null, district: a.district || null, country: isForeign(a) ? a.country : null, limit: 12 });
     const crumbs = crumbsOf(a), base = baseOf(req);
-    const h1 = isTop(a) ? `Làm quen & hẹn hò ${name}` : `Làm quen & hẹn hò tại ${name}`;
+    const h1 = (isTop(a) ? 'Làm quen & hẹn hò ' : 'Làm quen & hẹn hò tại ') + labelOf(a, name);
     const kw = c.keywords.split(',').map((x) => x.trim()).filter(Boolean);
     const kidsTitle = isTop(a) ? 'Tỉnh / thành phố' : 'Quận / huyện';
     const main = `<div class="wrap prose seo-area">
 <nav class="crumbs" aria-label="Breadcrumb">${crumbs.map((x, i) => (i < crumbs.length - 1 ? `<a href="${escHtml(x.url)}">${escHtml(x.name)}</a> › ` : `<span>${escHtml(x.name)}</span>`)).join('')}</nav>
 <h1>${escHtml(h1)}</h1>
 ${paragraphs(c.intro)}
-${kids.length ? `<h2>${kidsTitle} thuộc ${escHtml(name)}</h2><ul class="seo-links">${kids.map((k) => `<li><a href="${escHtml(k.url)}">${escHtml(k.name)}</a>${k.n ? ` (${k.n} video)` : ''}</li>`).join('')}</ul>` : ''}
+${kids.length ? `<h2>${kidsTitle} thuộc ${escHtml(name)}</h2><ul class="seo-links">${kids.map((k) => `<li><a href="${escHtml(k.url)}">${escHtml(k.area ? labelOf(k.area, isForeign(a) ? k.name : shortName(k.name)) : k.name)}</a>${k.n ? ` (${k.n} video)` : ''}</li>`).join('')}</ul>` : ''}
 ${vids.length ? `<h2>Video mới tại ${escHtml(name)}</h2><ul class="seo-links">${vids.map((v) => `<li><a href="/v/${v.id}">${escHtml(cut(v.caption || 'Video của ' + v.user.name, 90))}</a></li>`).join('')}</ul>` : ''}
 ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · ')}</p>` : ''}
 <p><a href="/#${escHtml(spaRoute(a))}">Xem video và làm quen tại ${escHtml(name)}</a></p>
@@ -277,7 +292,9 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
       { '@type': 'BreadcrumbList', itemListElement: crumbs.map((x, i) => ({ '@type': 'ListItem', position: i + 1, name: x.name, item: base + x.url })) },
       { '@type': 'CollectionPage', name: c.title, description: c.description, url: base + urlOf(a), inLanguage: 'vi-VN', isPartOf: { '@type': 'WebSite', name: 'xgaigu', url: base + '/' } },
     ] };
-    return shell(req, { title: c.title, description: c.description, keywords: c.keywords, canonical: urlOf(a), ld, route: spaRoute(a), main });
+    // social previews: the picture of the newest video there, else the site picture
+    const image = vids.length ? '/og/v/' + vids[0].id + '.jpg' : '';
+    return shell(req, { title: c.title, description: c.description, keywords: c.keywords, canonical: urlOf(a), ld, route: spaRoute(a), main, image });
   }
 
   function indexHtml(req) {
@@ -349,7 +366,7 @@ ${countries.size ? `<h2>Quốc gia khác</h2><ul class="seo-links">${[...countri
     const list = Array.isArray(req.body && req.body.sets) ? req.body.sets.slice(0, 20) : [];
     const sets = list.map((b) => ({
       keywords: String(b.keywords || '').replace(/\r/g, '').split(/[,\n]/).map((k) => clean(k, 80)).filter(Boolean).slice(0, 30).join(', '),
-      inTitle: !!b.inTitle, inDesc: !!b.inDesc, inIntro: !!b.inIntro, inKeywords: !!b.inKeywords, withName: !!b.withName,
+      inTitle: !!b.inTitle, inDesc: !!b.inDesc, inIntro: !!b.inIntro, inKeywords: !!b.inKeywords, inName: !!b.inName, withName: !!b.withName,
       titleCount: Math.max(0, Math.min(5, parseInt(b.titleCount, 10) || 0)),
       scope: b.scope === 'some' ? 'some' : 'all',
       areas: [...new Set((Array.isArray(b.areas) ? b.areas : []).map((k) => clean(k, 200)).filter(Boolean))].slice(0, 300),
