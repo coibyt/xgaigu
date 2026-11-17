@@ -1600,11 +1600,13 @@ const flagOf = (cc) => String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.ch
 // a country other than Việt Nam: its states / cities that have videos → districts → videos
 async function pageCountry(cc, prov, dist) {
   if (prov) Pref.bump(prov, 1.5);
-  const { areas: all } = await api('/areas');
+  const infoQ = new URLSearchParams({ region: 'qt', country: cc, province: prov || '', district: dist || '' });
+  const [{ areas: all }, info] = await Promise.all([api('/areas'), api('/area-info?' + infoQ).catch(() => null)]);
   const areas = all.filter((x) => x.region === 'qt' && x.country === cc);
+  const seoBox = (i) => (i ? h('section', { class: 'seo-box' }, h('div', { class: 'seo-intro' }, i.intro), h('div', { class: 'facts', style: 'margin-top:14px' }, i.keywords.map((k) => h('span', { class: 'fact tag' }, k)))) : null);
   const cname = (areas[0] && areas[0].countryName) || countryName(cc);
   const enc = encodeURIComponent, sum = (f) => areas.filter(f).reduce((n, x) => n + x.n, 0);
-  document.title = (prov ? (dist ? dist + ', ' : '') + prov + ' – ' : '') + cname + ' – làm quen & hẹn hò | xgaigu';
+  document.title = info ? info.title : (prov ? (dist ? dist + ', ' : '') + prov + ' – ' : '') + cname + ' – làm quen & hẹn hò | xgaigu';
   const crumb = [h('a', { href: '#/regions' }, 'Khu vực'), h('span', {}, ' › '), h('a', { href: '#/regions/' + cc }, flagOf(cc) + ' ' + cname)];
   if (prov) crumb.push(h('span', {}, ' › '), h('a', { href: `#/regions/${cc}/${enc(prov)}` }, prov));
   if (dist) crumb.push(h('span', {}, ' › '), h('span', {}, dist));
@@ -1621,7 +1623,7 @@ async function pageCountry(cc, prov, dist) {
       if (!grid.children.length) grid.append(h('div', { class: 'card empty', style: 'grid-column:1/-1' }, h('h3', {}, 'Chưa có video ở ' + cname)));
     };
     filter.addEventListener('input', draw); draw();
-    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, h('span', { class: 'cflag' }, flagOf(cc)), cname), provs.size > 8 ? h('div', { class: 'filters' }, filter) : '', grid);
+    wrap.append(h('h2', { class: 'title', style: 'margin-bottom:16px' }, h('span', { class: 'cflag' }, flagOf(cc)), cname), provs.size > 8 ? h('div', { class: 'filters' }, filter) : '', grid, seoBox(info));
   } else {
     const ds = new Map();
     areas.filter((x) => x.province === prov && x.district).forEach((x) => ds.set(x.district, (ds.get(x.district) || 0) + x.n));
@@ -1630,7 +1632,7 @@ async function pageCountry(cc, prov, dist) {
     const grid = h('div', { class: 'tgrid area-grid' });
     const count = h('span', { class: 'muted', style: 'font-size:14px;margin-left:8px;font-weight:500' });
     const pagerEl = h('div', { class: 'pager' });
-    wrap.append(h('h2', { class: 'title' }, dist || prov, count), chips, grid, pagerEl);
+    wrap.append(h('h2', { class: 'title' }, dist || prov, count), chips, grid, pagerEl, seoBox(info));
     const seed = Math.floor(Math.random() * 1e9);
     const go = async (page) => {
       grid.replaceChildren(h('div', { class: 'spin', style: 'grid-column:1/-1' }));
@@ -2421,18 +2423,23 @@ async function pageAdmin() {
         h('button', { class: 'btn primary', type: 'button', onclick: async (ev) => { if (!confirm('Gửi email này cho tối đa ' + lim.value + ' thành viên?')) return; ev.target.disabled = true; try { const r = await api('/admin/mail/campaign', { method: 'POST', body: { subject: subj.value, body: body.value, limit: lim.value, verifiedOnly: ver.checked, ctaLabel: ctaL.value, ctaUrl: ctaU.value } }); toast('Đang gửi cho ' + r.total + ' người…'); const poll = setInterval(async () => { try { const x = await api('/admin/mail'); drawC(x.campaigns); if (!x.campaigns.some((c) => c.status === 'running')) { clearInterval(poll); ev.target.disabled = false; toast('Đã gửi xong'); } } catch { clearInterval(poll); } }, 4000); S.cleanups.push(() => clearInterval(poll)); drawC((await api('/admin/mail')).campaigns); } catch (e) { fail(e); ev.target.disabled = false; } } }, 'Gửi email'), camp));
   })();
   // SEO text of every area (region / province / district)
-  const geoSeo = geoPicker();
+  const geoSeo = geoPicker({}, { countries: true });
   const sf = { title: h('input', { maxlength: 120, placeholder: 'Tiêu đề trang (nên dưới 60 ký tự)' }), description: h('textarea', { rows: 3, maxlength: 300, placeholder: 'Mô tả ngắn hiện trên Google (nên 120–160 ký tự)' }),
     keywords: h('textarea', { rows: 2, maxlength: 600, placeholder: 'Từ khóa, cách nhau bằng dấu phẩy' }), intro: h('textarea', { rows: 10, maxlength: 6000, placeholder: 'Nội dung giới thiệu khu vực. Để trống một dòng giữa các đoạn.' }) };
-  const seoInfo = h('p', { class: 'muted', style: 'font-size:14px;margin:8px 0 12px' }, 'Chọn khu vực ở trên (ít nhất là miền) để sửa.');
+  const seoInfo = h('p', { class: 'muted', style: 'font-size:14px;margin:8px 0 12px' }, 'Chọn quốc gia và khu vực ở trên (Việt Nam: ít nhất là miền; nước khác: chọn nước, có thể gõ thêm tỉnh / thành phố) để sửa.');
+  const seoPrev = h('div', { class: 'seo-prev', hidden: true });
   const counter = (el, n) => { const c = h('small', { class: 'muted' }); const u = () => { c.textContent = el.value.length + ' ký tự' + (n ? ' (nên ≤ ' + n + ')' : ''); c.style.color = n && el.value.length > n ? '#fbbf24' : ''; }; el.addEventListener('input', u); u(); return [c, u]; };
   const [cTitle, uTitle] = counter(sf.title, 60), [cDesc, uDesc] = counter(sf.description, 160);
   let seoDef = null, seoUrl = '';
   const seoView = h('a', { class: 'btn sm', target: '_blank', rel: 'noopener', hidden: true }, 'Xem trang này');
-  const seoBody = () => { const [r, p, d] = geoSeo.el.querySelectorAll('select'); return { region: r.value, province: p.value, district: d.value }; };
+  const seoBody = () => {
+    const val = (n) => ((geoSeo.el.querySelector('[name="' + n + '"]') || {}).value || '').trim();
+    const cc = geoSeo.country();
+    return cc === 'VN' ? { region: val('region'), province: val('province'), district: val('district') } : { region: 'qt', country: cc, province: val('province'), district: val('district') };
+  };
   const loadSeo = async () => {
     const b = seoBody();
-    if (!b.region) { seoInfo.textContent = 'Chọn khu vực ở trên (ít nhất là miền) để sửa.'; seoView.hidden = true; seoDef = null; return; }
+    if (!b.region) { seoInfo.textContent = 'Chọn khu vực ở trên (ít nhất là miền) để sửa.'; seoView.hidden = true; seoPrev.hidden = true; seoDef = null; return; }
     try {
       const d = await api('/admin/area-seo?' + new URLSearchParams(b));
       seoDef = d.defaults; seoUrl = d.url;
@@ -2443,9 +2450,14 @@ async function pageAdmin() {
       uTitle(); uDesc();
       seoInfo.textContent = d.saved ? 'Khu vực này đang dùng nội dung bạn đã viết.' : 'Đang dùng nội dung mẫu có sẵn (đã điền trong các ô). Cần thì sửa trực tiếp rồi bấm Lưu. Nếu bạn không bấm Lưu, trang vẫn dùng mẫu này và số video tự cập nhật.';
       seoView.href = d.url; seoView.hidden = false;
+      if (b.region === 'qt' && !d.total && !d.saved) seoInfo.textContent += ' Nơi này chưa có video: trang chỉ hiện trên Google sau khi bạn bấm Lưu hoặc khi có người đăng video ở đây.';
+      seoPrev.hidden = false;
+      seoPrev.replaceChildren(h('small', {}, 'Bản hiển thị trên Google (đã tự thêm từ khóa chung của bạn):'), h('div', { class: 'seo-prev-g' }, h('span', { class: 'seo-prev-url' }, location.host + d.url), h('b', {}, d.final.title), h('p', {}, d.final.description)));
     } catch (e) { fail(e); }
   };
+  let seoT = 0;
   geoSeo.el.addEventListener('change', () => setTimeout(loadSeo, 0));
+  geoSeo.el.addEventListener('input', (e) => { if (e.target.tagName === 'INPUT') { clearTimeout(seoT); seoT = setTimeout(loadSeo, 800); } });
   const seoForm = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
     h('label', { class: 'f' }, h('span', {}, 'Tiêu đề SEO'), sf.title, cTitle), h('label', { class: 'f' }, h('span', {}, 'Mô tả SEO (meta description)'), sf.description, cDesc),
     h('label', { class: 'f' }, h('span', {}, 'Từ khóa'), sf.keywords), h('label', { class: 'f' }, h('span', {}, 'Nội dung giới thiệu khu vực'), sf.intro),
@@ -2453,8 +2465,23 @@ async function pageAdmin() {
       h('button', { class: 'btn primary', type: 'button', onclick: async () => { const b = seoBody(); if (!b.region) return toast('Hãy chọn khu vực', true); try { await api('/admin/area-seo', { method: 'PUT', body: { ...b, title: sf.title.value, description: sf.description.value, keywords: sf.keywords.value, intro: sf.intro.value } }); toast('Đã lưu nội dung SEO'); loadSeo(); } catch (e) { fail(e); } } }, 'Lưu'),
       h('button', { class: 'btn', type: 'button', onclick: () => { if (!seoDef) return toast('Hãy chọn khu vực', true); sf.title.value = seoDef.title; sf.description.value = seoDef.description; sf.keywords.value = seoDef.keywords; sf.intro.value = seoDef.intro; uTitle(); uDesc(); } }, 'Điền nội dung mẫu để sửa'),
       h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
+  // the admin's own keywords, added to every area automatically
+  const gk = { keywords: h('textarea', { rows: 3, maxlength: 2000, placeholder: 'VD: gái xinh {khu vực}, hẹn hò {khu vực}, kết bạn bốn phương' }),
+    inTitle: h('input', { type: 'checkbox' }), inDesc: h('input', { type: 'checkbox' }), inIntro: h('input', { type: 'checkbox' }), inKeywords: h('input', { type: 'checkbox' }),
+    titleCount: h('input', { type: 'number', min: 0, max: 5, style: 'width:70px' }) };
+  api('/admin/seo-global').then((g) => { gk.keywords.value = (g.keywords || '').split(', ').filter(Boolean).join(', '); ['inTitle', 'inDesc', 'inIntro', 'inKeywords'].forEach((k) => { gk[k].checked = !!g[k]; }); gk.titleCount.value = g.titleCount; }).catch(() => {});
+  const chk = (el, label) => h('label', { class: 'check' }, el, h('span', {}, label));
+  const globalCard = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px;margin-bottom:16px;border-color:rgba(232,211,166,.35)' },
+    h('b', {}, '🔑 Từ khóa chung cho mọi khu vực'),
+    h('p', { class: 'muted', style: 'font-size:13.5px' }, 'Các từ khóa này tự động được thêm vào MỌI khu vực (Việt Nam và các nước), cả nội dung mẫu lẫn nội dung bạn đã viết. Cách nhau bằng dấu phẩy. Viết {khu vực} để tự thay bằng tên nơi đó, VD "hẹn hò {khu vực}" → "hẹn hò Bangkok". Từ khóa nào đã có sẵn trong nội dung thì không thêm lần nữa.'),
+    gk.keywords,
+    h('div', { style: 'display:grid;gap:6px' }, chk(gk.inTitle, 'Thêm vào tiêu đề SEO'), h('label', { class: 'muted', style: 'font-size:13.5px;margin-left:28px' }, 'Số từ khóa thêm vào tiêu đề: ', gk.titleCount, ' (tiêu đề dài quá Google sẽ cắt bớt)'),
+      chk(gk.inDesc, 'Thêm vào mô tả SEO'), chk(gk.inIntro, 'Thêm vào cuối nội dung giới thiệu khu vực'), chk(gk.inKeywords, 'Thêm vào ô từ khóa')),
+    h('div', { class: 'row', style: 'gap:8px' }, h('button', { class: 'btn primary', type: 'button', onclick: async () => {
+      try { await api('/admin/seo-global', { method: 'PUT', body: { keywords: gk.keywords.value, inTitle: gk.inTitle.checked, inDesc: gk.inDesc.checked, inIntro: gk.inIntro.checked, inKeywords: gk.inKeywords.checked, titleCount: gk.titleCount.value } }); toast('Đã lưu từ khóa chung, áp dụng cho mọi khu vực'); loadSeo(); } catch (e) { fail(e); }
+    } }, 'Lưu từ khóa chung')));
   const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
-    h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), geoSeo.el, seoInfo, seoForm);
+    h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google, cho cả Việt Nam và các nước khác. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), globalCard, geoSeo.el, seoInfo, seoPrev, seoForm);
   main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, window.XGTele.adminBox(), await window.XGLive.adminBox(), await window.XGShop.adminBox(), videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
     reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
 }

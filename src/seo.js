@@ -1,21 +1,35 @@
-// SEO pages for the "Khu vực" (regions → provinces → districts) section.
-// Real URLs (/khu-vuc/mien-nam/ho-chi-minh/quan-8) rendered on the server with title, meta tags, structured data,
-// intro text, keywords, links and a list of videos, plus sitemap.xml and robots.txt. Admins can edit the text of every area.
-// Defaults are generated from real data only (names and video counts); admins can replace them with their own text.
+// SEO pages for the "Khu vực" section: Việt Nam (regions → provinces → districts) and other countries
+// (country → state / city → district, from the places members really posted videos in).
+// Real URLs (/khu-vuc/mien-nam/ho-chi-minh/quan-8, /khu-vuc/quoc-gia/thai-lan/bangkok) rendered on the server with title,
+// meta tags, structured data, intro text, keywords, links and a list of videos, plus sitemap.xml and robots.txt.
+// Defaults are generated from real data only (names and video counts); admins can replace them with their own text,
+// and can set their own keywords that are added automatically to every area (title, description, intro, keywords).
 const fs = require('fs');
 const path = require('path');
 
 const REGIONS = { bac: 'Miền Bắc', trung: 'Miền Trung', nam: 'Miền Nam' };
 const REGION_SLUG = { bac: 'mien-bac', trung: 'mien-trung', nam: 'mien-nam' };
+const CC_RE = /^[A-Z]{2}$/;
 
 const slugify = (s) => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd')
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 const shortName = (p) => String(p).replace(/^(TP\.?\s*|Thành phố\s+|Tỉnh\s+)/i, '').trim();
+const dn = (() => { try { return new Intl.DisplayNames(['vi'], { type: 'region' }); } catch { return null; } })();
+const cName = (cc) => { try { return (dn && dn.of(cc)) || cc; } catch { return cc; } };
 
 function install(app, ctx) {
   const { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now } = ctx;
+  const getConf = (k) => { const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(k); return r ? r.value : ''; };
 
-  // ---------- area index ----------
+  // every country by its slug ("thai-lan" -> "TH")
+  const countryBySlug = new Map();
+  for (let i = 0; i < 26; i++) for (let j = 0; j < 26; j++) {
+    const cc = String.fromCharCode(65 + i, 65 + j), n = cName(cc);
+    if (cc !== 'VN' && n && n !== cc && !/^Unknown|Không xác định/i.test(n) && !countryBySlug.has(slugify(n))) countryBySlug.set(slugify(n), cc);
+  }
+  const isForeign = (a) => a.region === 'qt';
+
+  // ---------- area index (Việt Nam: fixed lists) ----------
   const byPath = new Map(); // "mien-nam/ho-chi-minh/quan-8" -> area
   const pathOf = (region, province, district) => {
     const parts = [REGION_SLUG[region]];
@@ -36,43 +50,66 @@ function install(app, ctx) {
       }
     }
   }
-  const urlOf = (a) => '/khu-vuc/' + pathOf(a.region, a.province, a.district);
-  const keyOf = (a) => [a.region, a.province, a.district].filter(Boolean).join('|');
-  const nameOf = (a) => (a.district || (a.province ? shortName(a.province) : REGIONS[a.region]));
-  const fullName = (a) => (a.district ? a.district + ', ' + shortName(a.province) : nameOf(a));
+  const foreignPath = (a) => ['quoc-gia', slugify(cName(a.country)), a.province && slugify(a.province), a.district && slugify(a.district)].filter(Boolean).join('/');
+  const urlOf = (a) => '/khu-vuc/' + (isForeign(a) ? foreignPath(a) : pathOf(a.region, a.province, a.district));
+  const keyOf = (a) => (isForeign(a) ? ['qt', a.country, a.province, a.district] : [a.region, a.province, a.district]).filter(Boolean).join('|');
+  const nameOf = (a) => (isForeign(a) ? a.district || a.province || cName(a.country) : a.district || (a.province ? shortName(a.province) : REGIONS[a.region]));
+  const fullName = (a) => {
+    if (isForeign(a)) return a.district ? a.district + ', ' + a.province : a.province ? a.province + ', ' + cName(a.country) : cName(a.country);
+    return a.district ? a.district + ', ' + shortName(a.province) : nameOf(a);
+  };
+  const isTop = (a) => a.level === 'region' || a.level === 'country';
+  const spaRoute = (a) => '/regions/' + (isForeign(a) ? a.country : a.region) + (a.province ? '/' + encodeURIComponent(a.province) : '') + (a.district ? '/' + encodeURIComponent(a.district) : '');
 
   // ---------- data ----------
   const counts = () => db.prepare(
-    `SELECT v.region, v.province, v.district, COUNT(*) AS n FROM videos v JOIN users u ON u.id = v.user_id
-     WHERE v.hidden = 0 AND u.banned = 0 AND v.region != '' GROUP BY v.region, v.province, v.district`).all();
+    `SELECT v.region, v.province, v.district, COALESCE(v.country, 'VN') AS country, COUNT(*) AS n FROM videos v JOIN users u ON u.id = v.user_id
+     WHERE v.hidden = 0 AND u.banned = 0 AND v.region != '' GROUP BY v.region, v.province, v.district, COALESCE(v.country, 'VN')`).all();
   const sumWhere = (rows, f) => rows.filter(f).reduce((n, x) => n + x.n, 0);
+  const inArea = (a) => (x) => (isForeign(a) ? x.region === 'qt' && x.country === a.country : x.region === a.region)
+    && (!a.province || x.province === a.province) && (!a.district || x.district === a.district);
 
   const byCount = (list) => list.sort((x, y) => y.n - x.n); // most videos first (stable: equal counts keep their normal order)
   function children(a, rows) {
+    if (isForeign(a)) {
+      if (a.level === 'district') return [];
+      const m = new Map();
+      for (const x of rows.filter(inArea(a))) {
+        const name = a.level === 'country' ? x.province : x.district;
+        if (!name) continue;
+        m.set(name, (m.get(name) || 0) + x.n);
+      }
+      return byCount([...m].map(([name, n]) => ({ name, n, url: urlOf(a.level === 'country' ? { ...a, level: 'province', province: name } : { ...a, level: 'district', district: name }) })));
+    }
     if (a.level === 'region') return byCount(GEO[a.region].map(([p]) => ({ name: p, url: urlOf({ level: 'province', region: a.region, province: p }), n: sumWhere(rows, (x) => x.region === a.region && x.province === p) })));
     if (a.level === 'province') return byCount(GEO[a.region].find((p) => p[0] === a.province)[1].map((d) => ({ name: d, url: urlOf({ level: 'district', region: a.region, province: a.province, district: d }), n: sumWhere(rows, (x) => x.province === a.province && x.district === d) })));
     return [];
   }
-  const totalOf = (a, rows) => sumWhere(rows, (x) => x.region === a.region && (!a.province || x.province === a.province) && (!a.district || x.district === a.district));
+  const totalOf = (a, rows) => sumWhere(rows, inArea(a));
 
   // ---------- generated defaults (only facts we really know: names, counts) ----------
   function defaults(a, rows) {
     const name = nameOf(a), full = fullName(a), total = totalOf(a, rows), kids = children(a, rows);
     const top = [...kids].sort((x, y) => y.n - x.n).filter((x) => x.n > 0).slice(0, 5);
     const safety = 'Mọi thành viên phải từ 18 tuổi trở lên. Hãy gặp gỡ ở nơi công cộng, không chuyển tiền trước cho người lạ và báo cáo ngay nội dung đáng ngờ để xgaigu xử lý.';
-    const place = a.level === 'region' ? name : full;
+    const place = isTop(a) ? name : full;
     const faq = `Câu hỏi thường gặp về ${place}\n` +
       `• Xem video tại ${place} như thế nào? Mở trang này, chọn khu vực bạn quan tâm rồi bấm vào video để xem toàn màn hình.\n` +
       `• Làm quen ra sao? Đăng ký tài khoản miễn phí, bấm "Xem thông tin" rồi nhắn tin hoặc đặt lịch hẹn gặp.\n` +
       `• Có an toàn không? Mọi thành viên từ 18 tuổi trở lên, có nút báo cáo ở mọi nơi và quản trị viên xử lý nội dung vi phạm.`;
     const keywords = [`làm quen ${place}`, `kết bạn ${place}`, `hẹn hò ${place}`, `video ${place}`, `chat ${place}`, `livestream ${place}`, `tìm bạn ${place}`, 'xgaigu'];
+    const sName = (k) => (isForeign(a) ? k.name : shortName(k.name));
     let intro;
-    if (a.level === 'region') {
-      intro = `${name} gồm ${kids.length} tỉnh/thành phố: ${kids.map((k) => shortName(k.name)).join(', ')}.\n\n` +
+    if (a.level === 'country') {
+      intro = (kids.length ? `${name} có ${kids.length} tỉnh / thành phố đã có video trên xgaigu.com: ${kids.map(sName).join(', ')}.\n\n` : `Trang dành cho thành viên ở ${name} trên xgaigu.com.\n\n`) +
+        `Bạn có thể xem video giới thiệu của thành viên đang sống, làm việc hoặc du lịch tại ${name}, nhắn tin làm quen, xem livestream và đặt lịch hẹn gặp có kiểm soát. ` +
+        (total ? `Hiện có ${total} video tại ${name}` + (top.length ? `, nhiều nhất ở ${top.map((t) => `${sName(t)} (${t.n})`).join(', ')}.` : '.') : `Khu vực này đang chờ những video đầu tiên.`) + `\n\n${faq}\n\n${safety}`;
+    } else if (a.level === 'region') {
+      intro = `${name} gồm ${kids.length} tỉnh/thành phố: ${kids.map(sName).join(', ')}.\n\n` +
         `Trên xgaigu.com bạn có thể xem video giới thiệu của thành viên ở từng tỉnh/thành, nhắn tin làm quen, xem livestream và đặt lịch hẹn gặp có kiểm soát. ` +
-        (total ? `Hiện có ${total} video tại ${name}` + (top.length ? `, nhiều nhất ở ${top.map((t) => `${shortName(t.name)} (${t.n})`).join(', ')}.` : '.') : `Khu vực này đang chờ những video đầu tiên.`) + `\n\n${faq}\n\n${safety}`;
+        (total ? `Hiện có ${total} video tại ${name}` + (top.length ? `, nhiều nhất ở ${top.map((t) => `${sName(t)} (${t.n})`).join(', ')}.` : '.') : `Khu vực này đang chờ những video đầu tiên.`) + `\n\n${faq}\n\n${safety}`;
     } else if (a.level === 'province') {
-      intro = `${name} có ${kids.length} quận/huyện/thị xã được liệt kê trên xgaigu.com.\n\n` +
+      intro = (isForeign(a) ? `${full} trên xgaigu.com` + (kids.length ? ` – các quận / thành phố đã có video: ${kids.map((k) => k.name).join(', ')}.` : '.') : `${name} có ${kids.length} quận/huyện/thị xã được liệt kê trên xgaigu.com.`) + `\n\n` +
         `Tại đây bạn có thể xem video giới thiệu của thành viên ở ${name}, làm quen qua tin nhắn và livestream, rồi sắp xếp cuộc hẹn an toàn. ` +
         (total ? `Hiện có ${total} video tại ${name}` + (top.length ? `, nhiều nhất ở ${top.map((t) => `${t.name} (${t.n})`).join(', ')}.` : '.') : `Hãy là người đầu tiên đăng video tại ${name}.`) + `\n\n${faq}\n\n${safety}`;
     } else {
@@ -81,19 +118,49 @@ function install(app, ctx) {
         `Bạn có thể xem thông tin, nhắn tin làm quen hoặc đặt lịch hẹn gặp.\n\n${safety}`;
     }
     return {
-      title: a.level === 'region' ? `Làm quen & hẹn hò ${name} – video, livestream | xgaigu` : `Làm quen & hẹn hò tại ${full} | xgaigu`,
+      title: isTop(a) ? `Làm quen & hẹn hò ${name} – video, livestream | xgaigu` : `Làm quen & hẹn hò tại ${full} | xgaigu`,
       description: cut(`Xem video giới thiệu, nhắn tin làm quen và hẹn gặp an toàn tại ${place}` + (total ? ` (${total} video)` : '') + ' trên xgaigu.com. Dành cho người từ 18 tuổi.', 160),
       keywords: keywords.join(', '), intro,
     };
   }
   const saved = (a) => db.prepare('SELECT title, description, keywords, intro FROM area_seo WHERE key = ?').get(keyOf(a)) || null;
+
+  // ---------- the admin's own keywords, added to every area ----------
+  const GLOBAL_DEFAULTS = { keywords: '', inTitle: true, inDesc: true, inIntro: true, inKeywords: true, titleCount: 1 };
+  const globalConf = () => { let g = {}; try { g = JSON.parse(getConf('seo_global') || '{}') || {}; } catch {} return { ...GLOBAL_DEFAULTS, ...g }; };
+  // "{khu vực}" in a keyword becomes the area's name ("gái xinh {khu vực}" -> "gái xinh Bangkok")
+  const globalWords = (a, g) => [...new Set(String(g.keywords || '').split(/[,\n]/).map((k) => k.trim()).filter(Boolean)
+    .map((k) => k.replace(/\{\s*(khu vực|khu vuc|area)\s*\}/gi, nameOf(a))))].slice(0, 30);
+  const has = (text, k) => String(text).toLowerCase().includes(k.toLowerCase());
+  function withGlobal(a, c) {
+    const g = globalConf(), words = globalWords(a, g);
+    if (!words.length) return c;
+    const out = { ...c };
+    if (g.inTitle) {
+      const add = words.filter((k) => !has(out.title, k)).slice(0, Math.max(0, Math.min(5, Number(g.titleCount) || 0)));
+      if (add.length) {
+        const m = /^(.*?)(\s*\|\s*xgaigu\s*)$/i.exec(out.title);
+        out.title = m ? m[1] + ' – ' + add.join(' – ') + m[2] : out.title + ' – ' + add.join(' – ');
+      }
+    }
+    if (g.inDesc) { const add = words.filter((k) => !has(out.description, k)); if (add.length) { const base = out.description.replace(/\s*$/, ''); out.description = base + (/[.!?…]$/.test(base) ? ' ' : '. ') + add.join(', ') + '.'; } }
+    if (g.inIntro) { const add = words.filter((k) => !has(out.intro, k)); if (add.length) out.intro = out.intro.replace(/\s*$/, '') + '\n\nTìm kiếm liên quan: ' + add.join(', ') + '.'; }
+    if (g.inKeywords) { const add = words.filter((k) => !out.keywords.split(',').some((x) => x.trim().toLowerCase() === k.toLowerCase())); if (add.length) out.keywords = [out.keywords, ...add].filter(Boolean).join(', '); }
+    return out;
+  }
   function content(a, rows) {
     const d = defaults(a, rows), s = saved(a) || {};
-    return { title: s.title || d.title, description: s.description || d.description, keywords: s.keywords || d.keywords, intro: s.intro || d.intro };
+    return withGlobal(a, { title: s.title || d.title, description: s.description || d.description, keywords: s.keywords || d.keywords, intro: s.intro || d.intro });
   }
 
   // ---------- area lookup from request data ----------
-  const GEO_OK = (region, province, district) => {
+  const GEO_OK = (region, province, district, country) => {
+    const cc = String(country || '').toUpperCase();
+    if ((region === 'qt' || CC_RE.test(cc)) && cc !== 'VN') {
+      if (!CC_RE.test(cc) || cName(cc) === cc) return null;
+      const p = clean(province, 80), d = p ? clean(district, 80) : '';
+      return { level: d ? 'district' : p ? 'province' : 'country', region: 'qt', country: cc, ...(p ? { province: p } : {}), ...(d ? { district: d } : {}) };
+    }
     if (!GEO[region]) return null;
     if (!province) return { level: 'region', region };
     const p = GEO[region].find((x) => x[0] === province);
@@ -101,6 +168,37 @@ function install(app, ctx) {
     if (!district) return { level: 'province', region, province };
     return p[1].includes(district) ? { level: 'district', region, province, district } : null;
   };
+  // foreign pages exist for places that have videos or text the admin wrote
+  function foreignByPath(rest) {
+    const [cs, ps, ds] = rest.split('/');
+    const cc = countryBySlug.get(cs);
+    if (!cc) return null;
+    const known = db.prepare(`SELECT DISTINCT province, district FROM videos v JOIN users u ON u.id = v.user_id WHERE v.region = 'qt' AND COALESCE(v.country, 'VN') = ? AND v.hidden = 0 AND u.banned = 0`).all(cc);
+    const custom = db.prepare("SELECT key FROM area_seo WHERE key LIKE ?").all('qt|' + cc + '%').map((r) => r.key.split('|'));
+    const places = [...known.map((r) => [r.province || '', r.district || '']), ...custom.map((k) => [k[2] || '', k[3] || ''])];
+    if (!ps) return known.length || custom.length ? { level: 'country', region: 'qt', country: cc } : null;
+    const prov = places.find(([p]) => p && slugify(p) === ps);
+    if (!prov) return null;
+    if (!ds) return { level: 'province', region: 'qt', country: cc, province: prov[0] };
+    const dist = places.find(([p, d]) => p === prov[0] && d && slugify(d) === ds);
+    return dist ? { level: 'district', region: 'qt', country: cc, province: prov[0], district: dist[1] } : null;
+  }
+  // every foreign area that has a page (for the sitemap and the index)
+  function foreignAreas(rows) {
+    const out = new Map();
+    const add = (a) => out.set(keyOf(a), a);
+    for (const x of rows.filter((r) => r.region === 'qt' && r.country !== 'VN')) {
+      add({ level: 'country', region: 'qt', country: x.country });
+      if (x.province) add({ level: 'province', region: 'qt', country: x.country, province: x.province });
+      if (x.province && x.district) add({ level: 'district', region: 'qt', country: x.country, province: x.province, district: x.district });
+    }
+    for (const r of db.prepare("SELECT key FROM area_seo WHERE key LIKE 'qt|%'").all()) {
+      const [, cc, p, d] = r.key.split('|');
+      if (!CC_RE.test(cc || '')) continue;
+      add({ level: d ? 'district' : p ? 'province' : 'country', region: 'qt', country: cc, ...(p ? { province: p } : {}), ...(d ? { district: d } : {}) });
+    }
+    return [...out.values()];
+  }
 
   // ---------- page shell ----------
   const baseOf = (req) => (process.env.SITE_URL || req.protocol + '://' + req.get('host')).replace(/\/$/, '');
@@ -135,6 +233,12 @@ function install(app, ctx) {
   const paragraphs = (t) => String(t).split(/\n{2,}/).map((p) => `<p>${escHtml(p.trim()).replace(/\n/g, '<br>')}</p>`).join('');
   const crumbsOf = (a) => {
     const out = [{ name: 'Trang chủ', url: '/' }, { name: 'Khu vực', url: '/khu-vuc' }];
+    if (isForeign(a)) {
+      out.push({ name: cName(a.country), url: urlOf({ level: 'country', region: 'qt', country: a.country }) });
+      if (a.province) out.push({ name: a.province, url: urlOf({ level: 'province', region: 'qt', country: a.country, province: a.province }) });
+      if (a.district) out.push({ name: a.district, url: urlOf(a) });
+      return out;
+    }
     out.push({ name: REGIONS[a.region], url: urlOf({ level: 'region', region: a.region }) });
     if (a.province) out.push({ name: shortName(a.province), url: urlOf({ level: 'province', region: a.region, province: a.province }) });
     if (a.district) out.push({ name: a.district, url: urlOf(a) });
@@ -142,35 +246,38 @@ function install(app, ctx) {
   };
 
   function areaHtml(req, a) {
-    const rows = counts(), c = content(a, rows), kids = children(a, rows), name = a.level === 'region' ? nameOf(a) : fullName(a);
-    const vids = listVideos(null, { region: a.region, province: a.province || null, district: a.district || null, limit: 12 });
+    const rows = counts(), c = content(a, rows), kids = children(a, rows), name = isTop(a) ? nameOf(a) : fullName(a);
+    const vids = listVideos(null, { region: a.region, province: a.province || null, district: a.district || null, country: isForeign(a) ? a.country : null, limit: 12 });
     const crumbs = crumbsOf(a), base = baseOf(req);
-    const h1 = a.level === 'region' ? `Làm quen & hẹn hò ${name}` : `Làm quen & hẹn hò tại ${name}`;
+    const h1 = isTop(a) ? `Làm quen & hẹn hò ${name}` : `Làm quen & hẹn hò tại ${name}`;
     const kw = c.keywords.split(',').map((x) => x.trim()).filter(Boolean);
+    const kidsTitle = isTop(a) ? 'Tỉnh / thành phố' : 'Quận / huyện';
     const main = `<div class="wrap prose seo-area">
 <nav class="crumbs" aria-label="Breadcrumb">${crumbs.map((x, i) => (i < crumbs.length - 1 ? `<a href="${escHtml(x.url)}">${escHtml(x.name)}</a> › ` : `<span>${escHtml(x.name)}</span>`)).join('')}</nav>
 <h1>${escHtml(h1)}</h1>
 ${paragraphs(c.intro)}
-${kids.length ? `<h2>${a.level === 'region' ? 'Tỉnh / thành phố' : 'Quận / huyện'} thuộc ${escHtml(name)}</h2><ul class="seo-links">${kids.map((k) => `<li><a href="${escHtml(k.url)}">${escHtml(k.name)}</a>${k.n ? ` (${k.n} video)` : ''}</li>`).join('')}</ul>` : ''}
+${kids.length ? `<h2>${kidsTitle} thuộc ${escHtml(name)}</h2><ul class="seo-links">${kids.map((k) => `<li><a href="${escHtml(k.url)}">${escHtml(k.name)}</a>${k.n ? ` (${k.n} video)` : ''}</li>`).join('')}</ul>` : ''}
 ${vids.length ? `<h2>Video mới tại ${escHtml(name)}</h2><ul class="seo-links">${vids.map((v) => `<li><a href="/v/${v.id}">${escHtml(cut(v.caption || 'Video của ' + v.user.name, 90))}</a></li>`).join('')}</ul>` : ''}
 ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · ')}</p>` : ''}
-<p><a href="/#/regions/${a.region}${a.province ? '/' + encodeURIComponent(a.province) : ''}${a.district ? '/' + encodeURIComponent(a.district) : ''}">Xem video và làm quen tại ${escHtml(name)}</a></p>
+<p><a href="/#${escHtml(spaRoute(a))}">Xem video và làm quen tại ${escHtml(name)}</a></p>
 </div>`;
     const ld = { '@context': 'https://schema.org', '@graph': [
       { '@type': 'BreadcrumbList', itemListElement: crumbs.map((x, i) => ({ '@type': 'ListItem', position: i + 1, name: x.name, item: base + x.url })) },
       { '@type': 'CollectionPage', name: c.title, description: c.description, url: base + urlOf(a), inLanguage: 'vi-VN', isPartOf: { '@type': 'WebSite', name: 'xgaigu', url: base + '/' } },
     ] };
-    const route = '/regions/' + a.region + (a.province ? '/' + encodeURIComponent(a.province) : '') + (a.district ? '/' + encodeURIComponent(a.district) : '');
-    return shell(req, { title: c.title, description: c.description, keywords: c.keywords, canonical: urlOf(a), ld, route, main });
+    return shell(req, { title: c.title, description: c.description, keywords: c.keywords, canonical: urlOf(a), ld, route: spaRoute(a), main });
   }
 
   function indexHtml(req) {
     const rows = counts(), base = baseOf(req);
+    const countries = new Map();
+    for (const x of rows.filter((r) => r.region === 'qt' && r.country !== 'VN')) countries.set(x.country, (countries.get(x.country) || 0) + x.n);
     const main = `<div class="wrap prose seo-area">
 <nav class="crumbs"><a href="/">Trang chủ</a> › <span>Khu vực</span></nav>
 <h1>Làm quen & hẹn hò theo khu vực – Miền Bắc, Miền Trung, Miền Nam</h1>
 <p>Chọn khu vực để xem video giới thiệu, nhắn tin làm quen, xem livestream và hẹn gặp an toàn trên xgaigu.com. Dành cho người từ 18 tuổi trở lên.</p>
 <ul class="seo-links">${Object.keys(REGIONS).sort((a, b) => sumWhere(rows, (x) => x.region === b) - sumWhere(rows, (x) => x.region === a)).map((r) => `<li><a href="${urlOf({ level: 'region', region: r })}">${REGIONS[r]}</a> – ${GEO[r].length} tỉnh/thành, ${sumWhere(rows, (x) => x.region === r)} video</li>`).join('')}</ul>
+${countries.size ? `<h2>Quốc gia khác</h2><ul class="seo-links">${[...countries].sort((a, b) => b[1] - a[1]).map(([cc, n]) => `<li><a href="${urlOf({ level: 'country', region: 'qt', country: cc })}">${escHtml(cName(cc))}</a> – ${n} video</li>`).join('')}</ul>` : ''}
 </div>`;
     const title = 'Làm quen & hẹn hò theo khu vực – Bắc, Trung, Nam | xgaigu';
     const description = 'Chọn khu vực Miền Bắc, Miền Trung, Miền Nam để xem video giới thiệu, làm quen, chat và hẹn gặp an toàn trên xgaigu.com. Dành cho người từ 18 tuổi.';
@@ -187,6 +294,11 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
     const ld = { '@context': 'https://schema.org', '@type': 'WebPage', name: title, description, url: base + '/app', inLanguage: 'vi-VN' };
     send(res, shell(req, { title, description, keywords: 'tải ứng dụng xgaigu, cài app xgaigu, xgaigu', canonical: '/app', ld, route: '/install', main }));
   });
+  app.get(/^\/khu-vuc\/quoc-gia\/([a-z0-9-]+(?:\/[a-z0-9-]+){0,2})\/?$/, (req, res, next) => {
+    const a = foreignByPath(req.params[0]);
+    if (!a) { res.status(404); return next(); }
+    send(res, areaHtml(req, a));
+  });
   app.get(/^\/khu-vuc\/([a-z0-9-]+(?:\/[a-z0-9-]+){0,2})\/?$/, (req, res, next) => {
     const a = byPath.get(req.params[0]);
     if (!a) { res.status(404); return next(); } // unknown area: real 404 status, not a soft 404
@@ -195,20 +307,20 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
 
   // ---------- public JSON for the app ----------
   app.get('/api/area-info', (req, res) => {
-    const a = GEO_OK(String(req.query.region || ''), String(req.query.province || ''), String(req.query.district || ''));
+    const a = GEO_OK(String(req.query.region || ''), String(req.query.province || ''), String(req.query.district || ''), req.query.country);
     if (!a) return fail(res, 404, 'Không tìm thấy khu vực');
     const rows = counts(), c = content(a, rows);
-    res.json({ name: a.level === 'region' ? nameOf(a) : fullName(a), title: c.title, description: c.description, intro: c.intro,
+    res.json({ name: isTop(a) ? nameOf(a) : fullName(a), title: c.title, description: c.description, intro: c.intro,
       keywords: c.keywords.split(',').map((x) => x.trim()).filter(Boolean), url: urlOf(a) });
   });
 
   // ---------- admin editing ----------
-  const parse = (src) => GEO_OK(String(src.region || ''), String(src.province || ''), String(src.district || ''));
+  const parse = (src) => GEO_OK(String(src.region || ''), String(src.province || ''), String(src.district || ''), src.country);
   app.get('/api/admin/area-seo', needAdmin, (req, res) => {
     const a = parse(req.query);
-    if (!a) return fail(res, 400, 'Hãy chọn khu vực (ít nhất là miền)');
+    if (!a) return fail(res, 400, 'Hãy chọn khu vực (ít nhất là miền hoặc quốc gia)');
     const rows = counts();
-    res.json({ key: keyOf(a), url: urlOf(a), saved: saved(a), defaults: defaults(a, rows) });
+    res.json({ key: keyOf(a), url: urlOf(a), saved: saved(a), defaults: defaults(a, rows), final: content(a, rows), total: totalOf(a, rows) });
   });
   app.put('/api/admin/area-seo', needAdmin, (req, res) => {
     const a = parse(req.body);
@@ -218,6 +330,15 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
     else db.prepare('INSERT INTO area_seo (key, title, description, keywords, intro, updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET title=excluded.title, description=excluded.description, keywords=excluded.keywords, intro=excluded.intro, updated_at=excluded.updated_at')
       .run(keyOf(a), f.title, f.description, f.keywords, f.intro, now());
     res.json({ ok: true, url: urlOf(a) });
+  });
+  // the admin's own keywords for every area
+  app.get('/api/admin/seo-global', needAdmin, (_req, res) => res.json(globalConf()));
+  app.put('/api/admin/seo-global', needAdmin, (req, res) => {
+    const b = req.body || {};
+    const keywords = String(b.keywords || '').replace(/\r/g, '').split(/[,\n]/).map((k) => clean(k, 80)).filter(Boolean).slice(0, 30).join(', ');
+    const g = { keywords, inTitle: !!b.inTitle, inDesc: !!b.inDesc, inIntro: !!b.inIntro, inKeywords: !!b.inKeywords, titleCount: Math.max(0, Math.min(5, parseInt(b.titleCount, 10) || 0)) };
+    db.prepare("INSERT INTO settings (key, value) VALUES ('seo_global', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(g));
+    res.json(g);
   });
 
   // ---------- crawlable home page content ----------
@@ -246,6 +367,7 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
       if (a.level === 'district' && !custom.has(keyOf(a)) && !totalOf(a, rows)) continue; // skip empty districts (thin pages)
       urls.push({ loc: urlOf(a), pri: a.level === 'region' ? '0.8' : a.level === 'province' ? '0.7' : '0.5', mod: today });
     }
+    for (const a of foreignAreas(rows)) urls.push({ loc: urlOf(a), pri: a.level === 'country' ? '0.8' : a.level === 'province' ? '0.7' : '0.5', mod: today });
     for (const v of db.prepare('SELECT v.id, v.created_at FROM videos v JOIN users u ON u.id = v.user_id WHERE v.hidden = 0 AND u.banned = 0 ORDER BY v.id DESC LIMIT 5000').all())
       urls.push({ loc: '/v/' + v.id, pri: '0.4', mod: new Date(v.created_at).toISOString().slice(0, 10) });
     const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
