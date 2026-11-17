@@ -643,7 +643,7 @@ function install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, t
       pending: db.prepare("SELECT COUNT(*) AS n FROM tg_queue WHERE user_id = ? AND status = 'pending'").get(uid).n, upcoming, recent, next, sentToday };
   }
 
-  return { announce, tick };
+  return { announce, tick, call, base, enabled };
 }
 
 module.exports = { install, parseTimes };

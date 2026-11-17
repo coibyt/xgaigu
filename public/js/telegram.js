@@ -199,7 +199,7 @@ function accountCard() {
 function adminBox() {
   const body = h('div');
   const box = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:6px' }, 'Bot Telegram tự đăng video'),
-    h('p', { class: 'muted', style: 'margin-bottom:14px' }, 'Thành viên được cho phép (cột “Gửi Telegram” trong danh sách thành viên) sẽ kết nối nhóm của họ với bot này; mọi video của họ (có sẵn và đăng mới) tự vào hàng chờ và được gửi vào nhóm.'), body, limitForm(), autoReplyCard());
+    h('p', { class: 'muted', style: 'margin-bottom:14px' }, 'Thành viên được cho phép (cột “Gửi Telegram” trong danh sách thành viên) sẽ kết nối nhóm của họ với bot này; mọi video của họ (có sẵn và đăng mới) tự vào hàng chờ và được gửi vào nhóm.'), body, limitForm(), autoReplyCard(), window.XGTeleAreas ? window.XGTeleAreas.card() : '');
   // automatic replies to customers who write to the bot
   function autoReplyCard() {
     const card = h('div', { class: 'card tg-ar' });

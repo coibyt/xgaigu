@@ -412,6 +412,22 @@ ${countries.size ? `<h2>Quốc gia khác</h2><ul class="seo-links">${[...countri
       '</div>';
   }
 
+  // ---------- areas the Telegram bot can share: every area page with videos (or with text the admin wrote) ----------
+  function postableAreas() {
+    const rows = counts(), out = [];
+    const custom = new Set(db.prepare('SELECT key FROM area_seo').all().map((r) => r.key));
+    for (const a of byPath.values()) {
+      const n = totalOf(a, rows);
+      if (n || custom.has(keyOf(a))) out.push({ a, n });
+    }
+    for (const a of foreignAreas(rows)) out.push({ a, n: totalOf(a, rows) });
+    return out.sort((x, y) => y.n - x.n).map(({ a, n }) => {
+      const c = content(a, rows), plain = isTop(a) ? nameOf(a) : fullName(a);
+      return { key: keyOf(a), path: urlOf(a), name: plain, title: labelOf(a, plain), description: c.description, n,
+        group: isForeign(a) ? cName(a.country) : REGIONS[a.region], level: a.level };
+    });
+  }
+
   // ---------- robots.txt and sitemap.xml ----------
   app.get('/robots.txt', (req, res) => {
     res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /uploads/wm/\n\nSitemap: ${baseOf(req)}/sitemap.xml\n`);
@@ -431,7 +447,7 @@ ${countries.size ? `<h2>Quốc gia khác</h2><ul class="seo-links">${[...countri
       urls.map((u) => `<url><loc>${escHtml(base + u.loc)}</loc>${u.mod ? `<lastmod>${u.mod}</lastmod>` : ''}<priority>${u.pri}</priority></url>`).join('\n') + '\n</urlset>\n';
     res.set('Cache-Control', 'public, max-age=3600').type('application/xml').send(xml);
   });
-  return { homeHtml };
+  return { homeHtml, postableAreas };
 }
 
 module.exports = { install, REGIONS };
