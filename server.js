@@ -1559,7 +1559,7 @@ require('./src/live').install(app, { db, fail, clean, now, needUser, needAdmin, 
 telegram = require('./src/telegram').install(app, { db, fail, clean, now, needUser, needAdmin, UPLOAD_DIR, thumbs });
 require('./src/groups').install(app, { db, fail, clean, now, needUser, rmUpload, faststart, UPLOAD_DIR, VIDEO_TYPES, IMAGE_TYPES, rateLimit });
 const shop = require('./src/shop').install(app, { db, fail, clean, now, needUser, needAdmin, postLimiter, rmUpload, pushUser, listVideos, UPLOAD_DIR, IMAGE_TYPES });
-const seo = require('./src/seo').install(app, { db, GEO, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
+const seo = require('./src/seo').install(app, { db, GEO, thumbs, listVideos, escHtml, cut, needAdmin, fail, clean, now, assetV: () => ASSET_V });
 app.get('/v/:id(\\d+)', (req, res) => renderPage(req, res, listVideos(null, { id: Number(req.params.id), limit: 1 })[0] || null));
 app.get('/', (req, res) => renderPage(req, res, null));
 // installable app (PWA): the worker must never be cached by the browser so updates reach installed apps at once

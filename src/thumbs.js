@@ -89,6 +89,62 @@ function frameFx() {
   return png(FRAME.w, FRAME.h, buf);
 }
 
+// ---------- area cards (link previews of /khu-vuc pages) ----------
+// left: brand, a gold "KHU VỰC" pill, the area's name, where it is, the number of videos and a button;
+// right: up to four pictures of videos posted there, in rounded tiles; behind it all, the first picture blurred.
+const GRID = { x: 700, y: 58, w: 436, h: 514, gap: 16 };
+const tilesFor = (n) => {
+  const { x, y, w, h, gap } = GRID, hw = (w - gap) / 2, hh = (h - gap) / 2;
+  if (n <= 1) return [{ x, y, w, h }];
+  if (n === 2) return [{ x, y, w: hw, h }, { x: x + hw + gap, y, w: hw, h }];
+  if (n === 3) return [{ x, y, w: hw, h }, { x: x + hw + gap, y, w: hw, h: hh }, { x: x + hw + gap, y: y + hh + gap, w: hw, h: hh }];
+  return [{ x, y, w: hw, h: hh }, { x: x + hw + gap, y, w: hw, h: hh }, { x, y: y + hh + gap, w: hw, h: hh }, { x: x + hw + gap, y: y + hh + gap, w: hw, h: hh }];
+};
+// drawn over the (blurred photo or plain) background: darkening, glows, brand mark, pill, pin, button, tile shadows
+function areaFx(photoBg) {
+  const buf = Buffer.alloc(W * H * 4);
+  const bg1 = hex('#12081b'), pink = hex('#ff2e7e'), orange = hex('#ff6b4a'), violet = hex('#8b5cf6'), gold = hex('#e8d3a6'), white = [255, 255, 255];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    // dark veil: almost solid on the left (text), lighter on the right
+    let a = photoBg ? 0.62 + 0.33 * clamp(1 - x / 760) : 1, c = mix(bg1, hex('#2a0d35'), clamp(x / W * 0.6 + y / H * 0.4));
+    const g1 = clamp(1 - Math.hypot(x - 1000, y - 60) / 600), g2 = clamp(1 - Math.hypot(x - 80, y - 660) / 560);
+    c = mix(c, pink, 0.34 * g1 * g1); c = mix(c, violet, 0.3 * g2 * g2);
+    // shadow under the picture area
+    const sd = rrect(x, y - 14, GRID.x, GRID.y, GRID.w, GRID.h, 30);
+    if (sd > 0 && sd < 44) { c = mix(c, [0, 0, 0], 0.5 * (1 - sd / 44) ** 2); a = Math.max(a, 0.5 * (1 - sd / 44) ** 2); }
+    const put = (col, al) => { c = mix(c, col, al); a = a + (1 - a) * al; };
+    // brand mark
+    const ba = cover(rrect(x, y, 64, 48, 56, 56, 16));
+    if (ba) { put(mix(pink, orange, (x - 64) / 56), ba); if (heart((x - 92) / 15, -(y - 78) / 15)) put(white, ba); }
+    // gold pill outline
+    const pd = rrect(x, y, 64, 140, 190, 40, 20);
+    if (pd < 0.5) put(gold, 0.14 * cover(pd));
+    if (Math.abs(pd + 1) < 1.5) put(gold, clamp(1.5 - Math.abs(pd + 1)));
+    // location pin
+    const pin = Math.hypot(x - 78, y - 410);
+    if (pin < 12.5 || inTri(x, y, [67, 416], [89, 416], [78, 432])) { if (pin >= 5) put(hex('#ff8fb5'), pin < 12.5 ? clamp(12.5 - pin) : 1); }
+    // button
+    const cd = rrect(x, y, 64, 500, 520, 78, 39);
+    if (cd < 0.5) put(mix(pink, orange, (x - 64) / 520), cover(cd));
+    const t = triCover(x, y, [100, 522], [100, 556], [128, 539]);
+    if (t) put(white, t);
+    const o = (y * W + x) * 4; buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = Math.round(255 * clamp(a));
+  }
+  return png(W, H, buf);
+}
+const tileMask = (w, h) => { const buf = Buffer.alloc(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) buf[y * w + x] = Math.round(255 * cover(rrect(x + 0.5, y + 0.5, 0, 0, w, h, 26))); return png(w, h, buf, true); };
+// the picture area when the place has no video pictures yet: a gradient tile with a big heart
+function emptyTile() {
+  const { w, h } = GRID, buf = Buffer.alloc(w * h * 4), pink = hex('#ff2e7e'), orange = hex('#ff6b4a'), white = [255, 255, 255];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const a = cover(rrect(x + 0.5, y + 0.5, 0, 0, w, h, 26));
+    let c = mix(mix(pink, orange, y / h), white, 0.14 * clamp(1 - Math.hypot(x - w * 0.3, y - h * 0.2) / 320));
+    if (heart((x - w / 2) / 95, -(y - h / 2 + 10) / 95)) c = mix(c, white, 0.9);
+    const o = (y * w + x) * 4; buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = Math.round(255 * a);
+  }
+  return png(w, h, buf);
+}
+
 // ---------- text layout ----------
 const clean = (s) => String(s || '').replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim(); // the font has no emoji
 function wrap(text, perLine, maxLines) {
@@ -219,12 +275,83 @@ function create({ ffmpeg, db, uploadDir, log = console.log }) {
     return out;
   }
 
+  // ---------- 3. area cards ----------
+  let areaAssets = null;
+  function prepareAreaAssets() {
+    if (areaAssets) return areaAssets;
+    fs.mkdirSync(OG, { recursive: true });
+    const a = { fxPhoto: path.join(OG, '_afx-photo-v1.png'), fxPlain: path.join(OG, '_afx-plain-v1.png'), empty: path.join(OG, '_atile-empty-v1.png'), masks: {} };
+    if (!fs.existsSync(a.fxPhoto)) fs.writeFileSync(a.fxPhoto, areaFx(true));
+    if (!fs.existsSync(a.fxPlain)) fs.writeFileSync(a.fxPlain, areaFx(false));
+    if (!fs.existsSync(a.empty)) fs.writeFileSync(a.empty, emptyTile());
+    for (const n of [1, 2, 3, 4]) for (const t of tilesFor(n)) {
+      const k = Math.round(t.w) + 'x' + Math.round(t.h), f = path.join(OG, `_amask-${k}-v1.png`);
+      if (!a.masks[k]) { if (!fs.existsSync(f)) fs.writeFileSync(f, tileMask(Math.round(t.w), Math.round(t.h))); a.masks[k] = f; }
+    }
+    return (areaAssets = a);
+  }
+  // { title, kind ('KHU VỰC' | 'QUỐC GIA'), place, sub, photos: [file paths] } -> a jpg file
+  async function areaCard(d) {
+    if (!ffmpeg) return '';
+    const photos = (d.photos || []).filter((f) => f && fs.existsSync(f)).slice(0, 4);
+    const title = wrap(d.title, 17, 2), place = clean(d.place).slice(0, 46), sub = clean(d.sub).slice(0, 52), kind = clean(d.kind || 'KHU VỰC');
+    const key = crypto.createHash('sha1').update(JSON.stringify([title, place, sub, kind, photos, 'a1'])).digest('hex').slice(0, 16);
+    const out = path.join(OG, `area-${key}.jpg`);
+    if (okFile(out)) return out;
+    const a = prepareAreaAssets();
+    const dir = fs.mkdtempSync(path.join(OG, '_t-'));
+    const lines = [];
+    const text = (s, font, size, color, x, y, extra = '') => {
+      const f = path.join(dir, lines.length + '.txt'); fs.writeFileSync(f, s);
+      lines.push(`drawtext=fontfile=${fq(path.join(FONTS, font))}:textfile=${fq(f)}:fontsize=${size}:fontcolor=${color}:x=${x}:y=${y}${extra}`);
+    };
+    const longest = Math.max(...title.map((l) => l.length), 1);
+    const size = Math.max(50, Math.min(76, Math.floor(600 / (longest * 0.6))));
+    text('xgaigu', 'BeVietnamPro-Bold.ttf', 40, 'white', 136, 52);
+    text(kind, 'BeVietnamPro-Bold.ttf', 19, '0xe8d3a6', '64+(190-text_w)/2', 150);
+    const top = title.length > 1 ? 202 : 236;
+    title.forEach((l, i) => text(l, 'BeVietnamPro-Bold.ttf', size, 'white', 62, top + i * Math.round(size * 1.12), ':shadowcolor=black@0.4:shadowy=3'));
+    if (place) text(place, 'BeVietnamPro-SemiBold.ttf', 27, '0xffb3cf', 102, 394);
+    if (sub) text(sub, 'BeVietnamPro-Regular.ttf', 25, '0xe6dcef', 64, 444);
+    text('Xem video & làm quen ngay', 'BeVietnamPro-Bold.ttf', 29, 'white', 146, 520);
+    const inputs = [], tiles = tilesFor(photos.length || 1);
+    let graph = '';
+    if (photos.length) {
+      inputs.push('-i', photos[0]);
+      graph = `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=24:2,format=rgba[bg];`;
+    } else {
+      inputs.push('-f', 'lavfi', '-i', `color=c=0x12081b:s=${W}x${H}`);
+      graph = '[0:v]format=rgba[bg];';
+    }
+    inputs.push('-i', photos.length ? a.fxPhoto : a.fxPlain);
+    graph += '[bg][1:v]overlay=0:0[l0];';
+    let last = 'l0', n = 2;
+    if (photos.length) {
+      photos.forEach((p, i) => {
+        const t = tiles[i], w = Math.round(t.w), h = Math.round(t.h);
+        inputs.push('-i', p, '-i', a.masks[w + 'x' + h]);
+        graph += `[${n}:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},format=rgba[p${i}];[${n + 1}:v]format=gray[m${i}];[p${i}][m${i}]alphamerge[t${i}];[${last}][t${i}]overlay=${Math.round(t.x)}:${Math.round(t.y)}[l${i + 1}];`;
+        last = 'l' + (i + 1); n += 2;
+      });
+    } else {
+      inputs.push('-i', a.empty);
+      graph += `[${last}][${n}:v]overlay=${GRID.x}:${GRID.y}[le];`; last = 'le';
+    }
+    graph += `[${last}]` + lines.join(',') + ',format=rgb24[out]';
+    const tmp = out + '.tmp.jpg';
+    const ok = await run([...inputs, '-filter_complex', graph, '-map', '[out]', '-frames:v', '1', '-q:v', '3', tmp]) && okFile(tmp);
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (!ok) { try { fs.rmSync(tmp, { force: true }); } catch {} return ''; }
+    fs.renameSync(tmp, out);
+    return out;
+  }
+
   // the picture to use for a video: its cover, else one from the video, else the designed card (a file path)
   async function pictureFile(videoId) {
     const v = db.prepare('SELECT thumb FROM videos WHERE id = ?').get(videoId);
     return fileOf(v && v.thumb) || fileOf(await ensureThumb(videoId)) || (await card(videoId).catch(() => ''));
   }
-  return { ensureThumb, card, pictureFile };
+  return { ensureThumb, card, pictureFile, areaCard, fileOf };
 }
 
 module.exports = { create };

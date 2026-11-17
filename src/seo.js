@@ -293,7 +293,7 @@ ${kw.length ? `<p class="seo-kw"><b>Từ khóa:</b> ${kw.map(escHtml).join(' · 
       { '@type': 'CollectionPage', name: c.title, description: c.description, url: base + urlOf(a), inLanguage: 'vi-VN', isPartOf: { '@type': 'WebSite', name: 'xgaigu', url: base + '/' } },
     ] };
     // social previews: the picture of the newest video there, else the site picture
-    const image = vids.length ? '/og/v/' + vids[0].id + '.jpg' : '';
+    const image = ctx.thumbs ? '/og' + urlOf(a) + '.jpg?n=' + totalOf(a, rows) + '-' + (vids[0] ? vids[0].id : 0) : vids.length ? '/og/v/' + vids[0].id + '.jpg' : '';
     return shell(req, { title: c.title, description: c.description, keywords: c.keywords, canonical: urlOf(a), ld, route: spaRoute(a), main, image });
   }
 
@@ -322,6 +322,29 @@ ${countries.size ? `<h2>Quốc gia khác</h2><ul class="seo-links">${[...countri
     const main = '<div class="wrap prose"><h1>Tải ứng dụng xgaigu</h1><p>' + escHtml(description) + '</p><p><a href="/">Vào xgaigu.com</a></p></div>';
     const ld = { '@context': 'https://schema.org', '@type': 'WebPage', name: title, description, url: base + '/app', inLanguage: 'vi-VN' };
     send(res, shell(req, { title, description, keywords: 'tải ứng dụng xgaigu, cài app xgaigu, xgaigu', canonical: '/app', ld, route: '/install', main }));
+  });
+  // the designed picture of an area, for link previews on social networks
+  const KIND = { country: 'QUỐC GIA', region: 'KHU VỰC', province: 'KHU VỰC', district: 'KHU VỰC' };
+  function cardData(a) {
+    const rows = counts(), total = totalOf(a, rows);
+    let place;
+    if (isForeign(a)) place = a.level === 'country' ? 'Làm quen & hẹn hò trên xgaigu' : a.level === 'province' ? cName(a.country) : a.province + ', ' + cName(a.country);
+    else place = a.level === 'region' ? 'Việt Nam' : a.level === 'province' ? REGIONS[a.region] + ', Việt Nam' : shortName(a.province) + ', Việt Nam';
+    const vids = listVideos(null, { region: a.region, province: a.province || null, district: a.district || null, country: isForeign(a) ? a.country : null, limit: 24 });
+    const photos = [];
+    for (const v of vids) { const f = ctx.thumbs.fileOf(v.thumb); if (f && !photos.includes(f)) photos.push(f); if (photos.length === 4) break; }
+    return { title: labelOf(a, nameOf(a)), kind: KIND[a.level], place, sub: total ? total + ' video · Làm quen & hẹn hò an toàn' : 'Làm quen & hẹn hò an toàn · 18+', photos };
+  }
+  app.get(/^\/og\/khu-vuc\/(.+)\.jpg$/, async (req, res, next) => {
+    if (!ctx.thumbs) return next();
+    const p = req.params[0];
+    const a = p.startsWith('quoc-gia/') ? foreignByPath(p.slice(9)) : byPath.get(p);
+    if (!a) return next();
+    try {
+      const file = await ctx.thumbs.areaCard(cardData(a));
+      if (!file) return res.redirect(302, '/img/og-default.png');
+      res.set('Cache-Control', 'public, max-age=3600').type('jpg').sendFile(file);
+    } catch { res.redirect(302, '/img/og-default.png'); }
   });
   app.get(/^\/khu-vuc\/quoc-gia\/([a-z0-9-]+(?:\/[a-z0-9-]+){0,2})\/?$/, (req, res, next) => {
     const a = foreignByPath(req.params[0]);
