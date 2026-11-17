@@ -2,7 +2,7 @@
 // a few areas per run, taking turns through the list, as a short text with the link (Telegram shows the area's
 // picture from the page by itself). Several Node processes may run this: each time slot is claimed in the database first.
 const DEFAULTS = {
-  enabled: false, targets: [], scope: 'all', areas: [], times: ['09:00', '20:00'], perRun: 3, preview: true,
+  enabled: false, targets: [], scope: 'all', areas: [], times: ['09:00', '20:00'], perRun: 3, preview: true, distribute: 'split',
   template: '📍 {khu vực}\n{mô tả}\n\n👉 Xem video tại đây: {link}',
 };
 const nowParts = (t = Date.now()) => { const d = new Date(t + 7 * 3600_000).toISOString(); return { day: d.slice(0, 10), hm: d.slice(11, 16) }; };
@@ -39,21 +39,27 @@ function install(app, { db, needAdmin, fail, tg, areas }) {
     const ids = new Set(c.targets.map(Number));
     const targets = adminTargets().filter((t) => t.active && (!ids.size || ids.has(t.id)));
     if (!targets.length) throw new Error('Chưa có nhóm nào để đăng. Hãy kết nối nhóm Telegram bằng tài khoản admin (trang Tài khoản → Tự động đăng lên Telegram).');
-    const list = nextAreas(c, count);
+    // "split": every group gets its own areas (no link posted in two groups in the same run); "same": all groups get the same
+    const split = c.distribute === 'split';
+    const list = nextAreas(c, split ? count * targets.length : count);
     if (!list.length) throw new Error('Chưa có khu vực nào để đăng.');
+    const plan = targets.map((t, i) => ({ t, areas: split ? list.filter((_, j) => j % targets.length === i) : list }));
     let sent = 0, last = '';
-    for (const area of list) {
-      const { text, link } = message(area, c);
-      for (const t of targets) {
+    const posted = [];
+    for (const { t, areas: mine } of plan) {
+      for (const area of mine) {
+        const { text, link } = message(area, c);
         try {
           await tg.call('sendMessage', { chat_id: t.chat_id, text, link_preview_options: c.preview ? { url: link, prefer_large_media: true } : { is_disabled: true } });
           sent++;
+          posted.push(split ? area.title + ' → ' + t.title : area.title);
         } catch (e) { last = t.title + ': ' + e.message; }
         await new Promise((r) => setTimeout(r, 1200)); // stay well under Telegram's limits
       }
     }
-    setConf('tg_area_last', JSON.stringify({ at: Date.now(), sent, areas: list.map((a) => a.title), error: last }));
-    return { sent, areas: list.map((a) => a.title), error: last };
+    const shown = [...new Set(posted)];
+    setConf('tg_area_last', JSON.stringify({ at: Date.now(), sent, areas: shown, error: last }));
+    return { sent, areas: shown, error: last };
   }
 
   // scheduled runs: once per time slot, claimed so only one process posts
@@ -81,7 +87,7 @@ function install(app, { db, needAdmin, fail, tg, areas }) {
   app.put('/api/admin/tg-areas', needAdmin, (req, res) => {
     const b = req.body || {}, cur = conf();
     const c = {
-      enabled: !!b.enabled, preview: b.preview !== false,
+      enabled: !!b.enabled, preview: b.preview !== false, distribute: b.distribute === 'same' ? 'same' : 'split',
       targets: (Array.isArray(b.targets) ? b.targets : []).map(Number).filter((n) => n > 0).slice(0, 100),
       scope: b.scope === 'some' ? 'some' : 'all',
       areas: [...new Set((Array.isArray(b.areas) ? b.areas : []).map((k) => String(k).slice(0, 200)))].slice(0, 1000),

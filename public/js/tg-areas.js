@@ -38,12 +38,16 @@ function card() {
     const someBox = h('div', { hidden: scope !== 'some' }, filter, areaList, count);
     paintAreas();
     const nm = 'tgap' + Math.random().toString(36).slice(2, 6);
-    const opt = (val, label) => h('label', { class: 'tg-inline' }, h('input', { type: 'radio', name: nm, checked: scope === val, onchange: () => { scope = val; someBox.hidden = scope !== 'some'; } }), label);
+    const opt = (val, label) => h('label', { class: 'tg-inline tg-radio' }, h('input', { type: 'radio', name: nm, checked: scope === val, onchange: () => { scope = val; someBox.hidden = scope !== 'some'; } }), label);
     // message
     const tpl = h('textarea', { rows: 4, maxlength: 1500 }); tpl.value = c.template;
     const prevBox = h('pre', { class: 'tg-ap-prev', hidden: true });
     const showPrev = async () => { try { const r = await api('/admin/tg-areas/preview', { method: 'POST', body: { template: tpl.value } }); prevBox.textContent = r.text; prevBox.hidden = false; } catch (e) { fail(e); } };
-    const body = () => ({ enabled: enabled.checked, preview: preview.checked, targets: [...picked], scope, areas: [...chosen], times, perRun: perRun.value, template: tpl.value });
+    // how the areas are shared out between the groups
+    let distribute = c.distribute || 'split';
+    const nd = 'tgapd' + Math.random().toString(36).slice(2, 6);
+    const dOpt = (val, title, desc) => h('label', { class: 'tg-opt' }, h('input', { type: 'radio', name: nd, checked: distribute === val, onchange: () => { distribute = val; } }), h('span', {}, h('b', {}, title), h('small', {}, desc)));
+    const body = () => ({ enabled: enabled.checked, preview: preview.checked, distribute, targets: [...picked], scope, areas: [...chosen], times, perRun: perRun.value, template: tpl.value });
     const save = h('button', { type: 'button', class: 'btn primary', onclick: async () => {
       try { await api('/admin/tg-areas', { method: 'PUT', body: body() }); toast(enabled.checked ? 'Đã lưu, bot sẽ tự đăng link khu vực theo giờ đã chọn' : 'Đã lưu (chức năng đang tắt)'); load(); } catch (e) { fail(e); }
     } }, 'Lưu cài đặt');
@@ -61,7 +65,10 @@ function card() {
       h('div', { class: 'tg-btitle' }, h('h4', {}, '📍 Tự động đăng link khu vực'), h('label', { class: 'tg-inline' }, enabled, 'Bật')),
       h('p', { class: 'muted', style: 'font-size:13.5px' }, 'Bot tự đăng link các trang khu vực (VD xgaigu.com/khu-vuc/quoc-gia/thai-lan/phuket) vào các nhóm Telegram của tài khoản admin, kèm vài dòng giới thiệu. Mỗi lần đăng vài khu vực, lần lượt xoay vòng hết danh sách rồi quay lại từ đầu. Telegram tự hiện ảnh đại diện của khu vực dưới link.'),
       h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Đăng vào nhóm'), groups),
-      h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Giờ đăng mỗi ngày'), timeList, h('label', { class: 'tg-inline' }, 'Mỗi lần đăng ', perRun, ' khu vực')),
+      h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Chia link giữa các nhóm'), h('div', { class: 'tg-opts' },
+        dOpt('split', '🔀 Mỗi nhóm một khu vực khác nhau', 'Không nhóm nào nhận trùng link với nhóm khác trong cùng một lần đăng (giúp tránh bị Telegram coi là spam).'),
+        dOpt('same', '🔁 Các nhóm nhận giống nhau', 'Mọi nhóm đều nhận cùng các link khu vực.'))),
+      h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Giờ đăng mỗi ngày'), timeList, h('label', { class: 'tg-inline' }, 'Mỗi lần đăng ', perRun, ' khu vực cho mỗi nhóm')),
       h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Khu vực'), opt('all', 'Tất cả khu vực có video (' + d.areas.length + ')'), opt('some', 'Chỉ những khu vực tôi chọn'), someBox),
       h('div', { class: 'tg-field' }, h('div', { class: 'tg-label' }, 'Nội dung tin'), tpl,
         h('small', { class: 'muted' }, 'Dùng: {khu vực} = tên khu vực (có từ khóa riêng), {mô tả} = mô tả SEO, {số video}, {link} = link khu vực.'),
