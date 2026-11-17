@@ -2190,9 +2190,38 @@ async function pageAdmin() {
       h('td', { style: 'text-align:center;white-space:nowrap' }, u.role === 'admin' ? h('span', { class: 'muted', title: 'Quản trị viên luôn được dùng' }, '✓') : h('input', { type: 'checkbox', checked: !!u.telegram_allowed, title: 'Cho phép tài khoản này tự động gửi video lên nhóm Telegram',
         onchange: async (e) => { const on = e.target.checked; try { await api('/admin/users/' + u.id + '/telegram', { method: 'POST', body: { allowed: on } }); toast(on ? 'Đã cho phép ' + u.name + ' gửi lên Telegram' : 'Đã tắt gửi Telegram của ' + u.name); } catch (er) { e.target.checked = !on; fail(er); } } }),
         u.tg_groups ? h('small', { class: 'muted', style: 'margin-left:6px' }, u.tg_groups + ' nhóm') : ''),
-      h('td', {}, u.banned ? h('span', { class: 'muted' }, 'Đã khoá') : u.role === 'admin' ? '' : h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá tài khoản ' + u.email + '?')) { await api('/admin/users/' + u.id + '/ban', { method: 'POST' }); loadMembers(); } } }, 'Khoá')))));
+      h('td', { style: 'white-space:nowrap' }, h('button', { class: 'btn sm', style: 'margin-right:6px', onclick: () => adminPasswordDialog(u) }, '🔑 Đổi mật khẩu'),
+        u.banned ? h('span', { class: 'muted' }, 'Đã khoá') : u.role === 'admin' ? '' : h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá tài khoản ' + u.email + '?')) { await api('/admin/users/' + u.id + '/ban', { method: 'POST' }); loadMembers(); } } }, 'Khoá')))));
     pager.replaceChildren(page > 0 ? h('button', { class: 'btn sm', onclick: () => { page--; loadMembers(); } }, '← Trước') : '', (page + 1) * d.size < d.total ? h('button', { class: 'btn sm', onclick: () => { page++; loadMembers(); } }, 'Sau →') : '');
   };
+  // set a new password for a member: typed by the admin or made up at random, shown so the admin can pass it on
+  function adminPasswordDialog(u) {
+    const makeUp = () => { const abc = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', b = crypto.getRandomValues(new Uint8Array(10)); return [...b].map((x) => abc[x % abc.length]).join(''); };
+    const pw = h('input', { type: 'text', minlength: 8, maxlength: 200, autocomplete: 'off', placeholder: 'Mật khẩu mới (ít nhất 8 ký tự)', style: 'flex:1;min-width:0' });
+    const err = h('p', { class: 'err', hidden: true });
+    const done = h('div', { hidden: true, class: 'notice', style: 'display:grid;gap:8px' });
+    const save = h('button', { type: 'submit', class: 'btn primary', style: 'width:100%' }, 'Đổi mật khẩu');
+    const form = h('form', { style: 'display:grid;gap:12px' },
+      h('p', { class: 'muted', style: 'font-size:14px' }, 'Tài khoản: ', h('b', { translate: 'no' }, u.email), ' (' + u.name + ')'),
+      h('div', { class: 'row', style: 'gap:8px;flex-wrap:nowrap' }, pw, h('button', { type: 'button', class: 'btn sm', onclick: () => { pw.value = makeUp(); } }, 'Tạo ngẫu nhiên')),
+      h('small', { class: 'muted' }, 'Sau khi đổi, tài khoản này bị đăng xuất khỏi mọi thiết bị và phải đăng nhập lại bằng mật khẩu mới.'),
+      err, save, done);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault(); err.hidden = true;
+      if (pw.value.length < 8) { err.textContent = 'Mật khẩu mới tối thiểu 8 ký tự'; err.hidden = false; return; }
+      save.disabled = true;
+      try {
+        await api('/admin/users/' + u.id + '/password', { method: 'POST', body: { password: pw.value } });
+        const val = pw.value;
+        done.replaceChildren(h('b', {}, '✅ Đã đổi mật khẩu cho ' + u.email), h('span', {}, 'Mật khẩu mới: ', h('code', { translate: 'no' }, val)),
+          h('button', { type: 'button', class: 'btn sm', style: 'justify-self:start', onclick: () => { navigator.clipboard && navigator.clipboard.writeText(val).then(() => toast('Đã sao chép mật khẩu')).catch(() => {}); } }, 'Sao chép mật khẩu'));
+        done.hidden = false; save.hidden = true; pw.disabled = true;
+        toast('Đã đổi mật khẩu');
+      } catch (ex) { err.textContent = ex.message; err.hidden = false; save.disabled = false; }
+    });
+    modal(h('div', {}, h('h3', { style: 'margin-bottom:10px' }, '🔑 Đổi mật khẩu tài khoản'), form));
+    setTimeout(() => pw.focus(), 50);
+  }
   qIn.addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(() => { page = 0; loadMembers().catch(fail); }, 300); });
   await loadMembers().catch(fail);
   const membersBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thành viên đã đăng ký'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, qIn, sortSel), memInfo,

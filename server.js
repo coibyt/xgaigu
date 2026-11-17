@@ -1424,6 +1424,18 @@ app.post('/api/admin/videos/:id/hide', needAdmin, (req, res) => {
   db.prepare('UPDATE videos SET hidden = 1 WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
+// the admin sets a new password for an account (e.g. a member who lost access); that account is signed out everywhere
+app.post('/api/admin/users/:id(\\d+)/password', needAdmin, wrap(async (req, res) => {
+  const u = db.prepare('SELECT id, email FROM users WHERE id = ?').get(Number(req.params.id));
+  if (!u) return fail(res, 404, 'Không tìm thấy tài khoản');
+  const pw = String(req.body.password || '');
+  if (pw.length < 8) return fail(res, 400, 'Mật khẩu mới tối thiểu 8 ký tự');
+  if (pw.length > 200) return fail(res, 400, 'Mật khẩu quá dài');
+  db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(await bcrypt.hash(pw, 10), u.id);
+  if (u.id === req.user.id) db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(u.id, req.cookies.sid);
+  else db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+  res.json({ ok: true, email: u.email });
+}));
 app.post('/api/admin/users/:id/ban', needAdmin, (req, res) => {
   if (Number(req.params.id) === req.user.id) return fail(res, 400, 'Không thể khóa chính mình');
   db.prepare('UPDATE users SET banned = 1 WHERE id = ?').run(req.params.id);
