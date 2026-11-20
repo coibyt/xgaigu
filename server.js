@@ -1178,7 +1178,8 @@ app.get('/api/admin/users', needAdmin, (req, res) => {
   const q = '%' + String(req.query.q || '').toLowerCase().replace(/[%_]/g, '').slice(0, 60) + '%';
   const page = Math.max(parseInt(req.query.page, 10) || 0, 0), size = 30;
   const order = { videos: 'videos DESC, u.id DESC', followers: 'followers DESC, u.id DESC', likes: 'likes DESC, u.id DESC', oldest: 'u.id ASC' }[req.query.sort] || 'u.id DESC';
-  const where = "(lower(u.email) LIKE ? OR lower(u.name) LIKE ?)";
+  const only = { banned: ' AND u.banned = 1', verified: ' AND u.verified = 1', admin: " AND u.role = 'admin'", telegram: ' AND u.telegram_allowed = 1', today: ' AND u.created_at > ' + (now() - 86400_000) }[req.query.filter] || '';
+  const where = "(lower(u.email) LIKE ? OR lower(u.name) LIKE ?)" + only;
   const total = db.prepare('SELECT COUNT(*) AS n FROM users u WHERE ' + where).get(q, q).n;
   const users = db.prepare(
     `SELECT u.id, u.email, u.name, u.role, u.banned, u.verified, u.telegram_allowed, u.created_at,
@@ -1203,8 +1204,12 @@ app.post('/api/users/:id(\\d+)/follow', needUser, postLimiter, (req, res) => {
 app.get('/api/admin/reports', needAdmin, (_req, res) => {
   const rows = db.prepare(
     `SELECT r.*, u.name AS reporter FROM reports r JOIN users u ON u.id = r.reporter_id
-     WHERE r.resolved = 0 ORDER BY r.id DESC LIMIT 100`
+     WHERE r.resolved = 0 ORDER BY r.id DESC LIMIT 200`
   ).all();
+  // what was reported, so the admin sees it without opening anything
+  const vq = db.prepare('SELECT v.id, v.caption, v.nickname, v.thumb, v.hidden, v.locked, u.email FROM videos v JOIN users u ON u.id = v.user_id WHERE v.id = ?');
+  const uq = db.prepare('SELECT id, name, email, banned FROM users WHERE id = ?');
+  for (const r of rows) r.target = r.target_type === 'video' ? vq.get(r.target_id) || null : r.target_type === 'user' ? uq.get(r.target_id) || null : null;
   res.json({ reports: rows });
 });
 app.post('/api/admin/reports/:id/resolve', needAdmin, (req, res) => {
@@ -1441,6 +1446,83 @@ app.post('/api/admin/users/:id/ban', needAdmin, (req, res) => {
   db.prepare('UPDATE users SET banned = 1 WHERE id = ?').run(req.params.id);
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+app.post('/api/admin/users/:id(\d+)/unban', needAdmin, (req, res) => {
+  db.prepare('UPDATE users SET banned = 0 WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+// several reports marked done / several videos shown, hidden or banned in one go
+const idList = (v) => [...new Set((Array.isArray(v) ? v : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 200);
+app.post('/api/admin/reports/resolve-many', needAdmin, (req, res) => {
+  const ids = idList(req.body.ids);
+  const st = db.prepare('UPDATE reports SET resolved = 1 WHERE id = ?');
+  for (const id of ids) st.run(id);
+  res.json({ ok: true, done: ids.length });
+});
+app.post('/api/admin/videos/bulk-status', needAdmin, (req, res) => {
+  const status = req.body.status, ids = idList(req.body.ids);
+  if (!['visible', 'hidden', 'banned'].includes(status)) return fail(res, 400, 'Trạng thái không hợp lệ');
+  if (!ids.length) return fail(res, 400, 'Chưa chọn video nào');
+  const st = db.prepare('UPDATE videos SET hidden = ?, locked = ?, hidden_by = ?, mod_note = ? WHERE id = ?');
+  let n = 0;
+  for (const id of ids) {
+    n += st.run(status === 'visible' ? 0 : 1, status === 'banned' ? 1 : 0, status === 'visible' ? '' : 'admin', status === 'visible' ? '' : clean(req.body.note, 300), id).changes;
+    if (status === 'visible') telegram.announce(id);
+  }
+  res.json({ ok: true, done: n });
+});
+// ---------- admin overview: the key numbers on one screen ----------
+// Folder sizes are slow to add up, so they are worked out at most every 10 minutes.
+let storageCache = null, storageAt = 0, storageBusy = null;
+const dirSize = async (dir) => {
+  let n = 0, files = 0;
+  const walk = async (d) => {
+    let list; try { list = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return; }
+    for (const e of list) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) await walk(p);
+      else if (e.isFile()) { try { n += (await fs.promises.stat(p)).size; files++; } catch {} }
+    }
+  };
+  await walk(dir);
+  return { bytes: n, files };
+};
+const storageInfo = async () => {
+  if (storageCache && Date.now() - storageAt < 10 * 60_000) return storageCache;
+  if (!storageBusy) storageBusy = (async () => {
+    const up = await dirSize(UPLOAD_DIR);
+    let dbBytes = 0; try { dbBytes = fs.statSync(path.join(require('./src/paths').DATA_DIR, 'xgaigu.db')).size; } catch {}
+    let free = null, total = null;
+    try { if (fs.promises.statfs) { const s = await fs.promises.statfs(UPLOAD_DIR); free = s.bavail * s.bsize; total = s.blocks * s.bsize; } } catch {}
+    storageCache = { uploads: up.bytes, files: up.files, db: dbBytes, free, total }; storageAt = Date.now();
+    return storageCache;
+  })().finally(() => { storageBusy = null; });
+  return storageBusy;
+};
+app.get('/api/admin/storage', needAdmin, wrap(async (_req, res) => res.json({ storage: await storageInfo().catch(() => null) })));
+app.get('/api/admin/overview', needAdmin, (_req, res) => {
+  const t = now(), DAY = 86400_000, today = vnDay(t);
+  const dayStart = Date.parse(today + 'T00:00:00+07:00');
+  const one = (sql, ...a) => db.prepare(sql).get(...a).n;
+  const safe = (fn, d = 0) => { try { return fn(); } catch { return d; } };
+  const daily = (table) => safe(() => db.prepare(`SELECT date(created_at / 1000, 'unixepoch', '+7 hours') AS day, COUNT(*) AS n FROM ${table} WHERE created_at > ? GROUP BY day`).all(dayStart - 13 * DAY), []);
+  res.json({
+    members: { total: one('SELECT COUNT(*) AS n FROM users'), today: one('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', dayStart), week: one('SELECT COUNT(*) AS n FROM users WHERE created_at > ?', t - 7 * DAY),
+      banned: one('SELECT COUNT(*) AS n FROM users WHERE banned = 1'), verified: one('SELECT COUNT(*) AS n FROM users WHERE verified = 1') },
+    videos: { total: one('SELECT COUNT(*) AS n FROM videos'), today: one('SELECT COUNT(*) AS n FROM videos WHERE created_at >= ?', dayStart), week: one('SELECT COUNT(*) AS n FROM videos WHERE created_at > ?', t - 7 * DAY),
+      visible: one('SELECT COUNT(*) AS n FROM videos WHERE hidden = 0 AND locked = 0'), hidden: one("SELECT COUNT(*) AS n FROM videos WHERE hidden = 1 AND locked = 0 AND hidden_by <> 'owner'"), banned: one('SELECT COUNT(*) AS n FROM videos WHERE locked = 1'),
+      views: one('SELECT COALESCE(SUM(views), 0) AS n FROM videos') },
+    reports: { open: one('SELECT COUNT(*) AS n FROM reports WHERE resolved = 0'), today: one('SELECT COUNT(*) AS n FROM reports WHERE created_at >= ?', dayStart) },
+    live: safe(() => one('SELECT COUNT(*) AS n FROM streams WHERE live = 1')),
+    orders: { today: safe(() => one('SELECT COUNT(*) AS n FROM orders WHERE created_at >= ?', dayStart)), open: safe(() => one("SELECT COUNT(*) AS n FROM orders WHERE status = 'new'")) },
+    telegram: { queued: safe(() => one("SELECT COUNT(*) AS n FROM tg_queue WHERE status = 'pending'")), groups: safe(() => one('SELECT COUNT(*) AS n FROM tg_targets WHERE active = 1')) },
+    traffic: { online: one('SELECT COUNT(*) AS n FROM presence WHERE last_seen > ?', t - 70_000), ...db.prepare('SELECT COUNT(*) AS visitors, COALESCE(SUM(hits), 0) AS views FROM presence WHERE day = ?').get(today),
+      yesterday: db.prepare('SELECT COUNT(*) AS visitors FROM presence WHERE day = ?').get(vnDay(t - DAY)).visitors,
+      daily: db.prepare('SELECT day, COUNT(*) AS visitors, COALESCE(SUM(hits), 0) AS views FROM presence WHERE day >= ? GROUP BY day ORDER BY day').all(vnDay(t - 13 * DAY)) },
+    signups: daily('users'), uploads: daily('videos'),
+    today,
+  });
 });
 
 // ---------- static & errors ----------

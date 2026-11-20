@@ -146,10 +146,10 @@ const S = { user: null, unread: 0, es: null, cleanups: [], sound: false };
 const onLeave = (fn) => S.cleanups.push(fn);
 
 // ---------- modal ----------
-function modal(content, { sheet = false, wide = false } = {}) {
+function modal(content, { sheet = false, wide = false, onClose = null } = {}) {
   const root = $('#modal-root');
   const prev = document.activeElement;
-  const close = () => { ov.remove(); document.removeEventListener('keydown', esc_); prev && prev.focus && prev.focus(); };
+  const close = () => { if (!ov.isConnected) return; ov.remove(); document.removeEventListener('keydown', esc_); prev && prev.focus && prev.focus(); onClose && onClose(); };
   const esc_ = (e) => { if (e.key === 'Escape') close(); };
   const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true' },
     h('button', { class: 'iconbtn x', 'aria-label': 'Đóng', onclick: close, html: icon('x') }), content);
@@ -159,6 +159,17 @@ function modal(content, { sheet = false, wide = false } = {}) {
   const first = box.querySelector('input,textarea,select,button.btn');
   first && first.focus();
   return { close, box };
+}
+
+// a styled yes / no question (replaces window.confirm); resolves true only when the main button is pressed
+function ask(title, text, { ok = 'Đồng ý', cancel = 'Huỷ', danger = false } = {}) {
+  return new Promise((resolve) => {
+    let yes = false;
+    const okB = h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), type: 'button', onclick: () => { yes = true; m.close(); } }, ok);
+    const m = modal(h('div', { class: 'askbox' }, h('div', { class: 'askbox-ic' + (danger ? ' danger' : ''), 'aria-hidden': 'true' }, danger ? '!' : '?'), h('h3', {}, title), text && h('p', { class: 'sub' }, text),
+      h('div', { class: 'askbox-act' }, h('button', { class: 'btn', type: 'button', onclick: () => m.close() }, cancel), okB)), { onClose: () => resolve(yes) });
+    setTimeout(() => okB.focus(), 30);
+  });
 }
 
 // ---------- address picker (autocomplete, like varaai) ----------
@@ -2084,7 +2095,7 @@ async function adminVideoDialog(id, onChange, own = false) {
   paint();
   const note = h('input', { placeholder: 'Lý do (không bắt buộc, chỉ admin thấy)', maxlength: 300 });
   const setStatus = async (status) => {
-    if (status === 'banned' && !confirm('Cấm xuất bản video này? Video sẽ bị gỡ khỏi website.')) return;
+    if (status === 'banned' && !(await ask('Cấm xuất bản video này?', 'Video sẽ bị gỡ khỏi website cho tới khi bạn bấm “Hiện lại”.', { ok: 'Cấm xuất bản', danger: true }))) return;
     try { v = (await api('/admin/videos/' + v.id + '/status', { method: 'POST', body: { status, note: note.value } })).video; paint(); toast(STATUS[v.status]); onChange && onChange(); } catch (e) { fail(e); }
   };
   const toggleSelf = async () => {
@@ -2100,7 +2111,7 @@ async function adminVideoDialog(id, onChange, own = false) {
       h('button', { class: 'btn sm', type: 'button', onclick: () => setStatus('visible') }, 'Hiện lại'),
       h('button', { class: 'btn sm', type: 'button', onclick: () => setStatus('hidden') }, 'Ẩn video'),
       h('button', { class: 'btn sm live', type: 'button', onclick: () => setStatus('banned') }, 'Cấm xuất bản'),
-      h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!confirm('XOÁ vĩnh viễn video này? Không thể khôi phục.')) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); toast('Đã xoá video'); m.close(); onChange && onChange(); } catch (e) { fail(e); } } }, 'Xoá')),
+      h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!(await ask('Xoá vĩnh viễn video này?', 'Video và lượt thích, bình luận của nó bị xoá hẳn, không thể khôi phục.', { ok: 'Xoá vĩnh viễn', danger: true }))) return; try { await api('/videos/' + v.id, { method: 'DELETE' }); toast('Đã xoá video'); m.close(); onChange && onChange(); } catch (e) { fail(e); } } }, 'Xoá')),
     own ? null : h('label', { class: 'check verify-tick' }, verChk, h('span', {}, h('b', {}, 'Đã xác minh'), ' – hiện huy hiệu xác minh nổi bật trên video này (chỉ admin được chọn)' + (v.accountVerified ? '. Lưu ý: tài khoản chủ video đã được xác minh nên mọi video của họ đều có huy hiệu.' : ''))), own ? null : h('div', { class: 'row', style: 'margin-bottom:10px' }, badgeSel), own ? null : note, h('div', { style: 'height:12px' }), f), { wide: true });
   geo.set(v); // fills the country and area once the lists have loaded
   f.addEventListener('submit', async (e) => {
@@ -2141,446 +2152,6 @@ function pageInstall() {
     h('p', { style: 'margin-top:26px' }, h('a', { href: '#/welcome', class: 'muted' }, 'Xem giới thiệu xgaigu')))), footer());
 }
 
-async function pageAdmin() {
-  if (!S.user || S.user.role !== 'admin') { location.hash = '#/'; return; }
-  const [{ reports }, st, tr] = await Promise.all([api('/admin/reports'), api('/admin/app-stats'), api('/admin/traffic')]);
-  const kv = (label, b, note) => h('div', { class: 'card', style: 'padding:16px;flex:1;min-width:210px' }, h('div', { class: 'muted', style: 'font-size:13px' }, label),
-    h('div', { style: 'font-size:32px;font-weight:800;margin:4px 0' }, String(b.total)),
-    h('div', { class: 'muted', style: 'font-size:13px;line-height:1.6' }, 'Hôm nay: ' + b.today + ' · 7 ngày: ' + b.week + ' · 30 ngày: ' + b.month, h('br'), 'Số thiết bị khác nhau: ' + b.devices), note && h('div', { class: 'muted', style: 'font-size:12px;margin-top:6px' }, note));
-  const dev = (k, d) => (st.byDevice.find((x) => x.kind === k && x.device === d) || {}).n || 0;
-  const devRows = [['android', 'Android'], ['ios', 'iPhone/iPad'], ['desktop', 'Máy tính'], ['other', 'Khác']].map(([d, n]) => h('tr', {}, h('td', {}, n), h('td', {}, String(dev('click', d))), h('td', {}, String(dev('install', d))), h('td', {}, String(dev('open', d)))));
-  const days = [...new Set(st.daily.map((x) => x.day))];
-  const dayVal = (day, k) => (st.daily.find((x) => x.day === day && x.kind === k) || {}).n || 0;
-  const statBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:16px' }, 'Thống kê ứng dụng'),
-    h('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap;margin-bottom:16px' },
-      kv('Lượt vào link tải ứng dụng', st.visit, 'Số lần khách mở trang xgaigu.com/app.'), kv('Lượt bấm “Tải ứng dụng”', st.click), kv('Đã cài về máy', st.install, 'Android/Chrome/Edge: trình duyệt xác nhận cài xong.'), kv('Lượt mở ứng dụng', st.open, 'Mở từ biểu tượng trên màn hình. iPhone không báo “đã cài”, nên xem số này.')),
-    h('div', { class: 'card', style: 'overflow:auto;margin-bottom:16px' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['Thiết bị', 'Bấm tải', 'Đã cài', 'Đang dùng app'].map((x) => h('th', {}, x)))), h('tbody', {}, devRows))),
-    days.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['Ngày (14 ngày gần nhất)', 'Bấm tải', 'Đã cài', 'Mở app'].map((x) => h('th', {}, x)))),
-      h('tbody', {}, days.map((d) => h('tr', {}, h('td', {}, d), h('td', {}, String(dayVal(d, 'click'))), h('td', {}, String(dayVal(d, 'install'))), h('td', {}, String(dayVal(d, 'open')))))))) : null);
-  const rows = reports.map((r) => h('tr', {}, h('td', {}, '#' + r.id), h('td', {}, r.target_type + ' #' + r.target_id), h('td', {}, r.reason), h('td', {}, r.reporter),
-    h('td', {}, h('div', { class: 'row' },
-      r.target_type === 'video' && h('button', { class: 'btn sm', onclick: async () => { await api('/admin/videos/' + r.target_id + '/hide', { method: 'POST' }); toast('Đã ẩn'); } }, 'Ẩn video'),
-      r.target_type === 'user' && h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá người dùng này?')) { await api('/admin/users/' + r.target_id + '/ban', { method: 'POST' }); toast('Đã khoá'); } } }, 'Khoá user'),
-      h('button', { class: 'btn sm primary', onclick: async () => { await api('/admin/reports/' + r.id + '/resolve', { method: 'POST' }); route(); } }, 'Xong')))));
-  const big = (label, val, note) => h('div', { class: 'card', style: 'padding:16px;flex:1;min-width:150px' }, h('div', { class: 'muted', style: 'font-size:13px' }, label), h('div', { style: 'font-size:32px;font-weight:800;margin:4px 0' }, val), note && h('div', { class: 'muted', style: 'font-size:12px' }, note));
-  const onlineEl = h('span', {}, String(tr.online));
-  const trafficBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:16px' }, 'Lượng truy cập website'),
-    h('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap;margin-bottom:16px' },
-      big('Đang xem website lúc này', h('span', {}, h('span', { style: 'color:#34d399' }, '● '), onlineEl), 'Tự cập nhật mỗi 20 giây'),
-      big('Khách truy cập hôm nay', String(tr.today.visitors), 'Mỗi thiết bị tính 1 lần/ngày · hôm qua: ' + tr.yesterday.visitors),
-      big('Lượt xem trang hôm nay', String(tr.today.views), 'Hôm qua: ' + tr.yesterday.views),
-      big('Tổng số thiết bị đã vào', String(tr.allTime), 'Từ khi bật thống kê')),
-    tr.daily.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['Ngày (giờ Việt Nam)', 'Khách truy cập', 'Lượt xem trang'].map((x) => h('th', {}, x)))),
-      h('tbody', {}, tr.daily.map((d) => h('tr', {}, h('td', {}, d.day), h('td', {}, String(d.visitors)), h('td', {}, String(d.views))))))) : h('p', { class: 'muted' }, 'Chưa có dữ liệu. Số liệu bắt đầu đếm từ khi website cập nhật bản này.'));
-  const tick = setInterval(async () => { try { onlineEl.textContent = String((await api('/admin/traffic')).online); } catch {} }, 20000);
-  S.cleanups.push(() => clearInterval(tick));
-  // member list
-  const memBody = h('tbody', {}), memInfo = h('div', { class: 'muted', style: 'margin:10px 0;font-size:14px' }), pager = h('div', { class: 'row', style: 'gap:8px;margin-top:12px' });
-  const qIn = h('input', { type: 'search', placeholder: 'Tìm theo email hoặc tên…', style: 'flex:1;min-width:200px' });
-  const sortSel = h('select', { 'aria-label': 'Sắp xếp', style: 'width:auto' }, [['newest', 'Mới đăng ký nhất'], ['videos', 'Nhiều video nhất'], ['followers', 'Nhiều người theo dõi nhất'], ['likes', 'Nhiều lượt thích nhất'], ['oldest', 'Đăng ký lâu nhất']].map(([v, l]) => h('option', { value: v }, l)));
-  sortSel.addEventListener('change', () => { page = 0; loadMembers().catch(fail); });
-  let page = 0, qt;
-  const loadMembers = async () => {
-    const d = await api('/admin/users?page=' + page + '&q=' + encodeURIComponent(qIn.value.trim()) + '&sort=' + sortSel.value);
-    memInfo.textContent = 'Tổng số thành viên: ' + d.total;
-    memBody.replaceChildren(...d.users.map((u) => h('tr', {}, h('td', {}, String(u.id)), h('td', { translate: 'no', style: 'word-break:break-all' }, u.email), h('td', { translate: 'no' }, u.name + (u.role === 'admin' ? ' (admin)' : '')),
-      h('td', {}, String(u.videos)), h('td', {}, String(u.followers)), h('td', {}, String(u.likes)), h('td', {}, new Date(u.created_at).toLocaleDateString('vi-VN')),
-      h('td', { style: 'text-align:center' }, h('input', { type: 'checkbox', checked: !!u.verified, title: 'Xác minh tài khoản: mọi video của thành viên này sẽ có huy hiệu Đã xác minh',
-        onchange: async (e) => { const on = e.target.checked; try { const r = await api('/admin/users/' + u.id + '/verified', { method: 'POST', body: { verified: on } }); toast(on ? 'Đã xác minh tài khoản, ' + r.videos + ' video có huy hiệu' : 'Đã gỡ xác minh tài khoản'); } catch (er) { e.target.checked = !on; fail(er); } } })),
-      h('td', { style: 'text-align:center;white-space:nowrap' }, u.role === 'admin' ? h('span', { class: 'muted', title: 'Quản trị viên luôn được dùng' }, '✓') : h('input', { type: 'checkbox', checked: !!u.telegram_allowed, title: 'Cho phép tài khoản này tự động gửi video lên nhóm Telegram',
-        onchange: async (e) => { const on = e.target.checked; try { await api('/admin/users/' + u.id + '/telegram', { method: 'POST', body: { allowed: on } }); toast(on ? 'Đã cho phép ' + u.name + ' gửi lên Telegram' : 'Đã tắt gửi Telegram của ' + u.name); } catch (er) { e.target.checked = !on; fail(er); } } }),
-        u.tg_groups ? h('small', { class: 'muted', style: 'margin-left:6px' }, u.tg_groups + ' nhóm') : ''),
-      h('td', { style: 'white-space:nowrap' }, h('button', { class: 'btn sm', style: 'margin-right:6px', onclick: () => adminPasswordDialog(u) }, '🔑 Đổi mật khẩu'),
-        u.banned ? h('span', { class: 'muted' }, 'Đã khoá') : u.role === 'admin' ? '' : h('button', { class: 'btn sm', onclick: async () => { if (confirm('Khoá tài khoản ' + u.email + '?')) { await api('/admin/users/' + u.id + '/ban', { method: 'POST' }); loadMembers(); } } }, 'Khoá')))));
-    pager.replaceChildren(page > 0 ? h('button', { class: 'btn sm', onclick: () => { page--; loadMembers(); } }, '← Trước') : '', (page + 1) * d.size < d.total ? h('button', { class: 'btn sm', onclick: () => { page++; loadMembers(); } }, 'Sau →') : '');
-  };
-  // set a new password for a member: typed by the admin or made up at random, shown so the admin can pass it on
-  function adminPasswordDialog(u) {
-    const makeUp = () => { const abc = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', b = crypto.getRandomValues(new Uint8Array(10)); return [...b].map((x) => abc[x % abc.length]).join(''); };
-    const pw = h('input', { type: 'text', minlength: 8, maxlength: 200, autocomplete: 'off', placeholder: 'Mật khẩu mới (ít nhất 8 ký tự)', style: 'flex:1;min-width:0' });
-    const err = h('p', { class: 'err', hidden: true });
-    const done = h('div', { hidden: true, class: 'notice', style: 'display:grid;gap:8px' });
-    const save = h('button', { type: 'submit', class: 'btn primary', style: 'width:100%' }, 'Đổi mật khẩu');
-    const form = h('form', { style: 'display:grid;gap:12px' },
-      h('p', { class: 'muted', style: 'font-size:14px' }, 'Tài khoản: ', h('b', { translate: 'no' }, u.email), ' (' + u.name + ')'),
-      h('div', { class: 'row', style: 'gap:8px;flex-wrap:nowrap' }, pw, h('button', { type: 'button', class: 'btn sm', onclick: () => { pw.value = makeUp(); } }, 'Tạo ngẫu nhiên')),
-      h('small', { class: 'muted' }, 'Sau khi đổi, tài khoản này bị đăng xuất khỏi mọi thiết bị và phải đăng nhập lại bằng mật khẩu mới.'),
-      err, save, done);
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault(); err.hidden = true;
-      if (pw.value.length < 8) { err.textContent = 'Mật khẩu mới tối thiểu 8 ký tự'; err.hidden = false; return; }
-      save.disabled = true;
-      try {
-        await api('/admin/users/' + u.id + '/password', { method: 'POST', body: { password: pw.value } });
-        const val = pw.value;
-        done.replaceChildren(h('b', {}, '✅ Đã đổi mật khẩu cho ' + u.email), h('span', {}, 'Mật khẩu mới: ', h('code', { translate: 'no' }, val)),
-          h('button', { type: 'button', class: 'btn sm', style: 'justify-self:start', onclick: () => { navigator.clipboard && navigator.clipboard.writeText(val).then(() => toast('Đã sao chép mật khẩu')).catch(() => {}); } }, 'Sao chép mật khẩu'));
-        done.hidden = false; save.hidden = true; pw.disabled = true;
-        toast('Đã đổi mật khẩu');
-      } catch (ex) { err.textContent = ex.message; err.hidden = false; save.disabled = false; }
-    });
-    modal(h('div', {}, h('h3', { style: 'margin-bottom:10px' }, '🔑 Đổi mật khẩu tài khoản'), form));
-    setTimeout(() => pw.focus(), 50);
-  }
-  qIn.addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(() => { page = 0; loadMembers().catch(fail); }, 300); });
-  await loadMembers().catch(fail);
-  const membersBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thành viên đã đăng ký'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, qIn, sortSel), memInfo,
-    h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Email', 'Tên', 'Video', 'Theo dõi', 'Lượt thích', 'Ngày đăng ký', 'Đã xác minh', 'Gửi Telegram', ''].map((x) => h('th', {}, x)))), memBody)), pager);
-  // video moderation list
-  const vBody = h('tbody', {}), vInfo = h('div', { class: 'muted', style: 'margin:10px 0;font-size:14px' }), vPager = h('div', { class: 'row', style: 'gap:8px;margin-top:12px' });
-  const vq = h('input', { type: 'search', placeholder: 'Tìm theo nội dung, biệt danh, email chủ video hoặc số ID…', style: 'flex:1;min-width:200px' });
-  const vst = h('select', { 'aria-label': 'Trạng thái', style: 'width:auto' }, [['', 'Tất cả video'], ['visible', 'Đang hiển thị'], ['hidden', 'Đã ẩn'], ['banned', 'Bị cấm xuất bản']].map(([a, b]) => h('option', { value: a }, b)));
-  let vpage = 0, vqt;
-  const BADGE = { visible: ['Hiển thị', '#34d399'], hidden: ['Đã ẩn', '#fbbf24'], self: ['Chủ tự ẩn', '#a78bfa'], banned: ['Bị cấm', '#f43f5e'] };
-  const loadVideos = async () => {
-    const d = await api('/admin/videos?page=' + vpage + '&status=' + vst.value + '&q=' + encodeURIComponent(vq.value.trim()));
-    vInfo.textContent = 'Tổng số video: ' + d.total;
-    vBody.replaceChildren(...d.videos.map((x) => h('tr', {},
-      h('td', {}, '#' + x.id, x.verified && h('span', { title: 'Đã xác minh', style: 'color:#38bdf8;margin-left:4px' }, '✔')),
-      h('td', {}, x.thumb ? h('img', { src: x.thumb, alt: '', style: 'width:44px;height:58px;object-fit:cover;border-radius:6px;display:block' }) : ''),
-      h('td', { translate: 'no', style: 'max-width:220px' }, (x.caption || x.nickname || '(không có nội dung)').slice(0, 80)),
-      h('td', { translate: 'no', style: 'word-break:break-all' }, x.owner.email),
-      h('td', {}, String(x.views)),
-      h('td', {}, h('b', { style: 'color:' + BADGE[x.status][1] }, BADGE[x.status][0])),
-      h('td', {}, h('button', { class: 'btn sm', onclick: () => adminVideoDialog(x.id, () => loadVideos().catch(fail)) }, 'Quản lý')))));
-    vPager.replaceChildren(vpage > 0 ? h('button', { class: 'btn sm', onclick: () => { vpage--; loadVideos(); } }, '← Trước') : '', (vpage + 1) * d.size < d.total ? h('button', { class: 'btn sm', onclick: () => { vpage++; loadVideos(); } }, 'Sau →') : '');
-  };
-  const vReload = () => { vpage = 0; loadVideos().catch(fail); };
-  vq.addEventListener('input', () => { clearTimeout(vqt); vqt = setTimeout(vReload, 300); }); vst.addEventListener('change', vReload);
-  await loadVideos().catch(fail);
-  const videosBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Quản lý video'), h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, vq, vst), vInfo,
-    h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', '', 'Nội dung', 'Chủ video', 'Lượt xem', 'Trạng thái', ''].map((x) => h('th', {}, x)))), vBody)), vPager);
-  // shareable install link + QR code
-  const shareBox = (() => {
-    const link = location.origin + '/app', text = 'Tải ứng dụng xgaigu về máy chỉ một chạm: ';
-    const qrBox = h('div', { style: 'background:#fff;padding:12px;border-radius:14px;width:fit-content;min-height:60px' }, h('span', { style: 'color:#555;font-size:13px' }, 'Đang tạo mã QR…'));
-    let qr = null;
-    const draw = () => { try { qrBox.replaceChildren(); qrBox.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 0, scalable: true }); const s = qrBox.querySelector('svg'); if (s) { s.setAttribute('width', 190); s.setAttribute('height', 190); } } catch { qrBox.textContent = 'Không tạo được mã QR'; } };
-    const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
-    sc.onload = () => { try { qr = window.qrcode(0, 'M'); qr.addData(link); qr.make(); draw(); } catch { qrBox.textContent = 'Không tạo được mã QR'; } };
-    sc.onerror = () => { qrBox.textContent = 'Không tải được thư viện mã QR'; };
-    document.head.append(sc);
-    const copy = async () => { try { await navigator.clipboard.writeText(link); toast('Đã sao chép liên kết'); } catch { prompt('Sao chép liên kết này:', link); } };
-    const open = (u) => window.open(u, '_blank', 'noopener');
-    const png = () => {
-      if (!qr) return toast('Mã QR chưa sẵn sàng', true);
-      const n = qr.getModuleCount(), cell = 12, pad = 24, c = document.createElement('canvas'); c.width = c.height = n * cell + pad * 2;
-      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#000';
-      for (let r = 0; r < n; r++) for (let q = 0; q < n; q++) if (qr.isDark(r, q)) g.fillRect(pad + q * cell, pad + r * cell, cell, cell);
-      c.toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'xgaigu-tai-ung-dung-qr.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); });
-    };
-    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Link tải ứng dụng'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:14px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Gửi liên kết này cho khách. Khách chỉ cần bấm vào, trang sẽ mở ra với nút “Cài đặt ứng dụng”, bấm thêm một lần là ứng dụng được cài vào máy (iPhone sẽ có hướng dẫn 3 bước).'),
-        h('div', { class: 'row', style: 'gap:8px;flex-wrap:nowrap' }, h('input', { readonly: true, value: link, style: 'flex:1;min-width:0', onclick: (e) => e.target.select() }), h('button', { class: 'btn primary', type: 'button', onclick: copy }, 'Sao chép')),
-        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
-          navigator.share && h('button', { class: 'btn', type: 'button', onclick: () => navigator.share({ title: 'Ứng dụng xgaigu', text, url: link }).catch(() => {}) }, 'Chia sẻ…'),
-          h('button', { class: 'btn', type: 'button', onclick: () => open('https://zalo.me/share?url=' + encodeURIComponent(link)) }, 'Zalo'),
-          h('button', { class: 'btn', type: 'button', onclick: () => open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(link)) }, 'Facebook'),
-          h('button', { class: 'btn', type: 'button', onclick: () => open('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text)) }, 'Telegram'),
-          h('a', { class: 'btn', href: '/app', target: '_blank', rel: 'noopener' }, 'Xem trang tải')),
-        h('div', { class: 'row', style: 'gap:18px;align-items:flex-end;flex-wrap:wrap' }, qrBox, h('div', { style: 'display:grid;gap:8px' }, h('span', { class: 'muted', style: 'font-size:13px' }, 'Mã QR: in ra hoặc đăng lên để khách quét bằng camera.'), h('button', { class: 'btn', type: 'button', onclick: png }, 'Tải mã QR (PNG)'))),
-        h('p', { class: 'muted', style: 'font-size:13px' }, 'Lượt vào link này được đếm trong mục “Thống kê ứng dụng”.')));
-  })();
-  // music library: songs uploaded by admins for the video editor
-  const musicBox = (() => {
-    const list = h('div', { style: 'display:grid;gap:8px' }), info = h('p', { class: 'muted', style: 'font-size:13px' });
-    const fileIn = h('input', { type: 'file', accept: 'audio/*,.mp3,.m4a,.aac,.wav,.ogg' });
-    const title = h('input', { placeholder: 'Tên bài hát (để trống = lấy theo tên file)', maxlength: 120 }), artist = h('input', { placeholder: 'Ca sĩ / nghệ sĩ (không bắt buộc)', maxlength: 80 });
-    const style = h('input', { placeholder: 'Thể loại, VD: Nhạc có lời, Remix, Bolero, Nhạc Hoa…', maxlength: 40, value: 'Nhạc có lời' });
-    const prog = h('div', { class: 'muted', style: 'font-size:13px' }), upBtn = h('button', { class: 'btn primary', type: 'button' }, 'Tải bài hát lên');
-    const load = async () => {
-      try {
-        const { tracks } = await api('/music');
-        info.textContent = tracks.length + ' bài hát trong thư viện';
-        list.replaceChildren(...tracks.map((t) => h('div', { class: 'card', style: 'padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
-          h('div', { style: 'flex:1;min-width:160px' }, h('b', { translate: 'no' }, t.title), h('div', { class: 'muted', style: 'font-size:13px' }, [t.artist, t.style].filter(Boolean).join(' · '))),
-          h('audio', { controls: true, preload: 'none', src: t.url, style: 'height:36px;max-width:100%' }),
-          h('button', { class: 'btn sm', type: 'button', onclick: async () => { const nt = prompt('Tên bài hát', t.title); if (nt == null) return; const na = prompt('Ca sĩ / nghệ sĩ', t.artist) ?? t.artist; const ns = prompt('Thể loại', t.style) ?? t.style; try { await api('/admin/music/' + t.id, { method: 'PUT', body: { title: nt, artist: na, style: ns } }); load(); } catch (e) { fail(e); } } }, 'Sửa'),
-          h('button', { class: 'btn sm live', type: 'button', onclick: async () => { if (!confirm('Xoá bài "' + t.title + '" khỏi thư viện?')) return; try { await api('/admin/music/' + t.id, { method: 'DELETE' }); toast('Đã xoá'); load(); } catch (e) { fail(e); } } }, 'Xoá'))));
-      } catch (e) { fail(e); }
-    };
-    upBtn.addEventListener('click', async () => {
-      const f = fileIn.files[0]; if (!f) return toast('Hãy chọn file nhạc', true);
-      if (f.size > 30 * 1024 * 1024) return toast('File quá lớn (tối đa 30 MB)', true);
-      const fd = new FormData(); fd.append('file', f); fd.append('title', title.value); fd.append('artist', artist.value); fd.append('style', style.value);
-      upBtn.disabled = true;
-      try {
-        await apiUpload('/admin/music', fd, (a, b) => { prog.textContent = 'Đang tải lên… ' + Math.round(a / b * 100) + '%'; }).promise;
-        prog.textContent = ''; toast('Đã thêm bài hát vào thư viện'); fileIn.value = ''; title.value = ''; artist.value = ''; load();
-      } catch (e) { prog.textContent = ''; fail(e); }
-      upBtn.disabled = false;
-    });
-    load();
-    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Thư viện nhạc có lời'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Bài hát tải lên đây hiện ngay đầu thư viện nhạc trong trình chỉnh sửa video, để thành viên chọn chèn vào video. Chỉ tải lên bài bạn có quyền sử dụng; nhạc có bản quyền có thể khiến video bị khiếu nại.'),
-        fileIn, h('div', { class: 'two' }, title, artist), style, h('div', { class: 'row', style: 'gap:10px;align-items:center' }, upBtn, prog), info, list));
-  })();
-  // recommendation mix: how much verified / new / hot / favourite-region videos are suggested
-  const feedBox = (() => {
-    const share = h('input', { type: 'range', min: 0, max: 100, step: 5, value: 60, style: 'flex:1' }), shareOut = h('b', { style: 'min-width:150px' });
-    const num = (v) => h('input', { type: 'number', min: 0, max: 20, value: v, style: 'width:90px' });
-    const newB = num(8), hotB = num(5), regB = num(7);
-    const stat = h('p', { class: 'muted', style: 'font-size:13px' });
-    const paint = () => { shareOut.textContent = share.value + '% đã xác minh · ' + (100 - share.value) + '% chưa xác minh'; };
-    share.addEventListener('input', paint);
-    const fill = (c) => { share.value = c.verifiedShare; newB.value = c.newBoost; hotB.value = c.hotBoost; regB.value = c.regionBoost; paint(); };
-    api('/admin/feed-conf').then((d) => { fill(d.conf); stat.textContent = 'Hiện có ' + d.verifiedVideos + ' / ' + d.totalVideos + ' video đã xác minh. Nếu một nhóm hết video, website tự lấy thêm từ nhóm còn lại.'; }).catch(() => {});
-    const save = async (body) => { try { const r = await api('/admin/feed-conf', { method: 'PUT', body }); fill(r.conf); toast('Đã lưu cách đề xuất video'); } catch (e) { fail(e); } };
-    const row = (label, el, hint) => h('label', { class: 'row', style: 'gap:10px;align-items:center;flex-wrap:wrap' }, h('span', { style: 'min-width:230px' }, label), el, hint && h('span', { class: 'muted', style: 'font-size:12px' }, hint));
-    paint();
-    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Đề xuất video'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:14px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Quyết định loại video nào khách được xem nhiều hơn ở trang chủ ("Dành cho bạn") và các trang khu vực. Thứ tự vẫn ngẫu nhiên, chỉ thay đổi tỉ lệ.'),
-        row('Tỉ lệ video đã xác minh', h('div', { class: 'row', style: 'gap:10px;flex:1;min-width:220px;align-items:center' }, share, shareOut)),
-        row('Ưu tiên video mới đăng (24 giờ)', newB, '1 = không ưu tiên, càng lớn càng hay xuất hiện'),
-        row('Ưu tiên video đang hot', hotB, '1 = không ưu tiên'),
-        row('Ưu tiên khu vực khách quan tâm', regB, '0 = không ưu tiên'),
-        stat,
-        h('div', { class: 'row', style: 'gap:8px' },
-          h('button', { class: 'btn primary', type: 'button', onclick: () => save({ verifiedShare: share.value, newBoost: newB.value, hotBoost: hotB.value, regionBoost: regB.value }) }, 'Lưu'),
-          h('button', { class: 'btn', type: 'button', onclick: () => save({ verifiedShare: 60, newBoost: 8, hotBoost: 5, regionBoost: 7 }) }, 'Về mặc định'))));
-  })();
-  // how many videos per page on area pages and profiles
-  const pageBox = (() => {
-    const inp = h('input', { type: 'number', min: 3, max: 60, value: 15, style: 'width:110px' });
-    api('/site-config').then((c) => { inp.value = c.pageSize || 15; }).catch(() => {});
-    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Số video mỗi trang'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Số video hiện trên mỗi trang ở các trang khu vực và trang hồ sơ thành viên. Nhiều hơn số này thì có nút chuyển sang trang tiếp theo. Ít video mỗi trang giúp trang tải nhanh hơn.'),
-        h('div', { class: 'row', style: 'gap:10px;align-items:center;flex-wrap:wrap' }, inp, h('span', { class: 'muted' }, 'video / trang (từ 3 đến 60)'),
-          h('button', { class: 'btn primary', type: 'button', onclick: async () => { try { const r = await api('/admin/page-size', { method: 'PUT', body: { pageSize: inp.value } }); inp.value = r.pageSize; toast('Đã lưu: ' + r.pageSize + ' video mỗi trang'); } catch (e) { fail(e); } } }, 'Lưu'))));
-  })();
-  // link to another website ("Xem Video Hẹn Hò" button in every info sheet)
-  const partnerBox = (() => {
-    const inp = h('input', { type: 'url', placeholder: 'https://ten-website-khac.com', style: 'flex:1;min-width:220px' });
-    api('/site-config').then((c) => { inp.value = c.partner || ''; }).catch(() => {});
-    const save = async (val) => { try { const r = await api('/admin/partner', { method: 'PUT', body: { url: val } }); S.conf = { ...(S.conf || {}), partner: r.url }; inp.value = r.url; toast(r.url ? 'Đã lưu, nút "Xem Video Hẹn Hò" đã hiện' : 'Đã ẩn nút "Xem Video Hẹn Hò"'); } catch (e) { fail(e); } };
-    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Nút "Xem Video Hẹn Hò"'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Dán đường link của một website khác. Khi có link, nút nổi bật "Xem Video Hẹn Hò" sẽ hiện trong mục "Xem thông tin" của mọi video; khách bấm vào sẽ mở website đó ở tab mới. Để trống rồi Lưu (hoặc bấm Ẩn nút) để ẩn.'),
-        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, inp, h('button', { class: 'btn primary', type: 'button', onclick: () => save(inp.value.trim()) }, 'Lưu'), h('button', { class: 'btn', type: 'button', onclick: () => { inp.value = ''; save(''); } }, 'Ẩn nút'))));
-  })();
-  // up to 5 Telegram group links; the info sheet shows one of them at random
-  const statsBody = h('tbody', {}), statsNote = h('p', { class: 'muted', style: 'font-size:13px' });
-  const loadTgStats = async () => {
-    try {
-      const d = await api('/admin/tg-stats');
-      const cell = (x) => h('td', { style: 'white-space:nowrap' }, h('b', {}, String(x.clicks)), h('span', { class: 'muted', style: 'font-size:12px' }, ' lượt · ' + x.people + ' người'));
-      statsBody.replaceChildren(...(d.links.length ? d.links.map((l, i) => h('tr', {},
-        h('td', { style: 'max-width:230px;word-break:break-all' }, (l.active ? 'Nhóm ' + (i + 1) + ': ' : '(link cũ) ') , h('a', { href: l.url, target: '_blank', rel: 'noopener', style: 'color:#7cc7ff' }, l.url.replace(/^https:\/\//, ''))),
-        cell(l.today), cell(l.week), cell(l.total))) : [h('tr', {}, h('td', { colspan: 4, class: 'muted' }, 'Chưa có lượt bấm nào.'))]));
-      statsNote.textContent = 'Hôm nay là ' + d.today.split('-').reverse().join('/') + ' (giờ Việt Nam). "Người" = số thiết bị khác nhau đã bấm.';
-    } catch (e) { fail(e); }
-  };
-  const statsWrap = h('div', { style: 'margin-top:8px;display:grid;gap:8px' },
-    h('div', { class: 'row', style: 'justify-content:space-between;align-items:center' }, h('b', {}, 'Lượt bấm vào từng nhóm'), h('button', { class: 'btn sm', type: 'button', onclick: loadTgStats }, 'Làm mới')),
-    h('div', { style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['Link nhóm', 'Hôm nay', '7 ngày', 'Tổng'].map((x) => h('th', {}, x)))), statsBody)), statsNote);
-  loadTgStats();
-  const tgBox = (() => {
-    const inputs = [1, 2, 3, 4, 5].map((n) => h('input', { type: 'url', placeholder: 'Nhóm ' + n + ': https://t.me/ten_nhom', style: 'width:100%' }));
-    const fill = (list) => inputs.forEach((inp, i) => { inp.value = list[i] || ''; });
-    api('/site-config').then((c) => fill(c.telegrams || [])).catch(() => {});
-    const save = async () => {
-      try {
-        const r = await api('/admin/site-config', { method: 'PUT', body: { telegrams: inputs.map((x) => x.value.trim()) } });
-        S.conf = { ...(S.conf || {}), telegrams: r.telegrams, telegram: r.telegrams[0] || '' }; fill(r.telegrams);
-        toast(r.telegrams.length ? 'Đã lưu ' + r.telegrams.length + ' nhóm Telegram' : 'Đã ẩn nút Telegram');
-      } catch (e) { fail(e); }
-    };
-    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Nhóm Telegram'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:10px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Điền tối đa 5 link nhóm Telegram. Mỗi lần khách mở "Xem thông tin", nút "Vào nhóm Telegram" sẽ dẫn tới một trong các nhóm này, chọn ngẫu nhiên, để chia đều khách giữa các nhóm. Để trống ô nào thì bỏ qua ô đó; để trống hết rồi Lưu thì nút bị ẩn.'),
-        ...inputs,
-        h('div', { class: 'row', style: 'gap:8px' }, h('button', { class: 'btn primary', type: 'button', onclick: save }, 'Lưu'), h('button', { class: 'btn', type: 'button', onclick: () => { fill([]); save(); } }, 'Xoá hết')),
-        statsWrap));
-  })();
-  // video optimisation: shrink big videos so they load fast
-  const optBox = await (async () => {
-    const o = await api('/admin/optimize').catch(() => null); if (!o) return null;
-    const info = h('p', { class: 'muted', style: 'font-size:14px;line-height:1.7' }), limit = h('input', { type: 'number', min: 1, max: 1000, value: 50, style: 'width:100px' });
-    const startB = h('button', { class: 'btn primary', type: 'button' }, 'Nén video cũ ngay'), stopB = h('button', { class: 'btn', type: 'button', hidden: true }, 'Dừng');
-    // compression settings
-    const cs = o.settings || {};
-    const num = (v, min, max) => h('input', { type: 'number', min, max, value: v, style: 'width:84px' });
-    const chk = (v) => h('input', { type: 'checkbox', checked: !!v, style: 'width:18px;height:18px;min-height:0;padding:0' });
-    const enabled = chk(cs.enabled), autoNew = chk(cs.autoNew), autoOld = chk(cs.autoOld);
-    const t1 = num(cs.tier1Mb, 3, 2000), p1 = num(cs.tier1Pct, 10, 90), t2 = num(cs.tier2Mb, 5, 5000), p2 = num(cs.tier2Pct, 10, 90);
-    const side = h('select', { style: 'width:auto' }, [[480, '480p (nhẹ nhất)'], [540, '540p'], [720, '720p (khuyên dùng)'], [1080, '1080p (nét nhất, nặng)']].map(([v, l]) => h('option', { value: v, selected: Number(cs.maxSide) === v }, l)));
-    const quality = h('select', { style: 'width:auto' }, [['light', 'Nhẹ máy nhất'], ['balanced', 'Cân bằng (khuyên dùng)'], ['sharp', 'Nét hơn']].map(([v, l]) => h('option', { value: v, selected: cs.quality === v }, l)));
-    const saveS = h('button', { class: 'btn primary', type: 'button' }, 'Lưu cài đặt nén');
-    const line = (...kids) => h('label', { class: 'row', style: 'gap:8px;flex-wrap:wrap;align-items:center;font-size:15px' }, ...kids);
-    saveS.addEventListener('click', async () => {
-      try {
-        const r = await api('/admin/optimize/settings', { method: 'PUT', body: { enabled: enabled.checked, autoNew: autoNew.checked, autoOld: autoOld.checked, tier1Mb: t1.value, tier1Pct: p1.value, tier2Mb: t2.value, tier2Pct: p2.value, maxSide: side.value, quality: quality.value } });
-        Object.assign(cs, r.settings); t1.value = cs.tier1Mb; p1.value = cs.tier1Pct; t2.value = cs.tier2Mb; p2.value = cs.tier2Pct;
-        toast('Đã lưu cài đặt nén video'); paint(await api('/admin/optimize'));
-      } catch (e) { fail(e); }
-    });
-    const settingsCard = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px;margin-bottom:12px' },
-      h('h3', { style: 'font-size:17px' }, 'Cài đặt nén'),
-      line(enabled, 'Bật nén video'),
-      line('Video nặng trên', t1, 'MB → nén còn', p1, '% dung lượng'),
-      line('Video nặng trên', t2, 'MB → nén còn', p2, '% dung lượng'),
-      line('Độ phân giải tối đa', side),
-      line('Chất lượng', quality),
-      h('p', { class: 'muted', style: 'font-size:13px;margin-top:-4px' }, 'Video nhỏ hơn mức đầu chỉ được nén khi nặng hơn mức điện thoại cần. Mức “Chất lượng” đặt giới hạn thấp nhất, nên video luôn xem rõ trên điện thoại (khi đó dung lượng có thể cao hơn % đã đặt một chút).'),
-      line(autoNew, 'Tự nén video mới đăng'),
-      line(autoOld, 'Tự nén dần các video đã đăng (chạy nền, mỗi lần một video, không làm chậm website)'),
-      h('div', {}, saveS));
-    let timer;
-    const paint = (s) => {
-      info.textContent = s.available
-        ? 'Còn ' + s.pending + ' video cần xem xét để nén (khoảng ' + s.pendingMB + ' MB).' + (s.settings && s.settings.autoOld ? ' Đang bật tự nén dần.' : '') + ' Đã nén: ' + s.optimized + ' video. Phiên này: nén xong ' + s.done + ', tiết kiệm ' + s.savedMB + ' MB' + (s.skipped ? ', bỏ qua ' + s.skipped + ' video đã đủ nhẹ' : '') + (s.failed ? ', lỗi ' + s.failed : '') + (s.running ? ' · đang chạy, còn ' + s.queued + ' video trong hàng đợi…' : '.')
-        : 'Máy chủ này không có ffmpeg nên không nén được video.';
-      startB.disabled = !s.available || s.running; stopB.hidden = !s.running;
-      if (s.running && !timer) timer = setInterval(async () => { try { paint(await api('/admin/optimize')); } catch {} }, 5000);
-      if (!s.running && timer) { clearInterval(timer); timer = null; }
-    };
-    paint(o); S.cleanups.push(() => timer && clearInterval(timer));
-    startB.addEventListener('click', async () => { try { const r = await api('/admin/optimize/start', { method: 'POST', body: { limit: limit.value } }); toast('Đã xếp hàng ' + r.queued + ' video'); paint(await api('/admin/optimize')); } catch (e) { fail(e); } });
-    stopB.addEventListener('click', async () => { try { await api('/admin/optimize/stop', { method: 'POST' }); toast('Sẽ dừng sau video hiện tại'); } catch (e) { fail(e); } });
-    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Tối ưu video'),
-      settingsCard, h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, 'Nén từng video một ở nền. File gốc chỉ bị thay khi bản nén nhỏ hơn rõ rệt và chạy tốt. Video dưới 2 MB giữ nguyên.'),
-        info, h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'muted', style: 'font-size:14px' }, 'Nén tối đa'), limit, h('span', { class: 'muted', style: 'font-size:14px' }, 'video mỗi lần'), startB, stopB)));
-  })();
-  // email: confirmation switch, test mail, campaigns
-  const ml = await api('/admin/mail').catch(() => null);
-  const mailBox = ml && (() => {
-    const chk = h('input', { type: 'checkbox', checked: ml.requireVerification });
-    chk.addEventListener('change', async () => { try { await api('/admin/mail', { method: 'PUT', body: { requireVerification: chk.checked } }); toast(chk.checked ? 'Đã BẬT: khách phải xác nhận email mới đăng nhập được' : 'Đã TẮT xác nhận email'); } catch (e) { chk.checked = !chk.checked; fail(e); } });
-    const testTo = h('input', { type: 'email', placeholder: 'Email nhận thư thử (để trống = email của bạn)', style: 'flex:1;min-width:220px' });
-    const testRes = h('p', { class: 'muted', style: 'font-size:14px;margin-top:8px' });
-    const subj = h('input', { placeholder: 'Tiêu đề email', maxlength: 150 }), body = h('textarea', { rows: 8, maxlength: 8000, placeholder: 'Nội dung email. Dùng {name} để chèn tên người nhận. Để trống một dòng giữa các đoạn.' });
-    const lim = h('input', { type: 'number', min: 1, max: 1000, value: 100, style: 'width:110px' }), ver = h('input', { type: 'checkbox' });
-    const ctaL = h('input', { placeholder: 'Chữ trên nút (không bắt buộc), VD: Xem ngay', maxlength: 40, style: 'flex:1;min-width:180px' }), ctaU = h('input', { placeholder: 'Địa chỉ của nút, VD: https://xgaigu.com/khu-vuc', maxlength: 400, style: 'flex:2;min-width:220px' });
-    const camp = h('div', { style: 'margin-top:12px;display:grid;gap:8px' });
-    const drawC = (list) => camp.replaceChildren(...list.map((c) => h('div', { class: 'muted', style: 'font-size:13px' }, '#' + c.id + ' · ' + c.subject + ' — ' + ({ running: 'đang gửi…', done: 'xong', interrupted: 'bị gián đoạn' }[c.status] || c.status) + ' · gửi được ' + c.sent + '/' + c.total + (c.failed ? ' · lỗi ' + c.failed : '') + ' · ' + new Date(c.created_at).toLocaleString('vi-VN'))));
-    drawC(ml.campaigns);
-    return h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'Email'),
-      h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-        h('p', { class: 'muted', style: 'font-size:14px' }, ml.configured ? 'Gửi từ: ' + ml.from + ' (đã cấu hình)' : '⚠️ Chưa cấu hình email gửi đi. Hãy thêm biến SMTP_USER và SMTP_PASS trên Hostinger.'),
-        h('label', { class: 'check' }, chk, h('span', {}, 'Bắt buộc khách xác nhận email mới được đăng ký / đăng nhập (chỉ áp dụng cho người đăng ký mới)')),
-        h('p', { class: 'muted', style: 'font-size:13px' }, 'Thành viên: ' + ml.counts.total + ' · đã xác nhận: ' + ml.counts.verified + ' · đã hủy nhận email quảng bá: ' + (ml.counts.optout || 0)),
-        h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, testTo, h('button', { class: 'btn', type: 'button', onclick: async (ev) => { ev.target.disabled = true; testRes.textContent = 'Đang gửi…'; try { const r = await api('/admin/mail/test', { method: 'POST', body: { to: testTo.value } }); testRes.textContent = '✅ Đã gửi thư thử tới ' + r.to + '. Hãy kiểm tra hộp thư (cả Spam).'; } catch (e) { testRes.textContent = '❌ ' + e.message; } ev.target.disabled = false; } }, 'Gửi email thử')), testRes,
-        h('hr', { style: 'border:0;border-top:1px solid var(--line);width:100%' }),
-        h('b', {}, 'Gửi email quảng bá cho thành viên'), subj, body, h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' }, ctaL, ctaU),
-        h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, h('label', { class: 'muted', style: 'font-size:14px' }, 'Tối đa '), lim, h('span', { class: 'muted', style: 'font-size:14px' }, 'người nhận'), h('label', { class: 'check' }, ver, h('span', {}, 'Chỉ người đã xác nhận email'))),
-        h('p', { class: 'muted', style: 'font-size:13px' }, 'Mỗi email có liên kết "Hủy nhận email quảng bá". Gửi chậm khoảng 1,5 giây/email để tránh bị nhà cung cấp chặn. Hãy hỏi Hostinger giới hạn số email mỗi giờ của gói bạn.'),
-        h('button', { class: 'btn primary', type: 'button', onclick: async (ev) => { if (!confirm('Gửi email này cho tối đa ' + lim.value + ' thành viên?')) return; ev.target.disabled = true; try { const r = await api('/admin/mail/campaign', { method: 'POST', body: { subject: subj.value, body: body.value, limit: lim.value, verifiedOnly: ver.checked, ctaLabel: ctaL.value, ctaUrl: ctaU.value } }); toast('Đang gửi cho ' + r.total + ' người…'); const poll = setInterval(async () => { try { const x = await api('/admin/mail'); drawC(x.campaigns); if (!x.campaigns.some((c) => c.status === 'running')) { clearInterval(poll); ev.target.disabled = false; toast('Đã gửi xong'); } } catch { clearInterval(poll); } }, 4000); S.cleanups.push(() => clearInterval(poll)); drawC((await api('/admin/mail')).campaigns); } catch (e) { fail(e); ev.target.disabled = false; } } }, 'Gửi email'), camp));
-  })();
-  // SEO text of every area (region / province / district)
-  const geoSeo = geoPicker({}, { countries: true });
-  const sf = { title: h('input', { maxlength: 120, placeholder: 'Tiêu đề trang (nên dưới 60 ký tự)' }), description: h('textarea', { rows: 3, maxlength: 300, placeholder: 'Mô tả ngắn hiện trên Google (nên 120–160 ký tự)' }),
-    keywords: h('textarea', { rows: 2, maxlength: 600, placeholder: 'Từ khóa, cách nhau bằng dấu phẩy' }), intro: h('textarea', { rows: 10, maxlength: 6000, placeholder: 'Nội dung giới thiệu khu vực. Để trống một dòng giữa các đoạn.' }) };
-  const seoInfo = h('p', { class: 'muted', style: 'font-size:14px;margin:8px 0 12px' }, 'Chọn quốc gia và khu vực ở trên (Việt Nam: ít nhất là miền; nước khác: chọn nước, có thể gõ thêm tỉnh / thành phố) để sửa.');
-  const seoPrev = h('div', { class: 'seo-prev', hidden: true });
-  // under each box: the admin's own keywords that are added automatically when the page is shown
-  const seoAdd = Object.fromEntries(['title', 'description', 'keywords', 'intro'].map((k) => [k, h('small', { class: 'seo-add', hidden: true })]));
-  const paintAdd = (added) => { for (const [k, el] of Object.entries(seoAdd)) { const w = (added && added[k]) || []; el.hidden = !w.length; el.textContent = w.length ? '➕ Tự thêm khi hiển thị: ' + w.join(', ') : ''; } };
-  const counter = (el, n) => { const c = h('small', { class: 'muted' }); const u = () => { c.textContent = el.value.length + ' ký tự' + (n ? ' (nên ≤ ' + n + ')' : ''); c.style.color = n && el.value.length > n ? '#fbbf24' : ''; }; el.addEventListener('input', u); u(); return [c, u]; };
-  const [cTitle, uTitle] = counter(sf.title, 60), [cDesc, uDesc] = counter(sf.description, 160);
-  let seoDef = null, seoUrl = '';
-  const seoView = h('a', { class: 'btn sm', target: '_blank', rel: 'noopener', hidden: true }, 'Xem trang này');
-  const seoBody = () => {
-    const val = (n) => ((geoSeo.el.querySelector('[name="' + n + '"]') || {}).value || '').trim();
-    const cc = geoSeo.country();
-    return cc === 'VN' ? { region: val('region'), province: val('province'), district: val('district') } : { region: 'qt', country: cc, province: val('province'), district: val('district') };
-  };
-  const loadSeo = async () => {
-    const b = seoBody();
-    if (!b.region) { seoInfo.textContent = 'Chọn khu vực ở trên (ít nhất là miền) để sửa.'; seoView.hidden = true; seoPrev.hidden = true; seoDef = null; return; }
-    try {
-      const d = await api('/admin/area-seo?' + new URLSearchParams(b));
-      seoDef = d.defaults; seoUrl = d.url;
-      const s = d.saved || {};
-      // pre-filled with the ready-made text (real, editable values); saved text wins when the admin has written their own
-      sf.title.value = s.title || d.defaults.title; sf.description.value = s.description || d.defaults.description; sf.keywords.value = s.keywords || d.defaults.keywords; sf.intro.value = s.intro || d.defaults.intro;
-      sf.title.placeholder = d.defaults.title; sf.description.placeholder = d.defaults.description; sf.keywords.placeholder = d.defaults.keywords; sf.intro.placeholder = d.defaults.intro;
-      uTitle(); uDesc(); paintAdd(d.final && d.final.added);
-      seoInfo.textContent = d.saved ? 'Khu vực này đang dùng nội dung bạn đã viết.' : 'Đang dùng nội dung mẫu có sẵn (đã điền trong các ô). Cần thì sửa trực tiếp rồi bấm Lưu. Nếu bạn không bấm Lưu, trang vẫn dùng mẫu này và số video tự cập nhật.';
-      seoView.href = d.url; seoView.hidden = false;
-      if (b.region === 'qt' && !d.total && !d.saved) seoInfo.textContent += ' Nơi này chưa có video: trang chỉ hiện trên Google sau khi bạn bấm Lưu hoặc khi có người đăng video ở đây.';
-      seoPrev.hidden = false;
-      seoPrev.replaceChildren(h('small', {}, 'Bản hiển thị trên Google (đã tự thêm từ khóa riêng của bạn):'), h('div', { class: 'seo-prev-g' }, h('span', { class: 'seo-prev-url' }, location.host + d.url), h('b', {}, d.final.title), h('p', {}, d.final.description)));
-    } catch (e) { fail(e); }
-  };
-  let seoT = 0;
-  geoSeo.el.addEventListener('change', () => setTimeout(loadSeo, 0));
-  geoSeo.el.addEventListener('input', (e) => { if (e.target.tagName === 'INPUT') { clearTimeout(seoT); seoT = setTimeout(loadSeo, 800); } });
-  const seoForm = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px' },
-    h('label', { class: 'f' }, h('span', {}, 'Tiêu đề SEO'), sf.title, cTitle, seoAdd.title), h('label', { class: 'f' }, h('span', {}, 'Mô tả SEO (meta description)'), sf.description, cDesc, seoAdd.description),
-    h('label', { class: 'f' }, h('span', {}, 'Từ khóa'), sf.keywords, seoAdd.keywords), h('label', { class: 'f' }, h('span', {}, 'Nội dung giới thiệu khu vực'), sf.intro, seoAdd.intro),
-    h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
-      h('button', { class: 'btn primary', type: 'button', onclick: async () => { const b = seoBody(); if (!b.region) return toast('Hãy chọn khu vực', true); try { await api('/admin/area-seo', { method: 'PUT', body: { ...b, title: sf.title.value, description: sf.description.value, keywords: sf.keywords.value, intro: sf.intro.value } }); toast('Đã lưu nội dung SEO'); loadSeo(); } catch (e) { fail(e); } } }, 'Lưu'),
-      h('button', { class: 'btn', type: 'button', onclick: () => { if (!seoDef) return toast('Hãy chọn khu vực', true); sf.title.value = seoDef.title; sf.description.value = seoDef.description; sf.keywords.value = seoDef.keywords; sf.intro.value = seoDef.intro; uTitle(); uDesc(); } }, 'Điền nội dung mẫu để sửa'),
-      h('button', { class: 'btn', type: 'button', onclick: () => { sf.title.value = sf.description.value = sf.keywords.value = sf.intro.value = ''; uTitle(); uDesc(); toast('Đã xoá nội dung, bấm Lưu để quay về nội dung tự động'); } }, 'Về nội dung tự động'), seoView));
-  // the admin's own keyword sets: added automatically to every area, or only to the areas the admin picks
-  const areaLabel = (k) => { const p = k.split('|'); return p[0] === 'qt' ? [countryName(p[1]), ...p.slice(2)].join(' › ') : [REGION_NAMES[p[0]] || p[0], ...p.slice(1)].join(' › '); };
-  const areaKey = (x) => (x.region === 'qt' ? ['qt', x.country, x.province, x.district] : [x.region, x.province, x.district]).filter(Boolean).join('|');
-  let kwSets = [];
-  const setsBox = h('div', { style: 'display:grid;gap:12px' });
-  const chk = (val, label, on) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!val, onchange: (e) => on(e.target.checked) }), h('span', {}, label));
-  const drawSets = () => {
-    setsBox.replaceChildren(...kwSets.map((s, i) => {
-      const kw = h('textarea', { rows: 2, maxlength: 2000, placeholder: 'VD: Giá rẻ, Uy tín, Gần đây' }); kw.value = s.keywords || '';
-      kw.addEventListener('input', () => { s.keywords = kw.value; });
-      const cnt = h('input', { type: 'number', min: 0, max: 5, value: s.titleCount, style: 'width:64px', oninput: (e) => { s.titleCount = e.target.value; } });
-      const nm = 'kwscope' + i + '_' + Math.random().toString(36).slice(2, 6);
-      const scopeOpt = (val, label) => h('label', { class: 'check' }, h('input', { type: 'radio', name: nm, checked: (s.scope || 'all') === val, onchange: () => { s.scope = val; drawSets(); } }), h('span', {}, label));
-      let pickBox = '';
-      if (s.scope === 'some') {
-        const gp = geoPicker({}, { countries: true });
-        const read = () => {
-          const v = (n) => ((gp.el.querySelector('[name="' + n + '"]') || {}).value || '').trim();
-          const cc = gp.country();
-          return cc === 'VN' ? { region: v('region'), province: v('province'), district: v('district') } : { region: 'qt', country: cc, province: v('province'), district: v('district') };
-        };
-        const add = h('button', { type: 'button', class: 'btn sm', onclick: () => {
-          const x = read();
-          if (x.region !== 'qt' && !x.region) return toast('Hãy chọn miền, hoặc chọn một nước khác', true);
-          const k = areaKey(x);
-          if (!s.areas.includes(k)) s.areas.push(k);
-          drawSets();
-        } }, '+ Thêm khu vực này');
-        pickBox = h('div', { style: 'display:grid;gap:8px;padding:12px;border:1px dashed var(--line);border-radius:14px' },
-          h('small', { class: 'muted' }, 'Chọn khu vực rồi bấm "Thêm". Chọn cả miền hoặc cả nước thì mọi tỉnh, quận bên trong cũng được áp dụng.'),
-          gp.el, add,
-          s.areas.length ? h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap' }, s.areas.map((k) => h('span', { class: 'chip on', style: 'display:inline-flex;gap:6px;align-items:center' }, areaLabel(k),
-            h('button', { type: 'button', 'aria-label': 'Bỏ', style: 'background:none;border:0;color:inherit;cursor:pointer;font-size:15px;padding:0', onclick: () => { s.areas = s.areas.filter((x) => x !== k); drawSets(); } }, '×'))))
-            : h('small', { style: 'color:#fbbf24' }, 'Chưa chọn khu vực nào: bộ này sẽ chưa áp dụng ở đâu cả.'));
-      }
-      return h('div', { class: 'card', style: 'padding:14px;display:grid;gap:10px;background:var(--surface2)' },
-        h('div', { class: 'row', style: 'justify-content:space-between;align-items:center' }, h('b', {}, 'Bộ từ khóa ' + (i + 1)),
-          h('button', { type: 'button', class: 'btn sm ghost', onclick: () => { if (confirm('Xoá bộ từ khóa này?')) { kwSets.splice(i, 1); drawSets(); } } }, 'Xoá')),
-        kw,
-        chk(s.withName, 'Tự ghép tên khu vực sau mỗi từ khóa (VD "Giá rẻ" → "Giá rẻ Bangkok")', (v) => { s.withName = v; }),
-        h('div', { style: 'display:grid;gap:6px' }, h('small', { class: 'muted' }, 'Thêm vào:'),
-          chk(s.inTitle, 'Tiêu đề SEO', (v) => { s.inTitle = v; }), h('label', { class: 'muted', style: 'font-size:13px;margin-left:28px' }, 'Số từ khóa của bộ này đưa vào tiêu đề: ', cnt),
-          chk(s.inDesc, 'Mô tả SEO', (v) => { s.inDesc = v; }), chk(s.inIntro, 'Nội dung giới thiệu khu vực', (v) => { s.inIntro = v; }), chk(s.inKeywords, 'Ô từ khóa', (v) => { s.inKeywords = v; }), chk(s.inName, 'Trước tên khu vực hiện trên web và trang SEO (VD "Giá rẻ Phuket", chỉ dùng từ khóa đầu tiên)', (v) => { s.inName = v; })),
-        h('div', { style: 'display:grid;gap:6px' }, h('small', { class: 'muted' }, 'Áp dụng cho:'), scopeOpt('all', 'Tất cả khu vực (Việt Nam và các nước)'), scopeOpt('some', 'Chỉ những khu vực tôi chọn')),
-        pickBox);
-    }));
-  };
-  api('/admin/seo-global').then((g) => { kwSets = (g.sets || []).map((s) => ({ ...s, areas: [...(s.areas || [])] })); if (!kwSets.length) kwSets.push(newSet()); drawSets(); }).catch((e) => console.error('seo keyword sets:', e));
-  const newSet = () => ({ keywords: '', inName: true, inTitle: true, inDesc: true, inIntro: true, inKeywords: true, titleCount: 1, withName: false, scope: 'all', areas: [] });
-  const globalCard = h('div', { class: 'card', style: 'padding:18px;display:grid;gap:12px;margin-bottom:16px;border-color:rgba(232,211,166,.35)' },
-    h('b', {}, '🔑 Từ khóa riêng của bạn'),
-    h('p', { class: 'muted', style: 'font-size:13.5px' }, 'Gõ từ khóa riêng, VD "Giá rẻ", rồi chọn áp dụng cho tất cả khu vực hay chỉ những khu vực bạn chọn. Từ khóa tự được thêm vào tiêu đề SEO, mô tả SEO, ô từ khóa và nội dung giới thiệu của các khu vực đó, cả nội dung mẫu lẫn nội dung bạn đã viết. Viết {khu vực} trong từ khóa để tự thay bằng tên nơi đó. Từ khóa đã có sẵn trong nội dung thì không thêm lần nữa.'),
-    setsBox,
-    h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
-      h('button', { class: 'btn', type: 'button', onclick: () => { kwSets.push(newSet()); drawSets(); } }, '+ Thêm bộ từ khóa'),
-      h('button', { class: 'btn primary', type: 'button', onclick: async () => {
-        try { const r = await api('/admin/seo-global', { method: 'PUT', body: { sets: kwSets } }); kwSets = r.sets.map((s) => ({ ...s, areas: [...s.areas] })); if (!kwSets.length) kwSets.push(newSet()); drawSets(); toast('Đã lưu từ khóa riêng'); loadSeo(); } catch (e) { fail(e); }
-      } }, 'Lưu từ khóa')));
-  const seoBox = h('section', { style: 'margin-bottom:34px' }, h('h2', { class: 'title', style: 'margin-bottom:12px' }, 'SEO khu vực'),
-    h('p', { class: 'muted', style: 'font-size:14px;margin-bottom:12px' }, 'Nội dung này hiện trên trang khu vực (xgaigu.com/khu-vuc/…) và trong kết quả Google, cho cả Việt Nam và các nước khác. Hãy viết tự nhiên, đúng sự thật, và đừng nhồi nhét từ khóa.'), globalCard, geoSeo.el, seoInfo, seoPrev, seoForm);
-  main.append(h('div', { class: 'wrap', style: 'padding:32px 0' }, trafficBox, shareBox, feedBox, pageBox, tgBox, partnerBox, statBox, window.XGTele.adminBox(), await window.XGLive.adminBox(), await window.XGShop.adminBox(), videosBox, optBox, musicBox, seoBox, mailBox, membersBox, h('h2', { class: 'title', style: 'margin-bottom:20px' }, 'Báo cáo chờ xử lý'),
-    reports.length ? h('div', { class: 'card', style: 'overflow:auto' }, h('table', { class: 't' }, h('thead', {}, h('tr', {}, ['ID', 'Đối tượng', 'Lý do', 'Người báo', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))) : h('div', { class: 'card empty' }, h('p', {}, 'Không có báo cáo nào 🎉'))));
-}
-
 // ---------- router ----------
 let routeSeq = 0;
 async function route() {
@@ -2616,7 +2187,7 @@ async function route() {
     if (a === 'reset') return pageReset(query);
     if (a === 'forgot-password') { const holder = h('div'); const mm = modal(holder); holder.append(forgotForm(mm)); location.hash = '#/'; return; }
     if (a === 'email-verified') return pageEmailVerified(query);
-    if (a === 'admin') return pageAdmin();
+    if (a === 'admin') return window.XGAdmin.page(b);
     if (['shop', 'p', 'seller', 'orders'].includes(a)) return window.XGShop.page(a, seg.slice(1), query);
     main.append(h('div', { class: 'empty', style: 'padding:100px 20px' }, h('h3', {}, 'Không tìm thấy trang'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/' }, 'Về trang chủ')));
   };
@@ -2628,7 +2199,7 @@ async function route() {
   main.focus({ preventScroll: true });
 }
 
-window.XG = { h, toast, icon, api, apiUpload, fmtMB, openBook, openReport, rtcConfig, modal, fail, avatar, esc, fmtCount, timeAgo, fmtDate, needLogin, openAuth, startChat, vbadge, renderPager, areaTile, footer, main, S, onLeave };
+window.XG = { h, toast, icon, api, apiUpload, fmtMB, openBook, openReport, rtcConfig, modal, ask, fail, avatar, esc, fmtCount, timeAgo, fmtDate, needLogin, openAuth, startChat, vbadge, renderPager, areaTile, footer, main, S, onLeave, route, geoPicker, countryName, REGION_NAMES, adminVideoDialog };
 
 // ---------- boot ----------
 (async function boot() {
